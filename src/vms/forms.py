@@ -21,11 +21,11 @@ def mk_voltage_field(label, **kwargs):
 
 
 class VoltageForm(Form):
-    voltage1 = mk_voltage_field("Voltage 1", default=-19)
-    voltage2 = mk_voltage_field("Voltage 2", default=-9)
-    voltage3 = mk_voltage_field("Voltage 3", default=-7)
-    voltage4 = mk_voltage_field("Voltage 4", default=-6)
-    voltage5 = mk_voltage_field("Voltage 5", default=11)
+    voltage1 = mk_voltage_field("\(V_0\)", default=-19)
+    voltage2 = mk_voltage_field("\(V_1\)", default=-9)
+    voltage3 = mk_voltage_field("\(V_2\)", default=-7)
+    voltage4 = mk_voltage_field("\(V_3\)", default=-6)
+    voltage5 = mk_voltage_field("\(V_4\)", default=11)
 
 
 def mk_instrument_form(hidden):
