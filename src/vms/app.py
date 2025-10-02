@@ -214,7 +214,7 @@ async def settings():
     return await render_template(
         "settings/settings.html",
         form=form,
-        chain=CHAINS[form.chain.data],
+        chain=CHAINS[form.pathways.chain.data],
     )
 
 

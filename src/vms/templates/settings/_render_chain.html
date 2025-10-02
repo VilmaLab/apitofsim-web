@@ -4,28 +4,39 @@
         <table class="text-right">
             <tr>
                 <td class="p-1 pr-4">Atomic mass</td>
-                <td class="p-1">{{ cluster.atomic_mass }}</td>
+                <td class="p-1">{{ cluster.atomic_mass }} \(Da\)</td>
             </tr>
             <tr>
                 <td class="p-1 pr-4">Electronic energy</td>
-                <td class="p-1">{{ "%0.2f"|format(cluster.electronic_energy[0]) }}</td>
+                <td class="p-1">{{ "%0.2f"|format(cluster.electronic_energy[0]) }} \(E_h\)</td>
             </tr>
-            <tr>
-                <td class="p-1 pr-4">Rotational temperatures</td>
-                <td class="p-1">{{ cluster.rotational_temperatures|join('<br>'|safe) }}</td>
-            </tr>
-            <tr>
-                <td class="p-1 pr-4">Vibrational temperatures</td>
-                <td class="p-1">
-                    <a href="#" onclick="event.preventDefault(); this.nextElementSibling.showModal();">
-                        {{ cluster.vibrational_temperatures|join_abbrv('<br>'|safe) }}
-                    </a>
-                    <dialog closedby="any" class="m-auto p-4 size-min">
-                        {{ cluster.vibrations_plot|safe }}
-                        {{ cluster.vibrational_temperatures|join('; '|safe) }}
-                    </dialog>
-                </td>
-            </tr>
+            {% if cluster.vibrational_temperatures %}
+                <tr>
+                    <td class="p-1 pr-4">Type</td>
+                    <td class="p-1">Compound with quantum chemistry data</td>
+                </tr>
+                <tr>
+                    <td class="p-1 pr-4">Rotational temperatures</td>
+                    <td class="p-1">{{ cluster.rotational_temperatures|join('<br>'|safe) }}</td>
+                </tr>
+                <tr>
+                    <td class="p-1 pr-4">Vibrational temperatures</td>
+                    <td class="p-1">
+                        <a href="#" onclick="event.preventDefault(); this.nextElementSibling.showModal();">
+                            {{ cluster.vibrational_temperatures|join_abbrv('<br>'|safe) }}
+                        </a>
+                        <dialog closedby="any" class="m-auto p-4 size-min">
+                            {{ cluster.vibrations_plot|safe }}
+                            {{ cluster.vibrational_temperatures|join('; '|safe) }}
+                        </dialog>
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td class="p-1 pr-4">Type</td>
+                    <td class="p-1">Atom-like product</td>
+                </tr>
+            {% endif %}
         </table>
     </div>
 {% endmacro %}
@@ -47,11 +58,12 @@
             <div class="text-center p-4"><em>Case 1:</em> Fragmentation</div>
             <div class="flex flex-col items-center">
                 <div>{{ cluster_link(chain.cluster.name) }}</div>
-                <svg width="300" height="100" xmlns="http://www.w3.org/2000/svg">
+                <svg width="300" height="200" xmlns="http://www.w3.org/2000/svg">
                     <!-- Breaking/splitting arrows -->
                     <path d="M 130 10 L 50 90" stroke="#e74c3c" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
                     <path d="M 170 10 L 250 90" stroke="#e74c3c" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
-                    
+                    <path d="M 150 10 L 150 190" stroke="#e74c3c" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+
                     <!-- Arrow marker definition -->
                     <defs>
                         <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -59,9 +71,18 @@
                         </marker>
                     </defs>
                 </svg>
-                <div class="flex flex-row text-center">
+                <div class="flex flex-row text-center mt-[-100px]">
                     <div class="w-1/2">{{ cluster_link(chain.first_product.name) }}</div>
                     <div class="w-1/2">{{ cluster_link(chain.second_product.name) }}</div>
+                </div>
+                <div class="flex flex-col text-center mt-[20px]">
+                    <div>
+                        {{ form.pathways.fragmentation_energy(
+                              class_="mt-1 border border-black p-1 text-right",
+                              placeholder=chain.first_product.electronic_energy[0] + chain.second_product.electronic_energy[0] - chain.cluster.electronic_energy[0])
+                        }} \(E_h\)
+                    </div>
+                    {{ form.pathways.fragmentation_energy.label }}
                 </div>
             </div>
         </div>

@@ -6,6 +6,23 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.7/dist/htmx.js" integrity="sha384-yWakaGAFicqusuwOYEmoRjLNOC+6OFsdmwC2lbGQaRELtuVEqNzt11c2J711DeCZ" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx-ext-sse@2.2.2" integrity="sha384-BkCCd4DbvhfvRLfThp+5RN2KiB1FBROoAtwZFfceJishUnpFW1eF/aqG14M5TwA2" crossorigin="anonymous"></script>
+    <script>
+    MathJax = {
+        options: {
+            enableExplorer: true
+        },
+        tex: {
+            inlineMath: {'[+]': [['$', '$']]}
+        },
+        svg: {
+            fontCache: 'global'
+        },
+        output: {
+            font: 'mathjax-fira'
+        }
+    };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="//unpkg.com/alpinejs" defer></script>
     <title>{% block title %}{% endblock %}</title>
     <style>

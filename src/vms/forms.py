@@ -128,19 +128,18 @@ BuiltInInstrumentForm = mk_instrument_form(hidden=True)
 CustomInstrumentForm = mk_instrument_form(hidden=False)
 
 
-class ConstantsForm(Form):
-    fragmentation_energy_ = FloatField(default=0, validators=[InputRequired()])
+class GasForm(Form):
+    gas_molecule_radius = FloatField(default=2.46e-10, validators=[InputRequired()])
+    gas_molecule_mass = FloatField(default=4.8506e-26, validators=[InputRequired()])
+    adiabatic_index = FloatField(default=1.4, validators=[InputRequired()])
+
+
+class SimulationForm(Form):
     energy_max_density_of_state = FloatField(
         default=2.0e5, validators=[InputRequired()]
     )
     energy_max_rate_constant = FloatField(default=3.0e4, validators=[InputRequired()])
     energy_resolution = FloatField(default=1.0, validators=[InputRequired()])
-    gas_molecule_radius = FloatField(default=2.46e-10, validators=[InputRequired()])
-    gas_molecule_mass = FloatField(default=4.8506e-26, validators=[InputRequired()])
-    adiabatic_index = FloatField(default=4.8506e-26, validators=[InputRequired()])
-
-
-class SimulationForm(Form):
     realizations = IntegerField(default=1000, validators=[InputRequired()])
     iterations_eq1 = IntegerField(default=1000, validators=[InputRequired()])
     iterations_eq2 = IntegerField(default=1000, validators=[InputRequired()])
@@ -160,14 +159,19 @@ def get_chain_default():
     return list(CHAINS.keys())[0]
 
 
-class SettingsForm(QuartForm):
-    voltage = FormField(VoltageForm)
+class FragmentationPathwayForm(Form):
     chain = SelectField(
-        "Compound chain",
+        "Fragmentation pathway",
         choices=get_chain_choices,
         default=get_chain_default,
         validators=[InputRequired()],
     )
+    fragmentation_energy = FloatField()
+
+
+class SettingsForm(QuartForm):
+    voltage = FormField(VoltageForm)
     instrument = FormField(BuiltInInstrumentForm)
-    constants = FormField(ConstantsForm)
+    pathways = FormField(FragmentationPathwayForm)
+    gas = FormField(GasForm)
     simulation = FormField(SimulationForm)
