@@ -191,13 +191,15 @@ def pump_jobs():
 
 @app.template_filter("join_abbrv")
 def join_abbrv_filter(s, sep="<br>"):
+    from itertools import chain
+
     def joined(s):
         return sep.join((str(e) for e in s))
 
     if len(s) <= 5:
         return joined(s)
     else:
-        return joined(s[:2] + ["..."] + s[-2:])
+        return joined(chain(s[:2], ["..."], s[-2:]))
 
 
 @app.route("/", methods=["GET", "POST"])
