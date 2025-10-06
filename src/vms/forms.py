@@ -1,7 +1,7 @@
 from quart_wtf import QuartForm
 from wtforms import Form
 from wtforms import SelectField, FloatField, FormField, HiddenField, IntegerField
-from wtforms.validators import InputRequired
+from wtforms.validators import InputRequired, Optional
 from vms.utils import PairedRangeInputWidget
 
 
@@ -166,7 +166,7 @@ class FragmentationPathwayForm(Form):
         default=get_chain_default,
         validators=[InputRequired()],
     )
-    fragmentation_energy = FloatField()
+    fragmentation_energy = FloatField(validators=[Optional()])
 
 
 class SettingsForm(QuartForm):
