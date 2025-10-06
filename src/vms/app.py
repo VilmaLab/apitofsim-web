@@ -42,6 +42,9 @@ def vibrations_plot(particle):
     from matplotlib import pyplot as plt
     from io import StringIO
 
+    if particle["vibrational_temperatures"] is None:
+        return
+
     plt.figure()
     plt.hlines(1, 1, 20)
     plt.eventplot(

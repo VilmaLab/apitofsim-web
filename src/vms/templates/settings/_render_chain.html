@@ -10,7 +10,12 @@
                 <td class="p-1 pr-4">Electronic energy</td>
                 <td class="p-1">{{ "%0.2f"|format(cluster.electronic_energy[0]) }} \(E_h\)</td>
             </tr>
-            {% if cluster.vibrational_temperatures %}
+            {% if cluster.vibrational_temperatures is none %}
+                <tr>
+                    <td class="p-1 pr-4">Type</td>
+                    <td class="p-1">Atom-like product</td>
+                </tr>
+            {% else %}
                 <tr>
                     <td class="p-1 pr-4">Type</td>
                     <td class="p-1">Compound with quantum chemistry data</td>
@@ -30,11 +35,6 @@
                             {{ cluster.vibrational_temperatures|join('; '|safe) }}
                         </dialog>
                     </td>
-                </tr>
-            {% else %}
-                <tr>
-                    <td class="p-1 pr-4">Type</td>
-                    <td class="p-1">Atom-like product</td>
                 </tr>
             {% endif %}
         </table>
