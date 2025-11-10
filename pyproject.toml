@@ -6,8 +6,12 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "apitofsim",
+    "duckdb>=1.4.1",
+    "holoviews>=1.21.0",
+    "lxml>=6.0.2",
     "matplotlib>=3.10.6",
     "minify-html-onepass>=0.16.4",
+    "pint>=0.25",
     "pip>=25.2",
     "quart>=0.20.0",
     "quart-wtforms>=1.0.3",

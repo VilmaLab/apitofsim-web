@@ -6,6 +6,20 @@
         {{ lightbox('img/measurements.svg', img_class='max-h-[320px] m-auto py-4') }}
     </div>
     <div>
-        {% include "ui/_table_form.html" %}
+        <fieldset>
+        {% with form=form.instrument_geometry %}
+            {% include "ui/_table_form.html" %}
+        {% endwith %}
+        </fieldset>
+        <fieldset>
+        {% with form=form.skimmer_geometry %}
+            {% include "ui/_table_form.html" %}
+        {% endwith %}
+        </fieldset>
+        <fieldset>
+        {% with form=form.quadrupole %}
+            {% include "ui/_table_form.html" %}
+        {% endwith %}
+        </fieldset>
     </div>
 </div>

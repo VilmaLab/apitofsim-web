@@ -1,34 +1,45 @@
+import duckdb
 import ray
 import asyncio
 from dataclasses import dataclass
 import typing
+import numpy
 import os
-from quart import (
-    Quart,
-    render_template,
-    redirect,
-    request,
-    abort,
-    make_response,
-)
+from os import environ
+from quart import Quart, render_template, redirect, request, abort, make_response, g
 from .forms import SettingsForm, BuiltInInstrumentForm, CustomInstrumentForm
-from .utils import parse_config_list
+from io import BytesIO
+import matplotlib
+import holoviews as hv
+from lxml import etree
+
 from uuid import uuid4
 
+from pint import UnitRegistry, set_application_registry
+
+matplotlib.use("SVG")
+hv.extension("matplotlib")  # type: ignore
+
+ureg = UnitRegistry()
+set_application_registry(ureg)
 
 app = Quart(__name__)
 app.config["SECRET_KEY"] = "a-secret-key"
 
 status = {}
-CHAINS = parse_config_list(os.environ["CHAINS"])
+
+
+@app.before_request
+async def before_request():
+    g.db = duckdb.connect(database=environ["DATABASE"])
 
 
 @app.while_serving
 async def lifespan():
     my_ray = await asyncio.to_thread(
         ray.init,
-        address="local",
-        include_dashboard=True,
+        address=environ.get("RAY_ADDRESS", "local"),
+        log_to_driver=False,
         runtime_env={"pip": ["jinja2", "minify-html-onepass"]},
     )
     print("Dashboard url", my_ray.dashboard_url)
@@ -38,17 +49,18 @@ async def lifespan():
         yield
 
 
+"""
 def vibrations_plot(particle):
     from matplotlib import pyplot as plt
     from io import StringIO
 
-    if particle["vibrational_temperatures"] is None:
+    if particle.vibrational_temperatures is None:
         return
 
     plt.figure()
     plt.hlines(1, 1, 20)
     plt.eventplot(
-        particle["vibrational_temperatures"], orientation="horizontal", colors="b"
+        particle.vibrational_temperatures, orientation="horizontal", colors="b"
     )
     plt.axis("off")
     f = StringIO()
@@ -56,25 +68,25 @@ def vibrations_plot(particle):
     particle["vibrations_plot"] = f.getvalue()
 
 
-for chain in CHAINS.values():
-    for particle in ["cluster", "first_product", "second_product"]:
-        vibrations_plot(chain[particle])
+for config in DATA.values():
+    for pathway in config["pathways"]:
+        for particle in pathway:
+            vibrations_plot(particle)
+"""
 
 
 jinja_loader = app.jinja_loader
-print(jinja_loader)
 
 
 @ray.remote
-def run_simulation(realizations):
+def run_simulation(voltage, pathways, gas, config):
     from time import sleep
     from random import random
     from jinja2 import Environment
     from minify_html_onepass import minify
+    from apitofsim import skimmer_pandas
 
     jinja_env = Environment(loader=jinja_loader)
-
-    print("run_simulation")
 
     processing = "queue"
     statuses = {
@@ -104,7 +116,7 @@ def run_simulation(realizations):
                 apitof=apitof,
                 survived=survived,
                 fragmented=fragmented,
-                realizations=realizations,
+                realizations=1000,
                 iterations=iterations,
                 ratio=survived / iterations if iterations > 0 else 0,
             )
@@ -116,6 +128,7 @@ def run_simulation(realizations):
     # def update_all():
     # return b"body", render_template("analysis/body.html")
 
+    df = rhos = k_rate = None
     while 1:
         if processing == "queue":
             yield update_pane("queue")
@@ -127,27 +140,46 @@ def run_simulation(realizations):
             processing = "skimmer"
             yield update_pane("tabs")
         elif processing == "skimmer":
-            sleep(1)
             skimmer += "Skimming...<br>"
             yield update_pane("skimmer")
-            sleep(1)
-            skimmer = "Skimmed after XXXs<br>"
-            yield update_pane("skimmer")
-            sleep(1)
-            skimmer += "#Distance / Velocity / Temperature / Pressure / GasMassDensity / SpeedOfSound"
+            df = skimmer_pandas(
+                config[c]
+                for c in (
+                    "T",
+                    "pressure_first",
+                    "Lsk",
+                    "dc",
+                    "alpha_factor",
+                    "m_gas",
+                    "ga",
+                    "N_iter",
+                    "M_iter",
+                    "resolution",
+                    "tolerance",
+                )
+            )
+            skimmer = df.to_html()
             yield update_pane("skimmer")
             statuses["skimmer"] = "done"
             statuses["densityandr"] = "processing"
             processing = "densityandr"
             yield update_pane("tabs")
         elif processing == "densityandr":
-            yield update_pane("densityandr")
-            sleep(1)
             densityandr += "Calculating density and rate...<br>"
             yield update_pane("densityandr")
-            sleep(1)
-            densityandr = "Calculated density and rate after XXXs<br>"
-            densityandr += "Density 1, 2, 3, comb, rate constant"
+            rhos, k_rate = densityandrate(
+                *clusters,
+                *(
+                    config[setting]
+                    for setting in (
+                        "energy_max",
+                        "energy_max_rate",
+                        "bin_width",
+                        "bonding_energy",
+                    )
+                ),
+            )
+            densityandr = "Done"
             yield update_pane("densityandr")
             statuses["densityandr"] = "done"
             statuses["apitof"] = "processing"
@@ -169,7 +201,7 @@ def run_simulation(realizations):
 def start_job(job_id):
     info = status[job_id]  # type: ignore
 
-    simulation_call = run_simulation.remote(info["realizations"])
+    simulation_call = run_simulation.remote(**info["arguments"])
     new_info = {
         **info,  # type: ignore
         "status": "running",
@@ -208,10 +240,11 @@ async def settings():
     if typing.TYPE_CHECKING:
         form = typing.cast(SettingsForm, form)
     if await form.validate_on_submit():
+        arguments = form.get_data()
         job_id = uuid4()
         status[job_id.hex] = {  # type: ignore
             "status": "pending",
-            "realizations": form.simulation.realizations.data,
+            "arguments": arguments,
             "last_update": {},
         }
         pump_jobs()
@@ -219,17 +252,159 @@ async def settings():
     return await render_template(
         "settings/settings.html",
         form=form,
-        chain=CHAINS[form.pathways.chain.data],
+        primary_cluster=None,
     )
 
 
-@app.route("/fragments/chain")
-async def chain_fragment():
-    chain = request.args.get("chain")
-    if chain in CHAINS:
-        return await render_template("_render_chain.html", chain=chain)
-    else:
-        abort(400, description="Invalid chain parameter")
+def hypothetical_spectrogram(cluster_ids, masses, max_mass=None):
+    if max_mass is None:
+        max_mass = g.db.sql("select max(atomic_mass) from cluster").fetchone()[0]
+    spectrogram = hv.Spikes(
+        (masses, 1),
+        hv.Dimension("m/z", soft_range=(0, max_mass)),
+        "Intensity",
+    ).opts(fig_inches=(6, 3), aspect=2)
+    matplotlib_fig = hv.render(spectrogram)
+    ax = matplotlib_fig.axes[0]
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.set_yticks([])
+    f = BytesIO()
+    matplotlib_fig.savefig(f, format="svg")
+    f.seek(0)
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    tree = etree.parse(f)
+    lines = tree.getroot().xpath(
+        "//svg:g[@id='LineCollection_1']/svg:path", namespaces=ns
+    )
+    for line, cluster_id in zip(lines, cluster_ids, strict=True):
+        line.attrib["id"] = "spectrogram-line-cluster-" + str(cluster_id)
+        line.attrib["__AT_SYMBOL__click"] = f"current_cluster = {cluster_id}"
+        line.attrib["__AT_SYMBOL__mouseover"] = f"active_cluster = {cluster_id}"
+        line.attrib["__AT_SYMBOL__mouseout"] = "active_cluster = null"
+        line.attrib["__COLON__style"] = (
+            f"(active_cluster || current_cluster) == {cluster_id} ? {{'stroke': 'var(--color-blue-700)', 'z-index': 1}} : {{}}"
+        )
+    # Draw the current cluster on top of the others
+    lines[-1].addnext(
+        etree.XML(
+            """
+            <g style="pointer-events: none;">
+                <use __COLON__href="'#spectrogram-line-cluster-' + (active_cluster || current_cluster)"/>
+            </g>
+            """
+        )
+    )
+    return (
+        etree.tostring(tree, encoding="unicode")
+        .replace("__AT_SYMBOL__", "@")
+        .replace("__COLON__", ":")
+    )
+
+
+@app.route("/fragments/pathways")
+async def pathways_fragment():
+    form = await SettingsForm.create_form()
+    if typing.TYPE_CHECKING:
+        form = typing.cast(SettingsForm, form)
+    if "cluster" not in request.args:
+        abort(400, description="Missing cluster parameter")
+
+    cluster_id = int(request.args["cluster"])
+    if cluster_id is None:
+        abort(400, description="Invalid cluster parameter")
+    relevant_cluster_ids = g.db.sql(
+        """
+        select distinct unnest([cluster_id, product1_id, product2_id]) as relevant_cluster_id
+        from pathway
+        where cluster_id = ?
+        """,
+        params=(cluster_id,),
+    ).fetchdf()
+    cluster_df = (
+        g.db.table("cluster")
+        .join(
+            g.db.from_df(relevant_cluster_ids).set_alias("relevant"),
+            condition="relevant.relevant_cluster_id = cluster.id",
+        )
+        .fetchdf()
+    )
+    cluster_ids = cluster_df["id"].to_numpy()
+    masses = cluster_df["atomic_mass"].to_numpy()
+    clusters = {}
+    for cluster in cluster_df.itertuples():
+        clusters[cluster.id] = cluster
+    pathways_relations = g.db.sql(
+        """select * from pathway where cluster_id = ?""",
+        params=(cluster_id,),
+    ).fetchdf()
+    pathways = []
+
+    for pathway in pathways_relations.itertuples():
+        cluster = clusters[pathway.cluster_id]
+        product1 = clusters[pathway.product1_id]
+        product2 = clusters[pathway.product2_id]
+        bonding_energy = (
+            product1.electronic_energy
+            + product2.electronic_energy
+            - cluster.electronic_energy
+        )
+
+        pathways.append(
+            {
+                "cluster": (pathway.cluster_id, cluster.common_name),
+                "product1": (pathway.product1_id, product1.common_name),
+                "product2": (pathway.product2_id, product2.common_name),
+                "bonding_energy": bonding_energy,
+                "form": form.pathways.append_entry({"pathway": pathway.id}),
+            }
+        )
+
+    return await render_template(
+        "settings/_render_pathways.html",
+        pathways=pathways,
+        clusters=clusters.values(),
+        mass_spectrogram=hypothetical_spectrogram(cluster_ids, masses),
+        primary_cluster=(cluster_id, clusters[cluster_id].common_name),
+    )
+
+
+@app.route("/fragments/hypothetical-spectrogram")
+async def hypothetical_spectrogram_fragment():
+    form = SettingsForm(request.args)
+    if typing.TYPE_CHECKING:
+        form = typing.cast(SettingsForm, form)
+    if not form.pathways.validate(form) or not form.cluster.validate(form):
+        abort(400, description="Invalid pathways data")
+    cluster_id = int(form.cluster.data)
+    pathway_ids = numpy.array(
+        [
+            int(pathway["pathway"])
+            for pathway in form.pathways.data
+            if pathway["enabled"]
+        ]
+    )
+    pathway_ids = g.db.table("pathway_ids").set_alias("selected_pathways")
+    relevant_cluster_ids = (
+        g.db.table("pathway")
+        .join(pathway_ids, condition="selected_pathways.column0 = pathway.id")
+        .select(
+            "distinct unnest([cluster_id, product1_id, product2_id]) as relevant_cluster_id"
+        )
+        .fetchnumpy()
+    )["relevant_cluster_id"]
+    if cluster_id not in relevant_cluster_ids:
+        relevant_cluster_ids = numpy.append(relevant_cluster_ids, [cluster_id])
+    cluster_infos = (
+        g.db.table("cluster")
+        .join(
+            g.db.table("relevant_cluster_ids").set_alias("relevant"),
+            condition="relevant.column0 = cluster.id",
+        )
+        .select("id, atomic_mass")
+        .fetchnumpy()
+    )
+    return hypothetical_spectrogram(cluster_infos["id"], cluster_infos["atomic_mass"])
 
 
 @app.route("/fragments/instrument")
@@ -355,4 +530,4 @@ async def update_analysis():
 
 
 if __name__ == "__main__":
-    asyncio.run(app.run_task(debug=True))
+    asyncio.run(app.run_task())

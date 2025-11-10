@@ -1,0 +1,133 @@
+{% macro cluster_info(cluster) %}
+    <div class="p-4 w-fit m-4" x-show="current_cluster == {{ cluster.id }}">
+        <h3 class="p-4 text-xl font-medium">{{ cluster.name }}</h3>
+        <table class="text-right">
+            <tr>
+                <td class="p-1 pr-4">Atomic mass</td>
+                <td class="p-1">{{ cluster.atomic_mass }} \(Da\)</td>
+            </tr>
+            <tr>
+                <td class="p-1 pr-4">Electronic energy</td>
+                <td class="p-1">{{ "%0.2f"|format(cluster.electronic_energy) }} \(E_h\)</td>
+            </tr>
+            {% if cluster.vibrational_temperatures is none %}
+                <tr>
+                    <td class="p-1 pr-4">Type</td>
+                    <td class="p-1">Atom-like product</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td class="p-1 pr-4">Type</td>
+                    <td class="p-1">Compound with quantum chemistry data</td>
+                </tr>
+                <tr>
+                    <td class="p-1 pr-4">Rotational temperatures</td>
+                    <td class="p-1">{{ cluster.rotational_temperatures|join('<br>'|safe) }}</td>
+                </tr>
+                <tr>
+                    <td class="p-1 pr-4">Vibrational temperatures</td>
+                    <td class="p-1">
+                        <a href="#" onclick="event.preventDefault(); this.nextElementSibling.showModal();">
+                            {{ cluster.vibrational_temperatures|join_abbrv('<br>'|safe) }}
+                        </a>
+                        <dialog closedby="any" class="m-auto p-4 size-min">
+                            {{ cluster.vibrations_plot|safe }}
+                            {{ cluster.vibrational_temperatures|join('; '|safe) }}
+                        </dialog>
+                    </td>
+                </tr>
+            {% endif %}
+        </table>
+    </div>
+{% endmacro %}
+
+{% macro cluster_link(id, name) %}
+    <a 
+        href="#"
+        class="px-2 py-1 rounded-lg box-decoration-clone"
+        @mouseover="active_cluster = {{ id }}"
+        @mouseout="active_cluster = null"
+        @click.prevent="current_cluster = {{ id }}"
+        :class="active_cluster == {{ id }} ? 'bg-blue-700 text-white' : (current_cluster == {{ id }} ? 'text-gray-900 bg-gray-200' : 'bg-gray-100')"
+    >{{ name }}</a>
+{% endmacro %}
+
+{% if primary_cluster is none %}
+    <h2 class="text-center text-gray-500 italic my-8">
+        Select a cluster above to view fragmentation pathways here.
+    </h2>
+{% else %}
+    <div class="flex flex-row gap-4 items-start"
+        x-data="{
+            current_cluster: {{ primary_cluster[0] }},
+            active_cluster: null
+        }">
+        <div class="flex-none max-w-sm">
+            <div class="mt-4 mb-8">
+                <div class="flex flex-col items-center">
+                    <div>{{ cluster_link(*primary_cluster) }}</div>
+                    <div class="relative flex flex-col items-center">
+                        <div class="absolute italic absolute ml-[120px] mt-[10px]">(Survival)</div>
+                        <svg width="300" height="60" xmlns="http://www.w3.org/2000/svg">
+                            <!-- Breaking/splitting arrows -->
+                            <path d="M 150 10 L 150 50" stroke="#e74c3c" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                            
+                            <!-- Arrow marker definition -->
+                            <defs>
+                                <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                                <polygon points="0 0, 7 3.5, 0 7" fill="#e74c3c"/>
+                                </marker>
+                            </defs>
+                        </svg>
+                    </div>
+                    <div>{{ cluster_link(*primary_cluster) }}</div>
+                </div>
+            </div>
+            {% for pathway in pathways %}
+                <div class="my-8 relative flex flex-col items-center" x-data="{ enabled: true }" :class="enabled ? '' : 'opacity-50 grayscale'">
+                    {{ pathway.form.pathway }}
+                    {{ pathway.form.enabled(
+                        class_="absolute left-6 top-0 size-8 z-2",
+                        x_model="enabled",
+                        hx_get="/fragments/hypothetical-spectrogram",
+                        hx_target="#mass-spectrogram",
+                        hx_include="[name^=pathways-], [name=cluster]"
+                    ) }}
+                    <div class="z-1">{{ cluster_link(*pathway.cluster) }}</div>
+                    <svg class="absolute top-[15px]" width="300" height="160" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Breaking/splitting arrows -->
+                        <path d="M 130 10 L 70 60" stroke="#e74c3c" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                        <path d="M 170 10 L 230 60" stroke="#e74c3c" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+                        <path d="M 150 10 L 150 100" stroke="#e74c3c" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+
+                        <!-- Arrow marker definition -->
+                        <defs>
+                            <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                            <polygon points="0 0, 7 3.5, 0 7" fill="#e74c3c"/>
+                            </marker>
+                        </defs>
+                    </svg>
+                    <div class="absolute top-[85px] ml-[-200px]">{{ cluster_link(*pathway.product1) }}</div>
+                    <div class="absolute top-[85px] mr-[-200px]">{{ cluster_link(*pathway.product2) }}</div>
+                    <div class="z-1 flex flex-col items-center mt-[100px]">
+                        <div>
+                            {{ pathway.form.fragmentation_energy(
+                                class_="mt-1 border border-black p-1 text-right",
+                                placeholder=pathway.bonding_energy)
+                            }} \(E_h\)
+                        </div>
+                        {{ pathway.form.fragmentation_energy.label }}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        <div class="sticky top-0">
+            <div id="mass-spectrogram">
+                {{ mass_spectrogram|safe }}
+            </div>
+            {% for cluster in clusters %}
+                {{ cluster_info(cluster) }}
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}

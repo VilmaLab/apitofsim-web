@@ -1,8 +1,34 @@
 from quart_wtf import QuartForm
 from wtforms import Form
-from wtforms import SelectField, FloatField, FormField, HiddenField, IntegerField
+from wtforms.widgets import core as wtforms_widgets_core_module
+from wtforms import (
+    SelectField,
+    FloatField,
+    FormField,
+    FieldList,
+    HiddenField,
+    IntegerField,
+    BooleanField,
+)
 from wtforms.validators import InputRequired, Optional
 from vms.utils import PairedRangeInputWidget
+from quart import g
+
+
+# Cheeky monkeypatch to allow usage of htmx/alpine
+def clean_key(key):
+    key = key.rstrip("_")
+    if (
+        key.startswith("data_")
+        or key.startswith("aria_")
+        or key.startswith("hx_")
+        or key.startswith("x_")
+    ):
+        key = key.replace("_", "-")
+    return key
+
+
+wtforms_widgets_core_module.clean_key = clean_key
 
 
 def mk_voltage_field(label, **kwargs):
@@ -35,25 +61,7 @@ def mk_instrument_form(hidden):
         else:
             return mk_field(*args, **kwargs)
 
-    class InstrumentForm(Form):
-        temperature_ = maybe_field(
-            FloatField,
-            "Temperature (K)",
-            validators=[InputRequired()],
-            default=300.0,
-        )
-        pressure_first_chamber = maybe_field(
-            FloatField,
-            "Pressure first chamber (Pa)",
-            default=182.0,
-            validators=[InputRequired()],
-        )
-        pressure_second_chamber = maybe_field(
-            FloatField,
-            "Pressure second chamber (Pa)",
-            default=3.53,
-            validators=[InputRequired()],
-        )
+    class InstrumentGeometryForm(Form):
         length_of_first_chamber = maybe_field(
             FloatField,
             "Length of 1st chamber (meters)",
@@ -84,6 +92,8 @@ def mk_instrument_form(hidden):
             default=4.48e-3,
             validators=[InputRequired()],
         )
+
+    class SkimmerGeometryForm(Form):
         radius_at_smallest_cross_section_skimmer = maybe_field(
             FloatField,
             "Radius at smallest cross section skimmer (m)",
@@ -96,6 +106,8 @@ def mk_instrument_form(hidden):
             default=0.25,
             validators=[InputRequired()],
         )
+
+    class QuadrupoleForm(Form):
         dc_quadrupole = maybe_field(
             FloatField,
             "DC quadrupole",
@@ -121,6 +133,11 @@ def mk_instrument_form(hidden):
             validators=[InputRequired()],
         )
 
+    class InstrumentForm(Form):
+        instrument_geometry = FormField(InstrumentGeometryForm)
+        skimmer_geometry = FormField(SkimmerGeometryForm)
+        quadrupole = FormField(QuadrupoleForm)
+
     return InstrumentForm
 
 
@@ -132,6 +149,22 @@ class GasForm(Form):
     gas_molecule_radius = FloatField(default=2.46e-10, validators=[InputRequired()])
     gas_molecule_mass = FloatField(default=4.8506e-26, validators=[InputRequired()])
     adiabatic_index = FloatField(default=1.4, validators=[InputRequired()])
+
+    temperature_ = FloatField(
+        "Temperature (K)",
+        validators=[InputRequired()],
+        default=300.0,
+    )
+    pressure_first_chamber = FloatField(
+        "Pressure first chamber (Pa)",
+        default=182.0,
+        validators=[InputRequired()],
+    )
+    pressure_second_chamber = FloatField(
+        "Pressure second chamber (Pa)",
+        default=3.53,
+        validators=[InputRequired()],
+    )
 
 
 class SimulationForm(Form):
@@ -147,31 +180,52 @@ class SimulationForm(Form):
     tolerance = FloatField(default=1.0e-8, validators=[InputRequired()])
 
 
-def get_chain_choices():
-    from vms.app import CHAINS
+def get_cluster_choices():
+    clusters = g.db.execute(
+        "SELECT cluster.id, cluster.common_name FROM cluster JOIN pathway ON pathway.cluster_id = cluster.id"
+    ).fetchall()
 
-    return [(chain, chain) for chain in CHAINS.keys()]
-
-
-def get_chain_default():
-    from vms.app import CHAINS
-
-    return list(CHAINS.keys())[0]
+    return [(None, "")] + clusters
 
 
-class FragmentationPathwayForm(Form):
-    chain = SelectField(
+class SingleFragmentationPathwayForm(Form):
+    pathway = HiddenField(
         "Fragmentation pathway",
-        choices=get_chain_choices,
-        default=get_chain_default,
         validators=[InputRequired()],
     )
+    enabled = BooleanField("Enabled", default=True)
     fragmentation_energy = FloatField(validators=[Optional()])
 
 
 class SettingsForm(QuartForm):
     voltage = FormField(VoltageForm)
     instrument = FormField(BuiltInInstrumentForm)
-    pathways = FormField(FragmentationPathwayForm)
+    cluster = SelectField("Cluster", choices=get_cluster_choices)
+    pathways = FieldList(FormField(SingleFragmentationPathwayForm))
     gas = FormField(GasForm)
     simulation = FormField(SimulationForm)
+
+    def get_data(self):
+        from apitofsim import get_clusters, Gas
+        from numpy import array
+
+        data = self.data
+        result = {}
+        result["voltage"] = array((v for v in data["voltage"].values()))
+        """
+        result["pathways"] = [
+            {
+                "fragmentation_energy": data["pathways"]["fragmentation_energy"],
+                "pathway": get_clusters(CHAINS[data["pathways"]["chain"]]),
+            }
+        ]
+        """
+        gas = data["gas"]
+        result["gas"] = Gas(
+            *(
+                gas[k]
+                for k in ("gas_molecule_radius", "gas_molecule_mass", "adiabatic_index")
+            )
+        )
+        result["config"] = {**data["instrument"], **data["simulation"]}
+        return result

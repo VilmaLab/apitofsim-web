@@ -2,6 +2,9 @@ from markupsafe import escape, Markup
 from wtforms.widgets import html_params
 import json
 from contextlib import chdir
+from pint import get_application_registry
+
+ureg = get_application_registry()
 
 
 def chop_prefix(string, prefix):
@@ -40,12 +43,19 @@ class PairedRangeInputWidget:
         )
 
 
-def parse_config_list(fn):
-    from apitofsim import parse_config_with_particles
+def parse_config_pint(fn):
+    from apitofsim import parse_config_with_particles, get_clusters, get_gas
 
+    config = parse_config_with_particles(fn)
+    clusters = get_clusters(config)
+    gas = get_gas(config["config"])
+    return {"gas": gas, "pathways": [clusters]}
+
+
+def parse_config_list(fn):
     with open(fn) as f:
         config_dict = json.load(f)
         for k, conf_info in config_dict.items():
             with chdir(conf_info["cwd"]):
-                config_dict[k] = parse_config_with_particles(conf_info["config"])
+                config_dict[k] = parse_config_pint(conf_info["config"])
     return config_dict
