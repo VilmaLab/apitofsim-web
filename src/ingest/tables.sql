@@ -3,6 +3,7 @@ create sequence pathway_id_sequence start 1;
 
 create table cluster (
     id integer default nextval('cluster_id_sequence') primary key,
+    ase_mol_id integer,
     common_name varchar,
     atomic_mass integer,
     electronic_energy double,
