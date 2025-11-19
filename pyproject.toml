@@ -31,4 +31,4 @@ requires = ["uv_build>=0.8.17,<0.9.0"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
-apitofsim = { git = "https://github.com/VilmaHelsinki/apitofsim.git", branch = "python" }
+apitofsim = { git = "https://github.com/VilmaHelsinki/apitofsim.git" }
