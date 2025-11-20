@@ -1,6 +1,66 @@
+{% from "settings/_3dmoljs.html" import cluster_3dmol %}
+
 {% macro cluster_info(cluster) %}
     <div class="p-4 w-fit m-4" x-show="current_cluster == {{ cluster.id }}">
-        <h3 class="p-4 text-xl font-medium">{{ cluster.name }}</h3>
+        <h3 class="p-4 text-xl font-medium">{{ cluster.common_name }}</h3>
+        {% if cluster.conversion_error %}
+            Some values are missing due to an error converting from ase to rdkit. {{ cluster.conversion_error }}
+        {% endif %}
+        <div
+            class="flex flex-col items-center"
+            x-data="{ current_image: null }"
+        >
+            <select x-model.fill="current_image" class="mt-1 block mt-1 rounded-md border border-black p-1">
+                {% if cluster.ase_xyz %}
+                    <option value="ase_xyz">ASE XYZ</option>
+                {% endif %}
+                {% if cluster.ase_cube %}
+                    <option value="ase_cube">ASE CUBE</option>
+                {% endif %}
+                {% if cluster.rdkit_molblock %}
+                    <option value="rdkit_molblock">RDKit Molblock</option>
+                {% endif %}
+                {% if cluster.rd_png %}
+                    <option value="rd_png">RDKit PNG</option>
+                {% endif %}
+                {% if cluster.rd_svg %}
+                    <option value="rd_svg">RDKit SVG</option>
+                {% endif %}
+                {% if cluster.rd_svgacs %}
+                    <option value="rd_svgacs">RDKit SVG ACS</option>
+                {% endif %}
+            </select>
+            {% if cluster.ase_xyz %}
+                <div x-show="current_image == 'ase_xyz'" name="ase_xyz" class="relative p-4 bg-white border border-black">
+                    {{ cluster_3dmol(cluster.ase_xyz, "xyz", 400, 400, "viewer-xyz-}" + cluster.id|string ) }}
+                </div>
+            {% endif %}
+            {% if cluster.ase_cube %}
+                <div x-show="current_image == 'ase_cube'" name="ase_cube" class="relative p-4 bg-white border border-black">
+                    {{ cluster_3dmol(cluster.ase_cube, "cube", 400, 400, "viewer-cube-" + cluster.id|string) }}
+                </div>
+            {% endif %}
+            {% if cluster.rdkit_molblock %}
+                <div x-show="current_image == 'rdkit_molblock'" name="rdkit_molblock" class="relative p-4 bg-white border border-black">
+                    {{ cluster_3dmol(cluster.rdkit_molblock, "mol2", 400, 400, "viewer-mol2-" + cluster.id|string) }}
+                </div>
+            {% endif %}
+            {% if cluster.rd_png %}
+                <div x-show="current_image == 'rd_png'" name="rd_png" class="relative p-4 bg-white border border-black">
+                    {{ cluster.rd_png|safe }}
+                </div>
+            {% endif %}
+            {% if cluster.rd_svg %}
+                <div x-show="current_image == 'rd_svg'" name="rd_svg" class="relative p-4 bg-white border border-black">
+                    {{ cluster.rd_svg|safe }}
+                </div>
+            {% endif %}
+            {% if cluster.rd_svgacs %}
+                <div x-show="current_image == 'rd_svgacs'" name="rd_svgacs" class="relative p-4 bg-white border border-black">
+                    {{ cluster.rd_svgacs|safe }}
+                </div>
+            {% endif %}
+        </div>
         <table class="text-right">
             <tr>
                 <td class="p-1 pr-4">Atomic mass</td>
@@ -9,6 +69,18 @@
             <tr>
                 <td class="p-1 pr-4">Electronic energy</td>
                 <td class="p-1">{{ "%0.2f"|format(cluster.electronic_energy) }} \(E_h\)</td>
+            </tr>
+            <tr>
+                <td class="p-1 pr-4">Formula</td>
+                <td class="p-1">{{ cluster.formula }}</td>
+            </tr>
+            <tr>
+                <td class="p-1 pr-4">Symbols</td>
+                <td class="p-1">{{ cluster.symbols }}</td>
+            </tr>
+            <tr>
+                <td class="p-1 pr-4">Smiles string</td>
+                <td class="p-1">{{ cluster.smiles }}</td>
             </tr>
             {% if cluster.vibrational_temperatures is none %}
                 <tr>
@@ -122,7 +194,7 @@
             {% endfor %}
         </div>
         <div class="sticky top-0">
-            <div id="mass-spectrogram">
+            <div id="mass-spectrogram" class="border border-black py-2 bg-white">
                 {{ mass_spectrogram|safe }}
             </div>
             {% for cluster in clusters %}

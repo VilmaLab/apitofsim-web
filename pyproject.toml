@@ -12,11 +12,13 @@ dependencies = [
     "lxml>=6.0.2",
     "matplotlib>=3.10.6",
     "minify-html-onepass>=0.16.4",
+    "molify>=0.2.1",
     "pint>=0.25",
     "pip>=25.2",
     "quart>=0.20.0",
     "quart-wtforms>=1.0.3",
     "ray[default]>=2.49.1",
+    "rdkit>=2025.9.1",
     "virtualenv>=20.34.0",
     "wtforms>=3.2.1",
 ]

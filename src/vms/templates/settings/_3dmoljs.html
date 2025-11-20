@@ -1,0 +1,24 @@
+{% macro cluster_3dmol(cluster, format, width, height, viewer_id, show_atom_indices=False) -%}
+    <div id="{{ viewer_id }}" style="width: {{ width }}px; height: {{ height }}px;"></div>
+    <script>
+        (function() {
+            let viewer = $3Dmol.createViewer(document.getElementById("{{ viewer_id }}"), {
+                backgroundColor: "white"
+            });
+            let molblock = `{{ cluster }}`;
+            viewer.addModel(molblock, "{{ format }}");
+            viewer.setStyle({}, {stick:{}});
+            {% if show_atom_indices %}
+                viewer.addPropertyLabels("index",{not:{elem:'H'}}, {
+                    fontColor:'black',
+                    font:'sans-serif',
+                    fontSize: 15,
+                    showBackground:false,
+                    alignment:'center'
+                });
+            {% endif %}
+            viewer.zoomTo();
+            viewer.render();
+        })();
+    </script>
+{%- endmacro %}

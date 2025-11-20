@@ -1,17 +1,24 @@
+import warnings
+import os
 import duckdb
+from ase.db import connect as connect_ase_db
+from ase.io import write as ase_write
+from molify import ase2rdkit
+from rdkit import Chem as rdchem
+from rdkit.Chem import Draw as rddraw
+from io import StringIO, BytesIO, UnsupportedOperation
 import ray
 import asyncio
-from dataclasses import dataclass
 import typing
 import numpy
-import os
 from os import environ
 from quart import Quart, render_template, redirect, request, abort, make_response, g
 from .forms import SettingsForm, BuiltInInstrumentForm, CustomInstrumentForm
-from io import BytesIO
 import matplotlib
 import holoviews as hv
 from lxml import etree
+import base64
+import pandas
 
 from uuid import uuid4
 
@@ -25,13 +32,17 @@ set_application_registry(ureg)
 
 app = Quart(__name__)
 app.config["SECRET_KEY"] = "a-secret-key"
-
+pandas
 status = {}
 
 
 @app.before_request
 async def before_request():
-    g.db = duckdb.connect(database=environ["DATABASE"])
+    database_prefix = environ["DATABASE_PREFIX"]
+    duckdb_path = database_prefix + ".duckdb"
+    g.db = duckdb.connect(database=duckdb_path)
+    asedb_path = database_prefix + ".ase.sqlite"
+    g.ase_db = connect_ase_db(asedb_path, type="db")
 
 
 @app.while_serving
@@ -302,6 +313,72 @@ def hypothetical_spectrogram(cluster_ids, masses, max_mass=None):
     )
 
 
+def ase_write_string(atoms, format):
+    f = StringIO()
+    try:
+        ase_write(f, atoms, format=format)
+    except UnsupportedOperation:
+        if not hasattr(os, "memfd_create"):
+            warnings.warn(f"Could not convert to {format}. StringIO failed and memfd_create not supported.")
+            return None
+        fd = os.memfd_create("ase_convert_" + format)
+        f = os.fdopen(fd, "w+")
+        ase_write(f, atoms, format=format)
+        f.seek(0)
+        return f.read()
+    else:
+        return f.getvalue()
+
+
+def rddraw_html(rdkit_atoms, image_type="png", **kwargs):
+    if image_type not in ("png", "svg", "acs1996svg"):
+        raise ValueError(f"Unknown image type {image_type}")
+    drawfn = None
+    if image_type == "png":
+        drawfn = rddraw._moltoimg
+        kwargs["returnPNG"] = True
+    elif image_type == "svg":
+        drawfn = rddraw._moltoSVG
+    if image_type == "acs1996svg":
+        img = rddraw.MolToACS1996SVG(rdkit_atoms, **kwargs)
+    else:
+        assert drawfn is not None
+        kwargs.setdefault("sz", kwargs.get('size', (300, 300)))
+        kwargs.setdefault('highlights', kwargs.get('highlightBonds', []))
+        kwargs.setdefault('legend', '')
+        kwargs.setdefault('kekulize', True)
+        kwargs.setdefault('wedgeBonds', True)
+        img = drawfn(rdkit_atoms, **kwargs, options={"bgColor": (1, 1, 1, 0)})
+    if image_type == "png":
+        encoded = base64.b64encode(img).decode('utf-8')
+        return f'<img src="data:image/png;base64, {encoded}">'
+    else:
+        return img
+
+
+def enrich_cluster(cluster):
+    cluster["has_ase"] = cluster["ase_mol_id"] is not None
+    if not cluster["has_ase"]:
+        return
+    atoms = g.ase_db.get_atoms(cluster["ase_mol_id"])
+    cluster["formula"] = atoms.get_chemical_formula()
+    cluster["symbols"] = str(atoms.symbols)
+    cluster["ase_xyz"] = ase_write_string(atoms, "xyz")
+    cluster["ase_cube"] = ase_write_string(atoms, "cube")
+    try:
+        rdkit_atoms = ase2rdkit(atoms)
+    except ValueError as e:
+        cluster["conversion_error"] = e.args[0]
+        cluster["has_rdkit"] = False
+    else:
+        cluster["has_rdkit"] = True
+        cluster["smiles"] = rdchem.MolToSmiles(rdkit_atoms)
+        cluster["rd_molblock"] = rdchem.MolToMolBlock(rdkit_atoms)
+        cluster["rd_png"] = rddraw_html(rdkit_atoms, size=(400, 400))
+        cluster["rd_svg"] = rddraw_html(rdkit_atoms, size=(400, 400), image_type="svg")
+        cluster["rd_svgacs"] = rddraw_html(rdkit_atoms, image_type="acs1996svg")
+
+
 @app.route("/fragments/pathways")
 async def pathways_fragment():
     form = await SettingsForm.create_form()
@@ -327,13 +404,16 @@ async def pathways_fragment():
             g.db.from_df(relevant_cluster_ids).set_alias("relevant"),
             condition="relevant.relevant_cluster_id = cluster.id",
         )
-        .fetchdf()
+        .fetchdf().replace({pandas.NA: None})
     )
     cluster_ids = cluster_df["id"].to_numpy()
     masses = cluster_df["atomic_mass"].to_numpy()
     clusters = {}
+    print(cluster_df)
     for cluster in cluster_df.itertuples():
-        clusters[cluster.id] = cluster
+        cluster = cluster._asdict()
+        enrich_cluster(cluster)
+        clusters[cluster["id"]] = cluster
     pathways_relations = g.db.sql(
         """select * from pathway where cluster_id = ?""",
         params=(cluster_id,),
@@ -345,16 +425,16 @@ async def pathways_fragment():
         product1 = clusters[pathway.product1_id]
         product2 = clusters[pathway.product2_id]
         bonding_energy = (
-            product1.electronic_energy
-            + product2.electronic_energy
-            - cluster.electronic_energy
+            product1["electronic_energy"]
+            + product2["electronic_energy"]
+            - cluster["electronic_energy"]
         )
 
         pathways.append(
             {
-                "cluster": (pathway.cluster_id, cluster.common_name),
-                "product1": (pathway.product1_id, product1.common_name),
-                "product2": (pathway.product2_id, product2.common_name),
+                "cluster": (pathway.cluster_id, cluster["common_name"]),
+                "product1": (pathway.product1_id, product1["common_name"]),
+                "product2": (pathway.product2_id, product2["common_name"]),
                 "bonding_energy": bonding_energy,
                 "form": form.pathways.append_entry({"pathway": pathway.id}),
             }
@@ -365,7 +445,7 @@ async def pathways_fragment():
         pathways=pathways,
         clusters=clusters.values(),
         mass_spectrogram=hypothetical_spectrogram(cluster_ids, masses),
-        primary_cluster=(cluster_id, clusters[cluster_id].common_name),
+        primary_cluster=(cluster_id, clusters[cluster_id]["common_name"]),
     )
 
 
