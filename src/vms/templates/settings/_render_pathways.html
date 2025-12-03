@@ -64,11 +64,11 @@
         <table class="text-right">
             <tr>
                 <td class="p-1 pr-4">Atomic mass</td>
-                <td class="p-1">{{ cluster.atomic_mass }} \(Da\)</td>
+                <td class="p-1">{{ cluster.atomic_mass }} <span class="italic">Da</span></td>
             </tr>
             <tr>
                 <td class="p-1 pr-4">Electronic energy</td>
-                <td class="p-1">{{ "%0.2f"|format(cluster.electronic_energy) }} \(E_h\)</td>
+                <td class="p-1">{{ "%0.2f"|format(cluster.electronic_energy) }} <span class="italic">E<sub>h</sub></span></td>
             </tr>
             <tr>
                 <td class="p-1 pr-4">Formula</td>
@@ -186,7 +186,7 @@
                             {{ pathway.form.fragmentation_energy(
                                 class_="mt-1 border border-black p-1 text-right",
                                 placeholder=pathway.bonding_energy)
-                            }} \(E_h\)
+                            }} <span class="italic">E<sub>h</sub></span>
                         </div>
                         {{ pathway.form.fragmentation_energy.label }}
                     </div>
