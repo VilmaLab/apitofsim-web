@@ -1,24 +1,19 @@
-# Hello World Quart App
+# APi-ToF Web demo
 
-This is a minimal "Hello World" Quart application using `uv` for dependency management and Docker for containerization.
+This is a web demo of a simulation of a APi-ToF mass spectrometer
 
-## Prerequisites
-
-- Docker
-- uv (for local development)
-
-## Running the Application with Docker
+## Running with Docker
 
 1.  **Build the Docker image:**
 
     ```bash
-    docker build -t quart-hello-world .
+    docker build -t apitofsim-web .
     ```
 
 2.  **Run the Docker container:**
 
     ```bash
-    docker run -p 5000:5000 quart-hello-world
+    docker run -p 5000:5000 apitofsim-web
     ```
 
 3.  **Access the application:**
