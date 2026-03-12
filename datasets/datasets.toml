@@ -1,0 +1,66 @@
+[[pathways]]
+type = "csv"
+pathways_path = "alfaouri2022/pathways.csv"
+clusters_path = "alfaouri2022/clusters.csv"
+
+[pathways.clusters]
+default_source = "gaussian"
+electronic_energy = "orca.final_single_point_energy + gaussian.zero_point_energy"
+
+[pathways.clusters.sources.orca]
+append_to_common_prefix = ".out"
+
+[pathways.clusters.sources.gaussian]
+append_to_common_prefix = ".log"
+
+[[pathways]]
+type = "csv"
+pathways_path = "atomprod/pathways.csv"
+clusters_path = "atomprod/clusters.csv"
+
+[pathways.clusters]
+default_source = "orca_spectra"
+electronic_energy = "orca_energy.final_single_point_energy + orca_spectra.zero_point_energy"
+
+[pathways.clusters.sources.orca_energy]
+type = "orca"
+append_to_common_prefix = ".out"
+
+[pathways.clusters.sources.orca_spectra]
+type = "orca"
+append_to_common_prefix = ".log"
+ignore_unicode_errors = true
+
+[[pathways]]
+type = "csv"
+pathways_path = "besel2020/pathways.csv"
+clusters_path = "besel2020/clusters.csv"
+
+[pathways.clusters]
+default_source = "gaussian"
+electronic_energy = "orca.final_single_point_energy + gaussian.zero_point_energy"
+ase = "xyz"
+
+[pathways.clusters.sources.orca]
+append_to_common_prefix = ".out"
+
+[pathways.clusters.sources.gaussian]
+append_to_common_prefix = ".log"
+
+[pathways.clusters.sources.xyz]
+append_to_common_prefix = ".xyz"
+
+[[pathways]]
+type = "csv"
+pathways_path = "tunning/pathways.csv"
+clusters_path = "tunning/clusters.csv"
+
+[pathways.clusters]
+default_source = "gaussian"
+electronic_energy = "orca.final_single_point_energy + gaussian.zero_point_energy"
+
+[pathways.clusters.sources.orca]
+append_to_common_prefix = ".out"
+
+[pathways.clusters.sources.gaussian]
+append_to_common_prefix = ".log"

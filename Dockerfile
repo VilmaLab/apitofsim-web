@@ -1,36 +1,37 @@
-# First, build the application in the `/app` directory.
-# See `Dockerfile` for details.
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+## Step 1. Build application
+FROM docker.io/mambaorg/micromamba:2.5.0 AS builder
 
-# Disable Python downloads, because we want to use the system interpreter
-# across both images. If using a managed Python version, it needs to be
-# copied from the build image into the final image; see `standalone.Dockerfile`
-# for an example.
-ENV UV_PYTHON_DOWNLOADS=0
+COPY --chown=$MAMBA_USER:$MAMBA_USER . /tmp/apitofsim-web
+USER root
+RUN mkdir /env && chown $MAMBA_USER:$MAMBA_USER /env
+USER $MAMBA_USER
+RUN --mount=type=cache,target=/opt/conda/pkgs micromamba create --copy -p /env --yes --file /tmp/apitofsim-web/env-container.lock
 
-WORKDIR /app
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-dev --extra=deploy
-COPY . /app
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --extra=deploy
+## Step 2. Grab and import data
+ARG RCLONE_S3_ACCESS_KEY_ID
+ENV RCLONE_S3_ACCESS_KEY_ID=$RCLONE_S3_ACCESS_KEY_ID
+ARG RCLONE_S3_SECRET_ACCESS_KEY
+ENV RCLONE_S3_SECRET_ACCESS_KEY=$RCLONE_S3_SECRET_ACCESS_KEY
 
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    rclone 7zip
+USER $MAMBA_USER
 
-# Then, use a final image without uv
-FROM python:3.13-slim-bookworm
-# It is important to use the image that matches the builder, as the path to the
-# Python executable must be the same, e.g., using `python:3.11-slim-bookworm`
-# will fail.
+RUN cd /tmp/apitofsim-web/datasets && \
+    micromamba run -p /env ./ingest.sh
+
+## Step 3. Build the final bare container
+FROM gcr.io/distroless/base-debian13
 
 # Copy the application from the builder
-COPY --from=builder /app /app
+COPY --from=builder /env /env
+
+# Copy the database
+COPY --from=builder /tmp/apitofsim-web/datasets/database.ase.sqlite.db /tmp/apitofsim-web/datasets/database.duckdb .
 
 # Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
-ENV CHAINS=/app/config_list_docker.json
+ENV PATH="/env/bin:$PATH"
 
 # Run Quart
 EXPOSE 8080
