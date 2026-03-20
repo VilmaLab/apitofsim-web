@@ -64,3 +64,21 @@ append_to_common_prefix = ".out"
 
 [pathways.clusters.sources.gaussian]
 append_to_common_prefix = ".log"
+
+[[densityandrate_configs]]
+name = "superfine"
+bin_width = "0.5 kelvin"
+energy_max = "2.0e5 kelvin"
+energy_max_rate = "1.0e5 kelvin"
+
+[[densityandrate_configs]]
+name = "fine"
+bin_width = "1.0 kelvin"
+energy_max = "2.0e5 kelvin"
+energy_max_rate = "1.0e5 kelvin"
+
+[[densityandrate_configs]]
+name = "coarse"
+bin_width = "4.0 kelvin"
+energy_max = "2.0e5 kelvin"
+energy_max_rate = "1.0e5 kelvin"

@@ -3,7 +3,8 @@ shopt -s globstar
 set -euo pipefail
 IFS=$'\n\t'
 
-RCLONE_S3_ENDPOINT=https://a3s.fi rclone copy :s3,env_auth:apitofsim-data .
+export RCLONE_S3_ENDPOINT=https://a3s.fi
+rclone copy :s3,env_auth:apitofsim-data .
 
 7z x -y alfaouri2022.7z -oalfaouri2022
 7z x -y atomprod.7z -oatomprod
@@ -16,4 +17,11 @@ RCLONE_S3_ENDPOINT=https://a3s.fi rclone copy :s3,env_auth:apitofsim-data .
 (cd tunning && apitofsim generate pathways --guess-prefix gaussian pathways.csv clusters.csv **/*.log)
 
 rm -f database.db
-apitofsim db prepare create --db-type=super --ase datasets.toml database.duckdb
+if [ -n "${USE_TURSO}" ]; then
+    sbatch --wait prepare-turso.slurm
+else
+    bash ./prepare.sh
+fi
+
+rclone copy database.duckdb :s3,env_auth:apitofsim-data
+rclone copy database.ase.sqlite.db :s3,env_auth:apitofsim-data
