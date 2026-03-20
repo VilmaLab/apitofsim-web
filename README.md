@@ -50,7 +50,7 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
 
 5. **Run the webserver:**
     ```bash
-    quart --app vms run --debug
+    quart --debug --app vms run
     ```
 
 6.  **Access the application:**

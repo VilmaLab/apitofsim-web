@@ -15,11 +15,11 @@ ENV RCLONE_S3_SECRET_ACCESS_KEY=$RCLONE_S3_SECRET_ACCESS_KEY
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    rclone 7zip
+    rclone
 USER $MAMBA_USER
 
 RUN cd /tmp/apitofsim-web/datasets && \
-    micromamba run -p /env ./ingest.sh
+    rclone copy :s3,env_auth:apitofsim-data .
 
 ## Step 3. Build the final bare container
 FROM gcr.io/distroless/base-debian13
