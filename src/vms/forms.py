@@ -181,7 +181,7 @@ class SimulationForm(Form):
 
 
 def get_cluster_choices():
-    clusters = g.db.execute(
+    clusters = g.db.db.execute(
         "SELECT cluster.id, cluster.common_name FROM cluster JOIN pathway ON pathway.cluster_id = cluster.id"
     ).fetchall()
 

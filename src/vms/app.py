@@ -1,7 +1,6 @@
 import warnings
 import os
 import duckdb
-from ase.db import connect as connect_ase_db
 from ase.io import write as ase_write
 from molify import ase2rdkit
 from rdkit import Chem as rdchem
@@ -19,6 +18,7 @@ import holoviews as hv
 from lxml import etree
 import base64
 import pandas
+from apitofsim.workflow.db import SuperClusterDatabase, guess_ase_db_filename
 
 from uuid import uuid4
 
@@ -32,17 +32,13 @@ set_application_registry(ureg)
 
 app = Quart(__name__)
 app.config["SECRET_KEY"] = "a-secret-key"
-pandas
 status = {}
 
 
 @app.before_request
 async def before_request():
-    database_prefix = environ["DATABASE_PREFIX"]
-    duckdb_path = database_prefix + ".duckdb"
-    g.db = duckdb.connect(database=duckdb_path)
-    asedb_path = database_prefix + ".ase.sqlite"
-    g.ase_db = connect_ase_db(asedb_path, type="db")
+    database_path = environ["DATABASE"]
+    g.db = SuperClusterDatabase(database_path, ase_filename=guess_ase_db_filename(database_path))
 
 
 @app.while_serving
@@ -269,7 +265,7 @@ async def settings():
 
 def hypothetical_spectrogram(cluster_ids, masses, max_mass=None):
     if max_mass is None:
-        max_mass = g.db.sql("select max(atomic_mass) from cluster").fetchone()[0]
+        max_mass = g.db.db.sql("select max(atomic_mass) from cluster").fetchone()[0]
     spectrogram = hv.Spikes(
         (masses, 1),
         hv.Dimension("m/z", soft_range=(0, max_mass)),
@@ -360,7 +356,7 @@ def enrich_cluster(cluster):
     cluster["has_ase"] = cluster["ase_mol_id"] is not None
     if not cluster["has_ase"]:
         return
-    atoms = g.ase_db.get_atoms(cluster["ase_mol_id"])
+    atoms = g.db.ase_db.get_atoms(cluster["ase_mol_id"])
     cluster["formula"] = atoms.get_chemical_formula()
     cluster["symbols"] = str(atoms.symbols)
     cluster["ase_xyz"] = ase_write_string(atoms, "xyz")
@@ -390,7 +386,7 @@ async def pathways_fragment():
     cluster_id = int(request.args["cluster"])
     if cluster_id is None:
         abort(400, description="Invalid cluster parameter")
-    relevant_cluster_ids = g.db.sql(
+    relevant_cluster_ids = g.db.db.sql(
         """
         select distinct unnest([cluster_id, product1_id, product2_id]) as relevant_cluster_id
         from pathway
@@ -399,9 +395,9 @@ async def pathways_fragment():
         params=(cluster_id,),
     ).fetchdf()
     cluster_df = (
-        g.db.table("cluster")
+        g.db.db.table("cluster")
         .join(
-            g.db.from_df(relevant_cluster_ids).set_alias("relevant"),
+            g.db.db.from_df(relevant_cluster_ids).set_alias("relevant"),
             condition="relevant.relevant_cluster_id = cluster.id",
         )
         .fetchdf().replace({pandas.NA: None})
@@ -414,7 +410,7 @@ async def pathways_fragment():
         cluster = cluster._asdict()
         enrich_cluster(cluster)
         clusters[cluster["id"]] = cluster
-    pathways_relations = g.db.sql(
+    pathways_relations = g.db.db.sql(
         """select * from pathway where cluster_id = ?""",
         params=(cluster_id,),
     ).fetchdf()
@@ -464,9 +460,9 @@ async def hypothetical_spectrogram_fragment():
             if pathway["enabled"]
         ]
     )
-    pathway_ids = g.db.table("pathway_ids").set_alias("selected_pathways")
+    pathway_ids = g.db.db.table("pathway_ids").set_alias("selected_pathways")
     relevant_cluster_ids = (
-        g.db.table("pathway")
+        g.db.db.table("pathway")
         .join(pathway_ids, condition="selected_pathways.column0 = pathway.id")
         .select(
             "distinct unnest([cluster_id, product1_id, product2_id]) as relevant_cluster_id"
@@ -476,9 +472,9 @@ async def hypothetical_spectrogram_fragment():
     if cluster_id not in relevant_cluster_ids:
         relevant_cluster_ids = numpy.append(relevant_cluster_ids, [cluster_id])
     cluster_infos = (
-        g.db.table("cluster")
+        g.db.db.table("cluster")
         .join(
-            g.db.table("relevant_cluster_ids").set_alias("relevant"),
+            g.db.db.table("relevant_cluster_ids").set_alias("relevant"),
             condition="relevant.column0 = cluster.id",
         )
         .select("id, atomic_mass")
