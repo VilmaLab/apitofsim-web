@@ -1,6 +1,14 @@
-## Step 1. Build application
 FROM docker.io/mambaorg/micromamba:2.5.0 AS builder
 
+# Step 0. Args and arg checking
+ARG RCLONE_S3_ACCESS_KEY_ID
+ENV RCLONE_S3_ACCESS_KEY_ID=$RCLONE_S3_ACCESS_KEY_ID
+RUN test -n "$RCLONE_S3_ACCESS_KEY_ID" || (echo "RCLONE_S3_ACCESS_KEY_ID not set" && false)
+ARG RCLONE_S3_SECRET_ACCESS_KEY
+ENV RCLONE_S3_SECRET_ACCESS_KEY=$RCLONE_S3_SECRET_ACCESS_KEY
+RUN test -n "$RCLONE_S3_SECRET_ACCESS_KEY" || (echo "RCLONE_S3_SECRET_ACCESS_KEY not set" && false)
+
+## Step 1. Build application
 COPY --chown=$MAMBA_USER:$MAMBA_USER . /tmp/apitofsim-web
 USER root
 RUN mkdir /env && chown $MAMBA_USER:$MAMBA_USER /env
@@ -8,11 +16,6 @@ USER $MAMBA_USER
 RUN --mount=type=cache,target=/opt/conda/pkgs micromamba create --copy -p /env --yes --file /tmp/apitofsim-web/env-container.lock
 
 ## Step 2. Grab and import data
-ARG RCLONE_S3_ACCESS_KEY_ID
-ENV RCLONE_S3_ACCESS_KEY_ID=$RCLONE_S3_ACCESS_KEY_ID
-ARG RCLONE_S3_SECRET_ACCESS_KEY
-ENV RCLONE_S3_SECRET_ACCESS_KEY=$RCLONE_S3_SECRET_ACCESS_KEY
-
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     rclone
