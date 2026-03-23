@@ -16,12 +16,13 @@ FROM gcr.io/distroless/base-debian13
 
 # Copy the application from the builder
 COPY --from=builder /env /env
-COPY --from=builder /tmp/apitofsim-web/datasets/fetch-dbs.sh /env/bin/
+COPY --from=builder /tmp/apitofsim-web/fetch-and-start.sh /env/bin/
 
 # Place executables in the environment at the front of the path
 ENV PATH="/env/bin:$PATH"
+ENV DATABASE_DIR="/database/"
 
 # Run Quart
 EXPOSE 8080
 # Only ever use 1 worker since it is stateful
-CMD ["hypercorn", "-w", "1", "-b", "0.0.0.0:8080", "vms:app"]
+CMD ["fetch-and-start.sh"]
