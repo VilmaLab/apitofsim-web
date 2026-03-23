@@ -12,6 +12,10 @@ FROM gcr.io/distroless/base-debian13
 
 # Copy the application from the builder
 COPY --from=builder /env /env
+COPY --from=builder /tmp/apitofsim-web/datasets/fetch-dbs.sh /env/bin/
+
+## Install rclone
+RUN apt-get -o APT::Keep-Downloaded-Packages=false -o Dir::Cache=/tmp/apt-cache install -y --no-install-recommends rclone
 
 # Place executables in the environment at the front of the path
 ENV PATH="/env/bin:$PATH"
