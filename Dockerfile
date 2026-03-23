@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 USER $MAMBA_USER
 
 RUN cd /tmp/apitofsim-web/datasets && \
-    rclone copy :s3,env_auth:apitofsim-data .
+    RCLONE_S3_ENDPOINT=https://a3s.fi rclone copy :s3,env_auth:apitofsim-data .
 
 ## Step 3. Build the final bare container
 FROM gcr.io/distroless/base-debian13
