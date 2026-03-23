@@ -7,7 +7,7 @@ RUN mkdir /env && chown $MAMBA_USER:$MAMBA_USER /env
 USER $MAMBA_USER
 RUN --mount=type=cache,target=/opt/conda/pkgs \
   micromamba create --copy -p /env --yes \
-  --file /tmp/apitofsim-web/env-container.lock &&
+  --file /tmp/apitofsim-web/env-container.lock && \
   micromamba -p /env --yes rclone bash
 
 ## Step 2. Build the final bare container
