@@ -1,0 +1,31 @@
+name: QA (linters & formatters)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+
+  lint_python:
+    name: Style check Python
+    runs-on: ubuntu-slim
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Ruff check
+        uses: astral-sh/ruff-action@v3
+        with:
+          args: "check"
+          src: "./src"
+
+      - name: Ruff format check
+        uses: astral-sh/ruff-action@v3
+        with:
+          args: "format --check"
+          src: "./src"
