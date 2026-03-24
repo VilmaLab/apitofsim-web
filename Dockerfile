@@ -25,4 +25,4 @@ ENV DATABASE_DIR="/database/"
 # Run Quart
 EXPOSE 8080
 # Only ever use 1 worker since it is stateful
-CMD ["fetch-and-start.sh"]
+CMD ["/env/bin/bash", "fetch-and-start.sh"]
