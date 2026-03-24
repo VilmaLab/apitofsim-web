@@ -1,20 +1,21 @@
 import functools
 
+from quart import Markup, g
 from quart_wtf import QuartForm
-from wtforms import Form
-from wtforms.widgets import core as wtforms_widgets_core_module
 from wtforms import (
-    SelectField,
-    FloatField,
+    BooleanField,
     FieldList,
+    FloatField,
+    Form,
     FormField,
     HiddenField,
     IntegerField,
-    BooleanField,
+    SelectField,
 )
 from wtforms.validators import InputRequired, Optional
+from wtforms.widgets import core as wtforms_widgets_core_module
+
 from vms.utils import PairedRangeInputWidget
-from quart import g, Markup
 
 
 # Cheeky monkeypatch to allow usage of htmx/alpine
@@ -255,7 +256,7 @@ class SettingsForm(QuartForm):
     simulation = FormField(SimulationForm)
 
     def get_data(self):
-        from apitofsim import get_clusters, Gas
+        from apitofsim import Gas, get_clusters
         from numpy import array
 
         data = self.data

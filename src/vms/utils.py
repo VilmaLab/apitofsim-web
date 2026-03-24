@@ -1,8 +1,9 @@
-from markupsafe import escape, Markup
-from wtforms.widgets import html_params
 import json
 from contextlib import chdir
+
+from markupsafe import Markup, escape
 from pint import get_application_registry
+from wtforms.widgets import html_params
 
 ureg = get_application_registry()
 
@@ -44,7 +45,7 @@ class PairedRangeInputWidget:
 
 
 def parse_config_pint(fn):
-    from apitofsim import parse_config_with_particles, get_clusters, get_gas
+    from apitofsim import get_clusters, get_gas, parse_config_with_particles
 
     config = parse_config_with_particles(fn)
     clusters = get_clusters(config)

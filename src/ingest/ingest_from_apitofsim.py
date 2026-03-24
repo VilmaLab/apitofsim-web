@@ -1,16 +1,15 @@
-from glob import glob
-from sys import argv
-from json import load
-from contextlib import chdir
-from os.path import dirname, isfile, basename, expanduser
-import duckdb
 import os
+from contextlib import chdir
+from glob import glob
+from json import load
+from os.path import basename, dirname, expanduser, isfile
 from pathlib import Path
+from sys import argv
+
+import duckdb
+from apitofsim.config import get_particle, parse_config
 from ase.db import connect as connect_ase_db
 from ase.io import read as ase_read
-
-
-from apitofsim.config import parse_config, get_particle
 
 
 def backup_search(source, data_file):

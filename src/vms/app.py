@@ -3,31 +3,31 @@ import tempfile
 
 os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 
-import warnings
-import os
-import duckdb
-from ase.io import write as ase_write
-from molify import ase2rdkit
-from rdkit import Chem as rdchem
-from rdkit.Chem import Draw as rddraw
-from io import StringIO, BytesIO, UnsupportedOperation
-import ray
 import asyncio
-import typing
-import numpy
-from os import environ
-from quart import Quart, render_template, redirect, request, abort, make_response, g
-from .forms import SettingsForm, BuiltInInstrumentForm, CustomInstrumentForm
-import matplotlib
-import holoviews as hv
-from lxml import etree
 import base64
-import pandas
-from apitofsim.workflow.db import SuperClusterDatabase, guess_ase_db_filename
-
+import os
+import typing
+import warnings
+from io import BytesIO, StringIO, UnsupportedOperation
+from os import environ
 from uuid import uuid4
 
+import duckdb
+import holoviews as hv
+import matplotlib
+import numpy
+import pandas
+import ray
+from apitofsim.workflow.db import SuperClusterDatabase, guess_ase_db_filename
+from ase.io import write as ase_write
+from lxml import etree
+from molify import ase2rdkit
 from pint import UnitRegistry, set_application_registry
+from quart import Quart, abort, g, make_response, redirect, render_template, request
+from rdkit import Chem as rdchem
+from rdkit.Chem import Draw as rddraw
+
+from .forms import BuiltInInstrumentForm, CustomInstrumentForm, SettingsForm
 
 matplotlib.use("SVG")
 hv.extension("matplotlib")  # type: ignore
@@ -94,11 +94,12 @@ jinja_loader = app.jinja_loader
 
 @ray.remote
 def run_simulation(voltage, pathways, gas, config):
-    from time import sleep
     from random import random
+    from time import sleep
+
+    from apitofsim import skimmer_pandas
     from jinja2 import Environment
     from minify_html_onepass import minify
-    from apitofsim import skimmer_pandas
 
     jinja_env = Environment(loader=jinja_loader)
 
