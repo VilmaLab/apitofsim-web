@@ -4,15 +4,15 @@ from wtforms.widgets import core as wtforms_widgets_core_module
 from wtforms import (
     SelectField,
     FloatField,
-    FormField,
     FieldList,
+    FormField,
     HiddenField,
     IntegerField,
     BooleanField,
 )
 from wtforms.validators import InputRequired, Optional
 from vms.utils import PairedRangeInputWidget
-from quart import g
+from quart import g, Markup
 
 
 # Cheeky monkeypatch to allow usage of htmx/alpine
@@ -31,7 +31,8 @@ def clean_key(key):
 wtforms_widgets_core_module.clean_key = clean_key
 
 
-def mk_voltage_field(label, **kwargs):
+def mk_voltage_field(num, **kwargs):
+    label = Markup(rf'<span class="italic">V<sub>{num}</sub></em>')
     return FloatField(
         label,
         **kwargs,
@@ -47,11 +48,11 @@ def mk_voltage_field(label, **kwargs):
 
 
 class VoltageForm(Form):
-    voltage1 = mk_voltage_field(r"\(V_0\)", default=-19)
-    voltage2 = mk_voltage_field(r"\(V_1\)", default=-9)
-    voltage3 = mk_voltage_field(r"\(V_2\)", default=-7)
-    voltage4 = mk_voltage_field(r"\(V_3\)", default=-6)
-    voltage5 = mk_voltage_field(r"\(V_4\)", default=11)
+    voltage1 = mk_voltage_field(0, default=-19)
+    voltage2 = mk_voltage_field(1, default=-9)
+    voltage3 = mk_voltage_field(2, default=-7)
+    voltage4 = mk_voltage_field(3, default=-6)
+    voltage5 = mk_voltage_field(4, default=11)
 
 
 def mk_instrument_form(hidden):
