@@ -198,12 +198,16 @@ def get_histogram_precision_choices():
 
     NAMES = ["superfine (slow)", "fine", "coarse (fast)"]
     choices = []
-    for name, dos_hist, k_rate_hist in zip(NAMES, dos_histograms, k_rate_histograms, strict=True):
+    for name, dos_hist, k_rate_hist in zip(
+        NAMES, dos_histograms, k_rate_histograms, strict=True
+    ):
         if dos_hist[1] != k_rate_hist[1]:
             raise ValueError(
                 f"Mismatch in histogram precision choices: {dos_hist} vs {k_rate_hist}"
             )
-        choices.append(((dos_hist[0], k_rate_hist[0]), f"{name} [bin width = {dos_hist[1]:.1f} K]"))
+        choices.append(
+            ((dos_hist[0], k_rate_hist[0]), f"{name} [bin width = {dos_hist[1]:.1f} K]")
+        )
     return choices
 
 
@@ -214,14 +218,13 @@ class SkimmerPrecisionForm(Form):
     tolerance = FloatField(default=1.0e-8, validators=[InputRequired()])
 
 
-
 class SimulationForm(Form):
     realizations = IntegerField(default=1000, validators=[InputRequired()])
     histogram_precision = SelectField(
         "Histogram precision",
         choices=get_histogram_precision_choices,
         validators=[InputRequired()],
-        default=lambda: get_histogram_precision_choices()[1][0]
+        default=lambda: get_histogram_precision_choices()[1][0],
     )
     skimmer = FormField(SkimmerPrecisionForm)
 

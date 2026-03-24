@@ -39,9 +39,7 @@ def fixup_config(source, config, particle):
                     config[config_key] = result
                     particle_failed = False
             if particle_failed:
-                print(
-                    f"Could not find {config[config_key]}; skipping particle"
-                )
+                print(f"Could not find {config[config_key]}; skipping particle")
                 return True
     return False
 
@@ -85,7 +83,9 @@ def ingest_source(ddb, ase_db, source):
                     continue
                 gaussian_path = get_gaussian_log(source, config, particle)
                 if gaussian_path is None:
-                    print(f"Could not find Guassian log for {particle_name}. Carrying on without.")
+                    print(
+                        f"Could not find Guassian log for {particle_name}. Carrying on without."
+                    )
                     ase_id = None
                 else:
                     particle = ase_read(gaussian_path, format="gaussian-out")

@@ -1,6 +1,7 @@
 import os
 import tempfile
-os.environ['MPLCONFIGDIR'] = tempfile.mkdtemp()
+
+os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 
 import warnings
 import os
@@ -42,7 +43,9 @@ status = {}
 @app.before_request
 async def before_request():
     database_path = environ["DATABASE"]
-    g.db = SuperClusterDatabase(database_path, ase_filename=guess_ase_db_filename(database_path))
+    g.db = SuperClusterDatabase(
+        database_path, ase_filename=guess_ase_db_filename(database_path)
+    )
 
 
 @app.while_serving
@@ -319,7 +322,9 @@ def ase_write_string(atoms, format):
         ase_write(f, atoms, format=format)
     except UnsupportedOperation:
         if not hasattr(os, "memfd_create"):
-            warnings.warn(f"Could not convert to {format}. StringIO failed and memfd_create not supported.")
+            warnings.warn(
+                f"Could not convert to {format}. StringIO failed and memfd_create not supported."
+            )
             return None
         fd = os.memfd_create("ase_convert_" + format)
         f = os.fdopen(fd, "w+")
@@ -343,14 +348,14 @@ def rddraw_html(rdkit_atoms, image_type="png", **kwargs):
         img = rddraw.MolToACS1996SVG(rdkit_atoms, **kwargs)
     else:
         assert drawfn is not None
-        kwargs.setdefault("sz", kwargs.get('size', (300, 300)))
-        kwargs.setdefault('highlights', kwargs.get('highlightBonds', []))
-        kwargs.setdefault('legend', '')
-        kwargs.setdefault('kekulize', True)
-        kwargs.setdefault('wedgeBonds', True)
+        kwargs.setdefault("sz", kwargs.get("size", (300, 300)))
+        kwargs.setdefault("highlights", kwargs.get("highlightBonds", []))
+        kwargs.setdefault("legend", "")
+        kwargs.setdefault("kekulize", True)
+        kwargs.setdefault("wedgeBonds", True)
         img = drawfn(rdkit_atoms, **kwargs, options={"bgColor": (1, 1, 1, 0)})
     if image_type == "png":
-        encoded = base64.b64encode(img).decode('utf-8')
+        encoded = base64.b64encode(img).decode("utf-8")
         return f'<img src="data:image/png;base64, {encoded}">'
     else:
         return img
@@ -404,7 +409,8 @@ async def pathways_fragment():
             g.db.db.from_df(relevant_cluster_ids).set_alias("relevant"),
             condition="relevant.relevant_cluster_id = cluster.id",
         )
-        .fetchdf().replace({pandas.NA: None})
+        .fetchdf()
+        .replace({pandas.NA: None})
     )
     cluster_ids = cluster_df["id"].to_numpy()
     masses = cluster_df["atomic_mass"].to_numpy()
