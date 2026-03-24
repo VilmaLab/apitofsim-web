@@ -9,6 +9,7 @@ WORKDIR /tmp/
 RUN --mount=type=cache,target=/opt/conda/pkgs \
   micromamba create --copy -p /env --yes \
   --file /tmp/apitofsim-web/env-container.lock && \
+  micromamba run pip install /tmp/apitofsim-web/ && \
   micromamba install -p /env --yes rclone bash
 
 ## Step 2. Build the final bare container
