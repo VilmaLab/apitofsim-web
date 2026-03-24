@@ -1,3 +1,5 @@
+import functools
+
 from quart_wtf import QuartForm
 from wtforms import Form
 from wtforms.widgets import core as wtforms_widgets_core_module
@@ -168,17 +170,60 @@ class GasForm(Form):
     )
 
 
-class SimulationForm(Form):
-    energy_max_density_of_state = FloatField(
-        default=2.0e5, validators=[InputRequired()]
-    )
-    energy_max_rate_constant = FloatField(default=3.0e4, validators=[InputRequired()])
-    energy_resolution = FloatField(default=1.0, validators=[InputRequired()])
-    realizations = IntegerField(default=1000, validators=[InputRequired()])
+@functools.cache
+def get_histogram_precision_choices():
+    dos_histograms = g.db.db.execute(
+        """
+        with dos_histogram_ids as (
+            select distinct histogram_params_id from cluster_dos
+            union
+            select distinct histogram_params_id from products_dos
+        )
+        select histogram_params_id, bin_width
+        from histogram_params
+        join dos_histogram_ids
+        on dos_histogram_ids.histogram_params_id = histogram_params.id
+        order by bin_width
+        """
+    ).fetchall()
+    k_rate_histograms = g.db.db.execute(
+        """
+        select distinct histogram_params_id, bin_width
+        from histogram_params
+        join k_rate
+        on k_rate.histogram_params_id = histogram_params.id
+        order by bin_width
+        """
+    ).fetchall()
+
+    NAMES = ["superfine (slow)", "fine", "coarse (fast)"]
+    choices = []
+    for name, dos_hist, k_rate_hist in zip(NAMES, dos_histograms, k_rate_histograms, strict=True):
+        if dos_hist[1] != k_rate_hist[1]:
+            raise ValueError(
+                f"Mismatch in histogram precision choices: {dos_hist} vs {k_rate_hist}"
+            )
+        choices.append(((dos_hist[0], k_rate_hist[0]), f"{name} [bin width = {dos_hist[1]:.1f} K]"))
+    return choices
+
+
+class SkimmerPrecisionForm(Form):
     iterations_eq1 = IntegerField(default=1000, validators=[InputRequired()])
     iterations_eq2 = IntegerField(default=1000, validators=[InputRequired()])
     solved_points = IntegerField(default=1000, validators=[InputRequired()])
     tolerance = FloatField(default=1.0e-8, validators=[InputRequired()])
+
+
+
+class SimulationForm(Form):
+    realizations = IntegerField(default=1000, validators=[InputRequired()])
+    histogram_precision = SelectField(
+        "Histogram precision",
+        choices=get_histogram_precision_choices,
+        validators=[InputRequired()],
+        default=lambda: get_histogram_precision_choices()[1][0]
+    )
+    skimmer = FormField(SkimmerPrecisionForm)
 
 
 def get_cluster_choices():
