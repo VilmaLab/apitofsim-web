@@ -28,6 +28,10 @@ deploy = [
     "hypercorn>=0.17.0",
 ]
 
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
 [build-system]
 requires = ["uv_build>=0.8.17,<0.9.0"]
 build-backend = "uv_build"
