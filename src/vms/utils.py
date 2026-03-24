@@ -1,7 +1,7 @@
 import json
 from contextlib import chdir
 
-from markupsafe import Markup, escape
+from markupsafe import Markup
 from pint import get_application_registry
 from wtforms.widgets import html_params
 

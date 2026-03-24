@@ -256,7 +256,7 @@ class SettingsForm(QuartForm):
     simulation = FormField(SimulationForm)
 
     def get_data(self):
-        from apitofsim import Gas, get_clusters
+        from apitofsim import Gas
         from numpy import array
 
         data = self.data

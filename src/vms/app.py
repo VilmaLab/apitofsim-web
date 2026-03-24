@@ -12,7 +12,6 @@ from io import BytesIO, StringIO, UnsupportedOperation
 from os import environ
 from uuid import uuid4
 
-import duckdb
 import holoviews as hv
 import matplotlib
 import numpy
@@ -228,7 +227,6 @@ def start_job(job_id):
 
 
 def pump_jobs():
-    import time
 
     # XXX: 0.01s per job. Run in thread?
     for job_id, info in status.items():  # type: ignore
