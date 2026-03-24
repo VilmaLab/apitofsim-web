@@ -1,3 +1,7 @@
+import os
+import tempfile
+os.environ['MPLCONFIGDIR'] = tempfile.mkdtemp()
+
 import warnings
 import os
 import duckdb
