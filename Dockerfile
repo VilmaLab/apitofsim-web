@@ -6,6 +6,7 @@ USER root
 RUN mkdir /env && chown $MAMBA_USER:$MAMBA_USER /env
 USER $MAMBA_USER
 WORKDIR /tmp/
+ENV PATH="/env/bin:$PATH"
 RUN --mount=type=cache,target=/opt/conda/pkgs \
   micromamba create --copy -p /env --yes \
   --file /tmp/apitofsim-web/env-container.lock && \
