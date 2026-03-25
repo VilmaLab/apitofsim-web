@@ -1,0 +1,24 @@
+{
+  "name": "apitofsim-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build-css && npm run build-js",
+    "build-css": "npx @tailwindcss/cli -i src/css/index.css -o src/vms/static/index.css",
+    "build-js": "esbuild src/js/index.ts --bundle --outfile=src/vms/static/index.js"
+  },
+  "devDependencies": {
+    "@types/alpinejs": "^3.13.11",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "@tailwindcss/cli": "^4.2.2",
+    "3dmol": "^2.5.4",
+    "alpinejs": "^3.15.8",
+    "esbuild": "^0.27.4",
+    "htmx-ext-sse": "^2.2.4",
+    "htmx.org": "^2.0.8",
+    "tailwindcss": "^4.2.2"
+  }
+}
