@@ -4,3 +4,4 @@
 /cenv/
 /.venv/
 /uv.lock
+/node_modules/
