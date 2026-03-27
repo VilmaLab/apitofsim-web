@@ -1,0 +1,35 @@
+<script>
+function unitSwitcher({ unit, dropdown, system }) {
+    return {
+        unit,
+        dropdown,
+        system,
+        viewUnit: unit,
+
+        setUnit(value) {
+            this.viewUnit = value
+            this.$dispatch('unit-change', value)
+        },
+
+        cycle() {
+            this.setUnit(this.system.nextUnit(this.viewUnit))
+        }
+    }
+}
+document.addEventListener('alpine:init', () => {
+    Alpine.data('dropdown', () => ({
+        open: false,
+
+        toggle() {
+            this.open = ! this.open
+        },
+    }))
+})
+</script>
+
+<select @change="setUnit($event.target.value)">
+    <template x-for="unit in system.units" :key="unit.name">
+        <option :value="unit.name" x-text="unit.label"></option>
+    </template>
+</select>
+

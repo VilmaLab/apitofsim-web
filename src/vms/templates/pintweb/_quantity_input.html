@@ -1,0 +1,21 @@
+<div
+    x-data="quantityinput({
+        'system': {{ unit_system|escape }},
+        'magnitude': {{ magnitude }},
+        'unit': '{{ unit }}'
+    })"
+    class="relative w-50"
+    @unit-change="unitChange($event.detail)"
+>
+    <input
+        :value="viewValue"
+        @input="input($event)"
+        type="text"
+        inputmode="numeric"
+    `   {{ container_params }}>
+    {% if unit_select %}
+        {% include "pintweb/_unit_select.html" %}
+    {% else %}
+        {% include "pintweb/_unit_cycle.html" %}
+    {% endif %}
+</div>

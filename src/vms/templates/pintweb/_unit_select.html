@@ -1,0 +1,13 @@
+<select
+    x-data="unitswitcher({
+        'system': {{ unit_system|escape }},
+        'unit': '{{ unit }}'
+    })"
+    class="absolute right-1 top-0 h-[34px]"
+    @change="setUnit($event.target.value)"
+>
+    <template x-for="unit in system" :key="unit.name">
+        <option :value="unit.name" x-text="unit.label"></option>
+    </template>
+</select>
+

@@ -1,5 +1,6 @@
 import functools
 
+from pint import get_application_registry
 from quart import Markup, g
 from quart_wtf import QuartForm
 from wtforms import (
@@ -15,7 +16,11 @@ from wtforms import (
 from wtforms.validators import InputRequired, Optional
 from wtforms.widgets import core as wtforms_widgets_core_module
 
+from vms.pintweb.wtforms import QuantityField
 from vms.utils import PairedRangeInputWidget
+
+ureg = get_application_registry()
+Q_ = ureg.Quantity
 
 
 # Cheeky monkeypatch to allow usage of htmx/alpine
@@ -150,23 +155,30 @@ CustomInstrumentForm = mk_instrument_form(hidden=False)
 
 
 class GasForm(Form):
-    gas_molecule_radius = FloatField(default=2.46e-10, validators=[InputRequired()])
-    gas_molecule_mass = FloatField(default=4.8506e-26, validators=[InputRequired()])
+    gas_molecule_radius = QuantityField(
+        "Gas molecule radius",
+        validators=[InputRequired()],
+        default=Q_(2.46e-10, "meters"),
+    )
+    gas_molecule_mass = QuantityField(
+        "Gas molecule mass", default=Q_(4.8506e-26, "kg"), validators=[InputRequired()]
+    )
     adiabatic_index = FloatField(default=1.4, validators=[InputRequired()])
 
-    temperature_ = FloatField(
-        "Temperature (K)",
+    temperature_ = QuantityField(
+        "Temperature",
         validators=[InputRequired()],
-        default=300.0,
+        default=Q_(300.0, "K"),
+        units=["K", "°C"],
     )
-    pressure_first_chamber = FloatField(
-        "Pressure first chamber (Pa)",
-        default=182.0,
+    pressure_first_chamber = QuantityField(
+        "Pressure first chamber",
+        default=Q_(300.0, "Pa"),
         validators=[InputRequired()],
     )
-    pressure_second_chamber = FloatField(
-        "Pressure second chamber (Pa)",
-        default=3.53,
+    pressure_second_chamber = QuantityField(
+        "Pressure second chamber",
+        default=Q_(3.53, "Pa"),
         validators=[InputRequired()],
     )
 

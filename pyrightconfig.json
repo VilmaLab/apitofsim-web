@@ -1,0 +1,7 @@
+{
+  "executionEnvironments": [
+    {
+      "python": "cenv/bin/python"
+    }
+  ]
+}

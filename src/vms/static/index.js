@@ -13072,7 +13072,7 @@
                        * @param {number} alpha - unit cell angle in degrees (default 90)
                        * @param {number} beta - unit cell angle in degrees (default 90)
                        * @param {number} gamma - unit cell angle in degrees (default 90)
-                  
+
                        */
                   setCrystData(a, b, c, alpha, beta, gamma) {
                     a = a || 1;
@@ -13246,12 +13246,12 @@
                        * @param {boolean} bothWays - if true, extend both in positive and negative directions by numFrames
                        * @param {ArrowSpec} arrowSpec - specification for drawing animated arrows. If color isn't specified, atom color (sphere, stick, line preference) is used.
                        *@example
-                  
+
                         $3Dmol.download("pdb:4UAA",viewer,{},function(){
                           viewer.setStyle({},{stick:{}});
                           viewer.vibrate(10, 1);
                           viewer.animate({loop: "forward",reps: 1});
-                  
+
                           viewer.zoomTo();
                                 viewer.render();
                             });
@@ -13725,7 +13725,7 @@
                        * @param {AtomSpec[]} newatoms
                        * @example
                        * var atoms = [{elem: 'C', x: 0, y: 0, z: 0, bonds: [1,2], bondOrder: [1,2]}, {elem: 'O', x: -1.5, y: 0, z: 0, bonds: [0]},{elem: 'O', x: 1.5, y: 0, z: 0, bonds: [0], bondOrder: [2]}];
-                  
+
                           viewer.setBackgroundColor(0xffffffff);
                           var m = viewer.addModel();
                           m.addAtoms(atoms);
@@ -13802,7 +13802,7 @@
                        @example
                       $3Dmol.download("pdb:4UB9",viewer,{},function(){
                                 viewer.setBackgroundColor(0xffffffff);
-                  
+
                                 viewer.setStyle({chain:'A'},{line:{hidden:true,colorscheme:{prop:'b',gradient: new $3Dmol.Gradient.Sinebow($3Dmol.getPropertyRange(viewer.selectedAtoms(),'b'))}}});
                                 viewer.setStyle({chain:'B'},{line:{colorscheme:{prop:'b',gradient: new $3Dmol.Gradient.Sinebow($3Dmol.getPropertyRange(viewer.selectedAtoms(),'b'))}}});
                                 viewer.setStyle({chain:'C'},{cross:{hidden:true,colorscheme:{prop:'b',gradient: new $3Dmol.Gradient.Sinebow($3Dmol.getPropertyRange(viewer.selectedAtoms(),'b'))}}});
@@ -13865,7 +13865,7 @@
                        * @param {AtomSelectionSpec} sel - atom selection to apply clickable settings to
                        * @param {boolean} clickable - whether click-handling is enabled for the selection
                        * @param {function} callback - function called when an atom in the selection is clicked
-                  
+
                        */
                   setClickable(sel, clickable, callback2) {
                     clickable = !!clickable;
@@ -13992,12 +13992,12 @@
                                 var colorAsSnake = function(atom) {
                                   return atom.resi % 2 ? 'white': 'green'
                                 };
-                  
+
                                 viewer.setStyle( {}, { cartoon: {colorfunc: colorAsSnake }});
-                  
+
                                 viewer.render();
                             });
-                  
+
                        */
                   setColorByFunction(sel, colorfun) {
                     var atoms = this.selectedAtoms(sel, atoms);
@@ -14108,7 +14108,7 @@
                        * so it can be efficiencly shown again.
                        *
                        * * @see GLModel#show
-                  
+
                        * @example
                           $3Dmol.download("pdb:3ucr",viewer,{},function(){
                           viewer.setStyle({},{stick:{}});
@@ -15062,7 +15062,7 @@
                    * @param {SphereSpec} sphereSpec
                    @example
                    viewer.addSphere({center:{x:0,y:0,z:0},radius:10.0,color:'red'});
-                   
+
                    viewer.render();
                    */
                   addSphere(sphereSpec) {
@@ -15337,7 +15337,7 @@
                             viewer.addLine({dashed:true,start:{x:0,y:0,z:0},end:{x:100,y:100,z:100}});
                             viewer.render(callback);
                         });
-                  
+
                    */
                   addLine(lineSpec) {
                     var start2;
@@ -16818,7 +16818,7 @@
                        *
                        * @param {Object | string} element
                        *            Either HTML element or string identifier. Defaults to the element used to initialize the viewer.
-                  
+
                        */
                   setContainer(element) {
                     let elem = (0, _utilities__WEBPACK_IMPORTED_MODULE_11__.getElement)(element) || this.container;
@@ -16836,8 +16836,8 @@
                        * @example
                        *
                        * viewer.setBackgroundColor("green",0.5);
-                  
-                  
+
+
                        *
                        */
                   setBackgroundColor(hex, a) {
@@ -16867,7 +16867,7 @@
                                     viewer.addSurface($3Dmol.SurfaceType.VDW, {opacity:0.85,voldata: new $3Dmol.VolumeData(volumedata, "cube"), volscheme: new $3Dmol.Gradient.RWB(-10,10)},{});
                                 });
                                 viewer.zoomTo();
-                  
+
                                 viewer.setProjection("orthographic");
                                 viewer.render(callback);
                             });
@@ -17173,7 +17173,7 @@
                       viewer.rotate(90,'y',1);
                       viewer.render(callback);
                       });
-                  
+
                        *
                        */
                   rotate(angle, axis = "y", animationDuration = 0, fixedPath = false) {
@@ -17491,7 +17491,7 @@
                       viewer.zoom(2,1000);
                       viewer.render();
                       });
-                  
+
                            */
                   zoom(factor = 2, animationDuration = 0, fixedPath = false) {
                     var scale = (this.CAMERA_Z - this.rotationGroup.position.z) / factor;
@@ -17698,8 +17698,8 @@
                        * @param {Boolean} [fixedPath] - if true animation is constrained to
                        *      requested motion, overriding updates that happen during the animation         *
                         * @example
-                  
-                  
+
+
                             $3Dmol.get('data/1fas.pqr', function(data){
                                 viewer.addModel(data, "pqr");
                             viewer.zoomTo();
@@ -17709,7 +17709,7 @@
                                         voldata: new $3Dmol.VolumeData(volumedata, "cube"),
                                         volscheme: new $3Dmol.Gradient.Sinebow($3Dmol.getPropertyRange(viewer.selectedAtoms(),'charge'))
                                     },{});
-                  
+
                                 viewer.render();
                                 });
                               });
@@ -17826,7 +17826,7 @@
                        *
                        * @example
                        *  $3Dmol.download("pdb:2EJ0",viewer,{},function(){
-                  
+
                                 viewer.addLabel("Aromatic", {position: {x:-6.89, y:0.75, z:0.35}, backgroundColor: 0x800080, backgroundOpacity: 0.8});
                                 viewer.addLabel("Label",{font:'sans-serif',fontSize:18,fontColor:'white',fontOpacity:1,borderThickness:1.0,
                                                          borderColor:'red',borderOpacity:0.5,backgroundColor:'black',backgroundOpacity:0.5,
@@ -17843,12 +17843,12 @@
                                 viewer.setStyle({chain:'E'},{cross:{hidden:false,
                                                                     linewidth:1.0,
                                                                     color:'black'}});
-                  
+
                                 viewer.render();
-                  
-                  
+
+
                               });
-                  
+
                        */
                   addLabel(text, options = {}, sel, noshow = false) {
                     if (sel) {
@@ -17919,10 +17919,10 @@
                                                          position:{x:50.0,y:0.0,z:0.0},inFront:true,showBackground:true});
                                 viewer.removeLabel(toremove);
                                 viewer.render();
-                  
-                  
+
+
                               });
-                  
+
                        */
                   removeLabel(label) {
                     for (var i = 0; i < this.labels.length; i++) {
@@ -17941,11 +17941,11 @@
                        *
                        *         @example
                       $3Dmol.download("pdb:1ubq",viewer,{},function(){
-                  
+
                              viewer.addResLabels();
                              viewer.setStyle({},{stick:{}});
                              viewer.render( ); //show labels
-                  
+
                              viewer.removeAllLabels();
                              viewer.render(); //hide labels
                       });
@@ -17965,11 +17965,11 @@
                        *
                        *         @example
                       $3Dmol.download("pdb:1ubq",viewer,{},function(){
-                  
+
                              viewer.addResLabels();
                              viewer.setStyle({},{stick:{}});
                              viewer.render( ); //show labels
-                  
+
                              viewer.hideAllLabels();
                              viewer.render(); //hide labels
                       });
@@ -17988,11 +17988,11 @@
                        *
                        *         @example
                       $3Dmol.download("pdb:1ubq",viewer,{},function(){
-                  
+
                              viewer.addLabel("Hello World",{position:{x:10,y:0,z:0},backgroundColor: "blue",useScreen: true, fontSize: 64})
                              viewer.setStyle({},{stick:{}});
                              viewer.render( ); //show labels
-                  
+
                              viewer.hideAllLabels();
                              viewer.showAllLabels();
                              viewer.render(); //hide labels
@@ -18100,9 +18100,9 @@
                        * @param {SphereShapeSpec} spec - Sphere shape style specification
                        * @return {GLShape}
                        @example
-                  
+
                        viewer.addSphere({center:{x:0,y:0,z:0},radius:10.0,color:'red'});
-                  
+
                        viewer.render();
                        */
                   addSphere(spec) {
@@ -18122,11 +18122,11 @@
                        * @param {BoxSpec} spec - Box shape style specification
                        * @return {GLShape}
                        @example
-                  
+
                        viewer.addLine({color:'red',start:{x:0,y:0,z:0},end:{x:5,y:0,z:0}});
                        viewer.addLine({color:'blue',start:{x:0,y:0,z:0},end:{x:0,y:5,z:0}});
                        viewer.addLine({color:'green',start:{x:0,y:0,z:0},end:{x:0,y:0,z:5}});
-                  
+
                        viewer.addBox({center:{x:0,y:0,z:0},dimensions: {w:3,h:4,d:2},color:'magenta'});
                        viewer.zoomTo();
                        viewer.rotate(45, {x:1,y:1,z:1});
@@ -18153,7 +18153,7 @@
                        * @return {GLShape}
                        @example
                       $3Dmol.download("pdb:4DM7",viewer,{},function(){
-                  
+
                                 viewer.setBackgroundColor(0xffffffff);
                                 viewer.addArrow({
                                     start: {x:-10.0, y:0.0, z:0.0},
@@ -18185,7 +18185,7 @@
                        *
                        * @param {CylinderSpec} spec - Style specification
                        * @return {GLShape}
-                  
+
                         @example
                        viewer.setBackgroundColor(0xffffffff);
                             viewer.addCylinder({start:{x:0.0,y:0.0,z:0.0},
@@ -18232,7 +18232,7 @@
                        *
                        * @param {CurveSpec} spec - Style specification
                        * @return {GLShape}
-                  
+
                        @example
                             viewer.addCurve({points: [{x:0.0,y:0.0,z:0.0}, {x:5.0,y:3.0,z:0.0}, {x:5.0,y:7.0,z:0.0}, {x:0.0,y:10.0,z:0.0}],
                                                 radius:0.5,
@@ -18265,7 +18265,7 @@
                        * @return {GLShape}
                        @example
                        $3Dmol.download("pdb:2ABJ",viewer,{},function(){
-                  
+
                                 viewer.setViewStyle({style:"outline"});
                                 viewer.setStyle({chain:'A'},{sphere:{hidden:true}});
                                 viewer.setStyle({chain:'D'},{sphere:{radius:3.0}});
@@ -18274,7 +18274,7 @@
                                 viewer.addLine({dashed:true,start:{x:0,y:0,z:0},end:{x:100,y:100,z:100}});
                                 viewer.render();
                             });
-                  
+
                        */
                   addLine(spec = {}) {
                     spec.start = this.getSelectionCenter(spec.start);
@@ -18296,7 +18296,7 @@
                        * @param {GLModel|number} model - Model with unit cell information (e.g., pdb derived).  If omitted uses most recently added model.
                        * @param {UnitCellStyleSpec} spec - visualization style
                          @example
-                  
+
                               $3Dmol.get('data/1jpy.cif', function(data) {
                                 let m = viewer.addModel(data);
                                 viewer.addUnitCell(m, {box:{color:'purple'},alabel:'X',blabel:'Y',clabel:'Z',alabelstyle: {fontColor: 'black',backgroundColor:'white',inFront:true,fontSize:40},astyle:{color:'darkred', radius:5,midpos: -10}});
@@ -18583,17 +18583,17 @@
                           vertices.push(new $3Dmol.Vector3(0,0,0));
                           vertices.push(new $3Dmol.Vector3(r,0,0));
                           vertices.push(new $3Dmol.Vector3(0,r,0));
-                  
+
                           normals.push(new $3Dmol.Vector3(0,0,1));
                           normals.push(new $3Dmol.Vector3(0,0,1));
                           normals.push(new $3Dmol.Vector3(0,0,1));
-                  
+
                           colors.push({r:1,g:0,b:0});
                           colors.push({r:0,g:1,b:0});
                           colors.push({r:0,g:0,b:1});
-                  
+
                           var faces = [ 0,1,2 ];
-                  
+
                           var spec = {vertexArr:vertices, normalArr: normals, faceArr:faces,color:colors};
                           viewer.addCustom(spec);
                       }
@@ -18617,17 +18617,17 @@
                        * @return {GLShape}
                        *
                        * @example
-                  
-                  
+
+
                       $3Dmol.get('data/bohr.cube', function(data) {
-                  
+
                       viewer.addVolumetricData(data, "cube", {isoval: -0.01, color: "red", opacity: 0.95});
                       viewer.setStyle({cartoon:{},stick:{}});
                       viewer.zoomTo();
                       viewer.render();
                       });
-                  
-                  
+
+
                        */
                   addVolumetricData(data2, format, spec = {}) {
                     var voldata = new _VolumeData__WEBPACK_IMPORTED_MODULE_6__.VolumeData(data2, format);
@@ -18901,14 +18901,14 @@
                        * @param {string} format - Input format ('pdb', 'sdf', 'xyz', 'pqr', or 'mol2')
                        * @param {ParserOptionsSpec} options - format dependent options. Attributes depend on the input file format.
                        * @example
-                  
-                  
+
+
                             viewer.setViewStyle({style:"outline"});
                             $3Dmol.get('data/1fas.pqr', function(data){
                                 viewer.addModel(data, "pqr");
                                 $3Dmol.get("data/1fas.cube",function(volumedata){
                                     viewer.addSurface($3Dmol.SurfaceType.VDW, {opacity:0.85,voldata: new $3Dmol.VolumeData(volumedata, "cube"), volscheme: new $3Dmol.Gradient.RWB(-10,10)},{});
-                  
+
                                 viewer.render();
                                 });
                                 viewer.zoomTo();
@@ -18983,8 +18983,8 @@
                        * @param {string} format - Input format (see {@link FileFormats})
                        * @return {GLModel}
                        @example
-                  
-                  
+
+
                             $3Dmol.get('../test_structs/multiple.sdf', function(data){
                                 viewer.addAsOneMolecule(data, "sdf");
                                 viewer.zoomTo();
@@ -19111,7 +19111,7 @@
                        *
                        * @example
                           $3Dmol.download("cid:307900",viewer,{},function(){
-                  
+
                                  viewer.setStyle({},{sphere:{}});
                                  viewer.setClickable({},true,function(atom,viewer,event,container) {
                                      viewer.addLabel(atom.resn+":"+atom.atom,{position: atom, backgroundColor: 'darkgreen', backgroundOpacity: 0.8});
@@ -19131,7 +19131,7 @@
                        * @param {function} unhover_callback - function called when the mouse moves out of the hover area
                       @example
                       $3Dmol.download("pdb:1ubq",viewer,{},function(){
-                  
+
                              viewer.setHoverable({},true,function(atom,viewer,event,container) {
                                  if(!atom.label) {
                                   atom.label = viewer.addLabel(atom.resn+":"+atom.atom,{position: atom, backgroundColor: 'mintcream', fontColor:'black'});
@@ -19147,7 +19147,7 @@
                              viewer.setStyle({},{stick:{}});
                              viewer.render();
                       });
-                  
+
                        */
                   setHoverable(sel, hoverable, hover_callback, unhover_callback) {
                     this.applyToModels("setHoverable", sel, hoverable, hover_callback, unhover_callback);
@@ -19157,7 +19157,7 @@
                        *
                        * @param {AtomSelectionSpec} sel - atom selection to apply hoverable settings to
                        * @param {boolean} contextMenuEnabled - whether contextMenu-handling is enabled for the selection
-                  
+
                        */
                   enableContextMenu(sel, contextMenuEnabled) {
                     this.applyToModels("enableContextMenu", sel, contextMenuEnabled);
@@ -19877,19 +19877,19 @@
                                 viewer.render();
                               });
                    */
-                  mapAtomProperties(props, sel) {
+                  mapAtomProperties(props2, sel) {
                     sel = sel || {};
                     var atoms = this.getAtomsFromSel(sel);
-                    if (typeof props == "function") {
+                    if (typeof props2 == "function") {
                       for (let a = 0, numa = atoms.length; a < numa; a++) {
                         let atom2 = atoms[a];
-                        props(atom2);
+                        props2(atom2);
                       }
                     } else {
                       for (let a = 0, numa = atoms.length; a < numa; a++) {
                         var atom = atoms[a];
-                        for (let i = 0, n = props.length; i < n; i++) {
-                          let prop = props[i];
+                        for (let i = 0, n = props2.length; i < n; i++) {
+                          let prop = props2[i];
                           if (prop.props) {
                             for (var p in prop.props) {
                               if (prop.props.hasOwnProperty(p)) {
@@ -25013,8 +25013,8 @@
                     this.gl.compileShader(fragmentShader);
                     this.gl.compileShader(vertexShader);
                     if (!this.gl.getShaderParameter(fragmentShader, this.gl.COMPILE_STATUS) || !this.gl.getShaderParameter(vertexShader, this.gl.COMPILE_STATUS)) {
-                      throw new Error(`Error compiling shader: 
-      ${this.gl.getShaderInfoLog(fragmentShader)} 
+                      throw new Error(`Error compiling shader:
+      ${this.gl.getShaderInfoLog(fragmentShader)}
       ${this.gl.getShaderInfoLog(vertexShader)}`);
                     }
                     this.gl.attachShader(program, fragmentShader);
@@ -31300,7 +31300,7 @@
                   "k": 0,
                   // black
                   "w": 16777215
-                  // white  
+                  // white
                 };
                 const ssColors = {
                   //names are in helix-sheet-coil order
@@ -45405,9 +45405,128 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
 
   // src/js/index.ts
   var import_dmol = __toESM(require_Dmol(), 1);
+
+  // src/js/unitsystem.ts
+  var UnitSystem2 = class {
+    unitIndex;
+    units;
+    constructor(units) {
+      this.unitIndex = {};
+      this.units = [];
+      if (units.length < 1) {
+        throw new Error("At least one unit must be provided");
+      }
+      for (let [idx, unit] of units.entries()) {
+        this.unitIndex[unit.name] = idx;
+        this.units.push(unit);
+      }
+    }
+    firstUnit() {
+      return this.units[0].name;
+    }
+    nextUnit(current) {
+      const idx = this.unitIndex[current];
+      if (idx === void 0) {
+        throw new Error(`Unknown unit ${current}`);
+      }
+      const nextIdx = (idx + 1) % this.units.length;
+      return this.units[nextIdx].name;
+    }
+    getUnit(unitName) {
+      console.log(unitName);
+      console.log(this.unitIndex);
+      console.log(this.units);
+      let unit = this.units?.[this.unitIndex?.[unitName]];
+      if (unit === void 0) {
+        throw new Error(`Unknown unit ${unit}`);
+      }
+      return unit;
+    }
+    convert(fromUnit, toUnit, value) {
+      if (fromUnit === toUnit) {
+        return value;
+      }
+      let toUnitObj = this.units?.[this.unitIndex?.[toUnit]];
+      let converter = toUnitObj?.conversions?.[fromUnit];
+      if (converter === void 0) {
+        throw new Error(`No conversion from ${fromUnit} to ${toUnit}`);
+      }
+      return converter(value);
+    }
+  };
+
+  // src/js/quantityinput.js
+  function mk_unit_system(system) {
+    return new UnitSystem((0, eval)(props.system));
+  }
+  var quantityinput_default = (props2) => {
+    let system;
+    if (typeof props2.system === "string") {
+      system = mk_unit_system(props2.system);
+    } else {
+      system = new UnitSystem(props2.system);
+    }
+    console.log(system);
+    return {
+      viewUnit: props2.unit || props2.canonicalUnit || system.firstUnit(),
+      inputUnit: props2.magnitude !== void 0 ? props2.unit : void 0,
+      viewValue: props2.magnitude,
+      inputValue: props2.magnitude,
+      unitChange(unit) {
+        console.log("unitChange", unit, system);
+        this.viewUnit = unit;
+        if (this.inputValue !== void 0 && this.inputUnit !== void 0) {
+          let newVal = system.convert(this.inputUnit, this.viewUnit, this.inputValue);
+          this.viewValue = newVal.toPrecision(5).replace(/\.?0+$/, "");
+        }
+        this.$root.dispatchEvent(new CustomEvent("view-change", {
+          bubbles: true,
+          detail: [this.viewValue, this.viewUnit]
+        }));
+      },
+      input($event) {
+        const value = parseFloat($event.currentTarget.value);
+        this.inputValue = value;
+        this.inputUnit = this.viewUnit;
+        this.viewValue = this.inputValue;
+        if (props2.canonicalUnit !== void 0) {
+          const canonicalValue = system.convert(this.inputUnit, props2.canonicalUnit, this.inputValue);
+          if (canonicalValue !== void 0) {
+            this.$dispatch("input-canonical", [canonicalValue, props2.canonicalUnit]);
+          }
+        }
+        this.$root.dispatchEvent(new CustomEvent("input", {
+          bubbles: true,
+          detail: [this.inputValue, this.inputUnit]
+        }));
+      }
+    };
+  };
+
+  // src/js/unitswitcher.js
+  var unitswitcher_default = ({ unit, dropdown, system }) => {
+    return {
+      unit,
+      dropdown,
+      system,
+      viewUnit: unit,
+      setUnit(value) {
+        this.viewUnit = value;
+        this.$dispatch("unit-change", value);
+      },
+      cycle() {
+        this.setUnit(this.system.nextUnit(this.viewUnit));
+      }
+    };
+  };
+
+  // src/js/index.ts
+  window.htmx = htmx_esm_default;
+  window.UnitSystem = UnitSystem2;
+  module_default.data("quantityinput", quantityinput_default);
+  module_default.data("unitswitcher", unitswitcher_default);
   window.Alpine = module_default;
   module_default.start();
-  window.htmx = htmx_esm_default;
 })();
 /*! Bundled license information:
 

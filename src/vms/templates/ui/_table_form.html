@@ -5,7 +5,7 @@
             {% if field.type == "HiddenField" %}
                 <td class="p-2">{{ field.default }}{{ field }}</td>
             {% else %}
-                <td class="p-1">{{ field(class_="border border-black p-1 text-right") }}</td>
+                <td class="p-1">{{ field(class_="border border-black p-1 text-right w-50") }}</td>
             {% endif %}
         </tr>
     {% endfor %}
