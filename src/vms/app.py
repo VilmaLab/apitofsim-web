@@ -462,7 +462,7 @@ async def hypothetical_spectrogram_fragment():
         form = typing.cast(SettingsForm, form)
     if not form.pathways.validate(form) or not form.cluster.validate(form):
         abort(400, description="Invalid pathways data")
-    cluster_id = int(form.cluster.data)
+    # cluster_id = int(form.cluster.data)
     pathway_ids = numpy.array(
         [
             int(pathway["pathway"])
@@ -470,25 +470,8 @@ async def hypothetical_spectrogram_fragment():
             if pathway["enabled"]
         ]
     )
-    pathway_ids = g.db.db.table("pathway_ids").set_alias("selected_pathways")
-    relevant_cluster_ids = (
-        g.db.db.table("pathway")
-        .join(pathway_ids, condition="selected_pathways.column0 = pathway.id")
-        .select(
-            "distinct unnest([cluster_id, product1_id, product2_id]) as relevant_cluster_id"
-        )
-        .fetchnumpy()
-    )["relevant_cluster_id"]
-    if cluster_id not in relevant_cluster_ids:
-        relevant_cluster_ids = numpy.append(relevant_cluster_ids, [cluster_id])
     cluster_infos = (
-        g.db.db.table("cluster")
-        .join(
-            g.db.db.table("relevant_cluster_ids").set_alias("relevant"),
-            condition="relevant.column0 = cluster.id",
-        )
-        .select("id, atomic_mass")
-        .fetchnumpy()
+        g.db.clusters_query(pathways=pathway_ids).select("id, atomic_mass").fetchnumpy()
     )
     return hypothetical_spectrogram(cluster_infos["id"], cluster_infos["atomic_mass"])
 
