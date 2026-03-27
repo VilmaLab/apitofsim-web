@@ -18,4 +18,5 @@
     {% else %}
         {% include "pintweb/_unit_cycle.html" %}
     {% endif %}
+    <input type="hidden" name="{{ name }}" :value="inputValue + ' ' + inputUnit">
 </div>
