@@ -36,6 +36,7 @@ set_application_registry(ureg)
 
 app = Quart(__name__)
 app.config["SECRET_KEY"] = "a-secret-key"
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 status = {}
 
 
