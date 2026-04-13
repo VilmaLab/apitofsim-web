@@ -17,11 +17,12 @@ import matplotlib
 import numpy
 import pandas
 import ray
+from apitofsim.api import ureg
 from apitofsim.workflow.db import SuperClusterDatabase, guess_ase_db_filename
 from ase.io import write as ase_write
 from lxml import etree
 from molify import ase2rdkit
-from pint import UnitRegistry, set_application_registry
+from pint import set_application_registry
 from quart import Quart, abort, g, make_response, redirect, render_template, request
 from rdkit import Chem as rdchem
 from rdkit.Chem import Draw as rddraw
@@ -31,7 +32,6 @@ from .forms import BuiltInInstrumentForm, CustomInstrumentForm, SettingsForm
 matplotlib.use("SVG")
 hv.extension("matplotlib")  # type: ignore
 
-ureg = UnitRegistry()
 set_application_registry(ureg)
 
 app = Quart(__name__)
@@ -40,12 +40,23 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 status = {}
 
 
+def connect_db():
+    database_path = environ["DATABASE"]
+    return SuperClusterDatabase(
+        database_path, ase_filename=guess_ase_db_filename(database_path), readonly=True
+    )
+
+
 @app.before_request
 async def before_request():
-    database_path = environ["DATABASE"]
-    g.db = SuperClusterDatabase(
-        database_path, ase_filename=guess_ase_db_filename(database_path)
-    )
+    g.db = connect_db()
+
+
+def worker_process_setup_hook():
+    from apitofsim.api import ureg
+    from pint import set_application_registry
+
+    set_application_registry(ureg)
 
 
 @app.while_serving
@@ -54,7 +65,10 @@ async def lifespan():
         ray.init,
         address=environ.get("RAY_ADDRESS", "local"),
         log_to_driver=False,
-        runtime_env={"pip": ["jinja2", "minify-html-onepass"]},
+        runtime_env={
+            "pip": ["jinja2", "minify-html-onepass"],
+            "worker_process_setup_hook": worker_process_setup_hook,
+        },
     )
     print("Dashboard url", my_ray.dashboard_url)
     # XXX: This complains about blocking in debug mode on shutdown since the shutdown blocks
@@ -92,15 +106,71 @@ for config in DATA.values():
 jinja_loader = app.jinja_loader
 
 
+def build_input_pathways(
+    config,
+    histograms,
+    cluster_indexed,
+    name_lookup,
+    pathway_lookup,
+    k_rates,
+    cluster_dos,
+):
+    from apitofsim.api import Histogram, MassSpecInputFragmentationPathway
+
+    density_hist_params, rate_hist_params = histograms
+    retval = None
+    for pathway_id, (
+        cluster_id,
+        product1_id,
+        product2_id,
+    ) in pathway_lookup.items():
+        density_cluster = cluster_dos[pathway_id]
+        cluster = cluster_indexed[cluster_id]
+        density_hist = Histogram.from_mesh(
+            *density_hist_params,
+            density_cluster,
+        )
+        if retval is None:
+            retval = {
+                "pathways": [],
+                "cluster": cluster,
+                "cluster_id": cluster_id,
+                "cluster_label": name_lookup[cluster_id],
+                "density_hist": density_hist,
+                "product_labels": [],
+                "pathway_ids": [],
+                # TODO: Should this not be included in ClusterData by now?
+                "cluster_charge_sign": -1,
+            }
+        product1 = cluster_indexed[product1_id]
+        product2 = cluster_indexed[product2_id]
+        rate_const = k_rates[pathway_id]
+        rate_hist = Histogram.from_mesh(
+            *rate_hist_params,
+            rate_const,
+        )
+        retval["pathways"].append(
+            MassSpecInputFragmentationPathway(cluster, product1, product2, rate_hist)
+        )
+    return retval
+
+
 @ray.remote
-def run_simulation(voltage, pathways, gas, config):
-    from random import random
+def run_simulation(
+    voltage, pathways, gas, quadrupole, histograms, config, database_path
+):
     from time import sleep
 
-    from apitofsim import skimmer_pandas
+    from apitofsim.api import (
+        MassSpecIntermediateCounter,
+        MassSpectrometer,
+        mass_spec_iter,
+    )
+    from apitofsim.workflow.runners import DerivedDataPreparer
     from jinja2 import Environment
     from minify_html_onepass import minify
 
+    db = SuperClusterDatabase(database_path, readonly=True)
     jinja_env = Environment(loader=jinja_loader)
 
     processing = "queue"
@@ -120,6 +190,10 @@ def run_simulation(voltage, pathways, gas, config):
     fragmented = 0
     iterations = 0
 
+    preparer = DerivedDataPreparer(db)
+
+    cluster_indexed, name_lookup, pathway_lookup = db.get_all_lookups(pathways=pathways)
+
     def render_template(path):
         return minify(
             jinja_env.get_template(path).render(
@@ -131,7 +205,7 @@ def run_simulation(voltage, pathways, gas, config):
                 apitof=apitof,
                 survived=survived,
                 fragmented=fragmented,
-                realizations=1000,
+                realizations=config["realizations"],
                 iterations=iterations,
                 ratio=survived / iterations if iterations > 0 else 0,
             )
@@ -140,10 +214,8 @@ def run_simulation(voltage, pathways, gas, config):
     def update_pane(message):
         return message.encode("utf-8"), render_template(f"analysis/{message}.html")
 
-    # def update_all():
-    # return b"body", render_template("analysis/body.html")
-
-    df = rhos = k_rate = None
+    skimmer_np = k_rates = cluster_dos = None
+    mass_spec = None
     while 1:
         if processing == "queue":
             yield update_pane("queue")
@@ -157,66 +229,76 @@ def run_simulation(voltage, pathways, gas, config):
         elif processing == "skimmer":
             skimmer += "Skimming...<br>"
             yield update_pane("skimmer")
-            df = skimmer_pandas(
-                config[c]
-                for c in (
-                    "T",
-                    "pressure_first",
-                    "Lsk",
-                    "dc",
-                    "alpha_factor",
-                    "m_gas",
-                    "ga",
-                    "N_iter",
-                    "M_iter",
-                    "resolution",
-                    "tolerance",
-                )
+            skimmer_np, k_rates, cluster_dos = preparer.run_preliminaries(
+                config,
+                cluster_indexed,
+                pathway_lookup=pathway_lookup,
+                use_cached_densityandrate=config["histogram_precision"],
             )
-            skimmer = df.to_html()
             yield update_pane("skimmer")
             statuses["skimmer"] = "done"
-            statuses["densityandr"] = "processing"
-            processing = "densityandr"
-            yield update_pane("tabs")
-        elif processing == "densityandr":
-            densityandr += "Calculating density and rate...<br>"
-            yield update_pane("densityandr")
-            rhos, k_rate = densityandrate(
-                *clusters,
-                *(
-                    config[setting]
-                    for setting in (
-                        "energy_max",
-                        "energy_max_rate",
-                        "bin_width",
-                        "bonding_energy",
-                    )
-                ),
-            )
-            densityandr = "Done"
-            yield update_pane("densityandr")
-            statuses["densityandr"] = "done"
             statuses["apitof"] = "processing"
             processing = "apitof"
             yield update_pane("tabs")
+            mass_spec = MassSpectrometer(
+                skimmer_np,
+                config["lengths"],
+                voltage,
+                config["T"],
+                config["pressures"],
+                quadrupole=quadrupole,
+            )
         elif processing == "apitof":
+            yield update_pane("apitof")
             yield update_pane("tabs")
-            for _ in range(1, realizations + 1):
-                yield update_pane("apitof")
-                sleep(2)
-                iterations += 1
-                if random() < 0.5:
-                    survived += 1
-                else:
-                    fragmented += 1
+            group = build_input_pathways(
+                config,
+                histograms,
+                cluster_indexed,
+                name_lookup,
+                pathway_lookup,
+                k_rates,
+                cluster_dos,
+            )
+            assert group is not None
+
+            from apitofsim.api import MassSpecSubstanceInput
+
+            realizations = config["realizations"]
+            subs = MassSpecSubstanceInput(
+                group["cluster"],
+                group["pathways"],
+                gas,
+                group["density_hist"],
+                group["cluster_charge_sign"],
+            )
+
+            assert mass_spec is not None
+            with mass_spec_iter(
+                mass_spec,
+                subs,
+                realizations,
+                sample_mode=2,
+                strict=True,
+            ) as it:
+                for result in it:
+                    if isinstance(result, MassSpecIntermediateCounter):
+                        counters = result.counters
+                        survived = counters.n_fragmented_total.sum()
+                        fragmented = counters.n_escaped_total
+                        iterations = survived + fragmented
+                        yield update_pane("apitof")
             break
+    statuses["apitof"] = "done"
+    yield update_pane("tabs")
 
 
 def start_job(job_id):
     info = status[job_id]  # type: ignore
 
-    simulation_call = run_simulation.remote(**info["arguments"])
+    simulation_call = run_simulation.remote(
+        **info["arguments"], database_path=environ["DATABASE"]
+    )
     new_info = {
         **info,  # type: ignore
         "status": "running",
@@ -575,7 +657,7 @@ async def update_analysis():
                 try:
                     # Really awaiting here(!)
                     event, data = await (await anext(info["aiter"]))
-                except StopIteration:
+                except StopAsyncIteration:
                     info["status"] = "done"
                     for bit in sse_safe("", event=b"done"):
                         yield bit

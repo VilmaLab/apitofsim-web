@@ -1,6 +1,6 @@
 import functools
 
-from pint import get_application_registry
+from apitofsim.api import ureg
 from quart import Markup, g
 from quart_wtf import QuartForm
 from wtforms import (
@@ -14,12 +14,12 @@ from wtforms import (
     SelectField,
 )
 from wtforms.validators import InputRequired, Optional
+from wtforms.widgets import HiddenInput
 from wtforms.widgets import core as wtforms_widgets_core_module
 
 from vms.pintweb.wtforms import QuantityField
 from vms.utils import PairedRangeInputWidget
 
-ureg = get_application_registry()
 Q_ = ureg.Quantity
 
 
@@ -63,40 +63,39 @@ class VoltageForm(Form):
     voltage5 = mk_voltage_field(4, default=11)
 
 
+class HiddenFloatField(FloatField):
+    widget = HiddenInput()
+
+
 def mk_instrument_form(hidden):
-    def maybe_field(mk_field, *args, **kwargs):
+    def maybe_field(*args, **kwargs):
         if hidden:
-            return HiddenField(*args, **kwargs)
+            return HiddenFloatField(*args, **kwargs)
         else:
-            return mk_field(*args, **kwargs)
+            return FloatField(*args, **kwargs)
 
     class InstrumentGeometryForm(Form):
         length_of_first_chamber = maybe_field(
-            FloatField,
             "Length of 1st chamber (meters)",
             default=1.0e-3,
             validators=[InputRequired()],
         )
         length_of_skimmer = maybe_field(
-            FloatField,
             "Length of skimmer (meters)",
             default=5.0e-4,
             validators=[InputRequired()],
         )
         length_between_skimmer_and_front_quadrupole = maybe_field(
-            FloatField,
             "Length between skimmer and front quadrupole",
             default=2.44e-3,
             validators=[InputRequired()],
         )
         length_between_front_quadrupole_and_back_quadrupole = maybe_field(
-            FloatField,
             "Length between front quadrupole and back quadrupole (meters)",
             default=0.101,
             validators=[InputRequired()],
         )
         length_between_back_quadrupole_and_2nd_skimmer = maybe_field(
-            FloatField,
             "Length between back quadrupole and 2nd skimmer (meters)",
             default=4.48e-3,
             validators=[InputRequired()],
@@ -104,13 +103,11 @@ def mk_instrument_form(hidden):
 
     class SkimmerGeometryForm(Form):
         radius_at_smallest_cross_section_skimmer = maybe_field(
-            FloatField,
             "Radius at smallest cross section skimmer (m)",
             default=5.0e-4,
             validators=[InputRequired()],
         )
         angle_of_skimmer = maybe_field(
-            FloatField,
             "Angle of skimmer (multiple of PI)",
             default=0.25,
             validators=[InputRequired()],
@@ -118,25 +115,21 @@ def mk_instrument_form(hidden):
 
     class QuadrupoleForm(Form):
         dc_quadrupole = maybe_field(
-            FloatField,
             "DC quadrupole",
             default=0.0,
             validators=[InputRequired()],
         )
         ac_quadrupole = maybe_field(
-            FloatField,
             "AC quadrupole",
             default=200.0,
             validators=[InputRequired()],
         )
         radiofrequency_quadrupole = maybe_field(
-            FloatField,
             "Radiofrequency quadrupole",
             default=1.3e6,
             validators=[InputRequired()],
         )
         half_distance_between_quadrupole_rods = maybe_field(
-            FloatField,
             "Half-distance between quadrupole rods",
             default=6.0e-3,
             validators=[InputRequired()],
@@ -218,8 +211,10 @@ def get_histogram_precision_choices():
             raise ValueError(
                 f"Mismatch in histogram precision choices: {dos_hist} vs {k_rate_hist}"
             )
+        dos_hid = dos_hist[0]
+        k_rate_hid = k_rate_hist[0]
         choices.append(
-            ((dos_hist[0], k_rate_hist[0]), f"{name} [bin width = {dos_hist[1]:.1f} K]")
+            (f"{dos_hid},{k_rate_hid}", f"{name} [bin width = {dos_hist[1]:.1f} K]")
         )
     return choices
 
@@ -263,25 +258,20 @@ class SettingsForm(QuartForm):
     voltage = FormField(VoltageForm)
     instrument = FormField(BuiltInInstrumentForm)
     cluster = SelectField("Cluster", choices=get_cluster_choices)
-    pathways = FieldList(FormField(SingleFragmentationPathwayForm))
+    pathways = FieldList(FormField(SingleFragmentationPathwayForm), min_entries=1)
     gas = FormField(GasForm)
     simulation = FormField(SimulationForm)
 
     def get_data(self):
-        from apitofsim import Gas
+        from apitofsim import Gas, Quadrupole
         from numpy import array
 
         data = self.data
         result = {}
-        result["voltage"] = array((v for v in data["voltage"].values()))
-        """
+        result["voltage"] = Q_(array(list(data["voltage"].values())), "V")
         result["pathways"] = [
-            {
-                "fragmentation_energy": data["pathways"]["fragmentation_energy"],
-                "pathway": get_clusters(CHAINS[data["pathways"]["chain"]]),
-            }
+            pathway["pathway"] for pathway in data["pathways"] if pathway["enabled"]
         ]
-        """
         gas = data["gas"]
         result["gas"] = Gas(
             *(
@@ -289,5 +279,70 @@ class SettingsForm(QuartForm):
                 for k in ("gas_molecule_radius", "gas_molecule_mass", "adiabatic_index")
             )
         )
-        result["config"] = {**data["instrument"], **data["simulation"]}
+        pressures = Q_(
+            array(
+                [
+                    data["gas"]["pressure_first_chamber"].to("Pa").magnitude,
+                    data["gas"]["pressure_second_chamber"].to("Pa").magnitude,
+                ]
+            ),
+            "Pa",
+        )
+        lengths = Q_(
+            array(
+                [
+                    data["instrument"]["instrument_geometry"][
+                        "length_of_first_chamber"
+                    ],
+                    data["instrument"]["instrument_geometry"]["length_of_skimmer"],
+                    data["instrument"]["instrument_geometry"][
+                        "length_between_skimmer_and_front_quadrupole"
+                    ],
+                    data["instrument"]["instrument_geometry"][
+                        "length_between_front_quadrupole_and_back_quadrupole"
+                    ],
+                    data["instrument"]["instrument_geometry"][
+                        "length_between_back_quadrupole_and_2nd_skimmer"
+                    ],
+                ]
+            ),
+            "m",
+        )
+        quadrupole_dict = data["instrument"]["quadrupole"]
+        quadrupole = Quadrupole(
+            Q_(quadrupole_dict["dc_quadrupole"], "V"),
+            Q_(quadrupole_dict["ac_quadrupole"], "V"),
+            Q_(quadrupole_dict["radiofrequency_quadrupole"], "Hz"),
+            Q_(quadrupole_dict["half_distance_between_quadrupole_rods"], "m"),
+        )
+        result["quadrupole"] = quadrupole
+        histogram_precision = tuple(
+            int(x) for x in data["simulation"]["histogram_precision"].split(",")
+        )
+        result["config"] = {
+            **data["instrument"],
+            **data["simulation"],
+            "dc": Q_(
+                data["instrument"]["skimmer_geometry"][
+                    "radius_at_smallest_cross_section_skimmer"
+                ],
+                "meter",
+            ),
+            "alpha_factor": Q_(
+                data["instrument"]["skimmer_geometry"]["angle_of_skimmer"],
+                "multiple_of_PI",
+            ),
+            "N_iter": data["simulation"]["skimmer"]["iterations_eq1"],
+            "M_iter": data["simulation"]["skimmer"]["iterations_eq2"],
+            "resolution": data["simulation"]["skimmer"]["solved_points"],
+            "tolerance": data["simulation"]["skimmer"]["tolerance"],
+            "T": gas["temperature_"],
+            "gas": result["gas"],
+            "pressures": pressures,
+            "lengths": lengths,
+            "histogram_precision": histogram_precision,
+        }
+        result["histograms"] = tuple(
+            (g.db.get_histogram_params(x) for x in histogram_precision)
+        )
         return result
