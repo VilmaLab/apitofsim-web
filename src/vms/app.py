@@ -115,7 +115,12 @@ def build_input_pathways(
     k_rates,
     cluster_dos,
 ):
-    from apitofsim.api import Histogram, MassSpecInputFragmentationPathway
+    from apitofsim.api import (
+        Histogram,
+        MassSpecInputFragmentationPathway,
+        scaled_density,
+        scaled_rate_const,
+    )
 
     density_hist_params, rate_hist_params = histograms
     retval = None
@@ -124,13 +129,15 @@ def build_input_pathways(
         product1_id,
         product2_id,
     ) in pathway_lookup.items():
-        density_cluster = cluster_dos[pathway_id]
         cluster = cluster_indexed[cluster_id]
-        density_hist = Histogram.from_mesh(
-            *density_hist_params,
-            density_cluster,
-        )
         if retval is None:
+            density_cluster = cluster_dos[cluster_id]
+            density_hist = scaled_density(
+                Histogram.from_mesh(
+                    *density_hist_params,
+                    density_cluster,
+                )
+            )
             retval = {
                 "pathways": [],
                 "cluster": cluster,
@@ -145,9 +152,11 @@ def build_input_pathways(
         product1 = cluster_indexed[product1_id]
         product2 = cluster_indexed[product2_id]
         rate_const = k_rates[pathway_id]
-        rate_hist = Histogram.from_mesh(
-            *rate_hist_params,
-            rate_const,
+        rate_hist = scaled_rate_const(
+            Histogram.from_mesh(
+                *rate_hist_params,
+                rate_const,
+            )
         )
         retval["pathways"].append(
             MassSpecInputFragmentationPathway(cluster, product1, product2, rate_hist)
@@ -233,7 +242,8 @@ def run_simulation(
                 config,
                 cluster_indexed,
                 pathway_lookup=pathway_lookup,
-                use_cached_densityandrate=config["histogram_precision"],
+                cached_densityandrate=config["histogram_precision"],
+                show_progress=False,
             )
             yield update_pane("skimmer")
             statuses["skimmer"] = "done"
@@ -262,10 +272,10 @@ def run_simulation(
             )
             assert group is not None
 
-            from apitofsim.api import MassSpecSubstanceInput
+            from apitofsim.api import MassSpecSubstanceSingleInput
 
             realizations = config["realizations"]
-            subs = MassSpecSubstanceInput(
+            subs = MassSpecSubstanceSingleInput(
                 group["cluster"],
                 group["pathways"],
                 gas,
