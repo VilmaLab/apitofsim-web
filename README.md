@@ -61,6 +61,6 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
 
 ```bash
 micromamba activate ./cenv
-mamba install python-meson
-pip install -Ceditable-verbose=true --no-build-isolation -e /path/to/apitofsim
+mamba install meson-python
+pip install -Csetup-args="-Dbuildtype=debugoptimized" -Ceditable-verbose=true --no-build-isolation -e /path/to/apitofsim
 ```
