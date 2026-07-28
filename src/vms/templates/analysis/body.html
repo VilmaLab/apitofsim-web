@@ -1,7 +1,11 @@
 {% from "ui/_lightbox.html" import lightbox %}
 {% from "ui/_tabs.html" import tab_container, tab, tab_content_sse %}
 
-{% call tab_container(default='queue') %}
+<div
+    class="md:flex md:justify-center"
+    x-data="{ current_tab: '{{ default}}', log_open: false }"
+    x-init="current_tab = window.location.hash?.replace('#', '') || '{{ default }}'"
+>
     <ul
         sse-swap="tabs"
         class="flex-col space-y space-y-4 md:me-4 mb-4 md:mb-0 mt-6"
@@ -19,4 +23,4 @@
             {# {{ apitof|safe }} #}
         {% endcall %}
     </div>
-{% endcall %}
+</div>

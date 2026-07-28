@@ -161,7 +161,36 @@ def build_input_pathways(
         retval["pathways"].append(
             MassSpecInputFragmentationPathway(cluster, product1, product2, rate_hist)
         )
+        retval["pathway_ids"].append(pathway_id)
     return retval
+
+
+def setup_result_db(database_path):
+    from tempfile import mkdtemp
+
+    import apitofsim.workflow.sql_files as sql_files
+    import duckdb
+    from apitofsim.workflow.db import RealizationDatabase
+
+    results_path = mkdtemp(prefix="apitofsim") + "/results.duckdb"
+    duckdb_db = duckdb.connect()
+    duckdb_db.execute(f"ATTACH '{database_path}' AS clusters_db (READ_ONLY);")
+    duckdb_db.execute(f"ATTACH '{results_path}' AS results_db;")
+    duckdb_db.execute("USE results_db;")
+    duckdb_db.execute("SET search_path = 'results_db,clusters_db'")
+    sql = "\n".join(
+        [
+            sql_files.experiment,
+            sql_files.experiment_report,
+            sql_files.realizations,
+            sql_files.event_report,
+        ]
+    )
+    # We need to filter these out since they're not supported across multiple schemas in DuckDB
+    sql = "\n".join((line for line in sql.split("\n") if "foreign key" not in line))
+    duckdb_db.execute(sql)
+
+    return RealizationDatabase(((duckdb_db, None))), results_path
 
 
 @ray.remote
@@ -172,14 +201,18 @@ def run_simulation(
 
     from apitofsim.api import (
         MassSpecIntermediateCounter,
+        MassSpecLogItem,
         MassSpectrometer,
         mass_spec_iter,
     )
+
+    # from apitofsim.workflow.db import EventRecorder
     from apitofsim.workflow.runners import DerivedDataPreparer
     from jinja2 import Environment
     from minify_html_onepass import minify
 
-    db = SuperClusterDatabase(database_path, readonly=True)
+    db, results_db_path = setup_result_db(database_path)
+    config_id = db.insert_config("webrun", config)
     jinja_env = Environment(loader=jinja_loader)
 
     processing = "queue"
@@ -195,6 +228,7 @@ def run_simulation(
     densityandr = ""
     apitof = ""
 
+    log = []
     survived = 0
     fragmented = 0
     iterations = 0
@@ -204,21 +238,29 @@ def run_simulation(
     cluster_indexed, name_lookup, pathway_lookup = db.get_all_lookups(pathways=pathways)
 
     def render_template(path):
-        return minify(
-            jinja_env.get_template(path).render(
-                processing=processing,
-                statuses=statuses,
-                queue=queue,
-                skimmer=skimmer,
-                densityandr=densityandr,
-                apitof=apitof,
-                survived=survived,
-                fragmented=fragmented,
-                realizations=config["realizations"],
-                iterations=iterations,
-                ratio=survived / iterations if iterations > 0 else 0,
-            )
+        html = jinja_env.get_template(path).render(
+            processing=processing,
+            statuses=statuses,
+            queue=queue,
+            skimmer=skimmer,
+            densityandr=densityandr,
+            apitof=apitof,
+            log=log,
+            survived=survived,
+            fragmented=fragmented,
+            realizations=config["realizations"],
+            iterations=iterations,
+            ratio=survived / iterations if iterations > 0 else 0,
         )
+        try:
+            return minify(html)
+        except SyntaxError as e:
+            # XXX: minify raises the builtin SyntaxError for malformed markup.
+            # Ray's RayTaskError wrapper doesn't copy SyntaxError's msg/lineno
+            # slots, and traceback.py reads those slots instead of __str__ for
+            # anything deriving from SyntaxError, so the message is lost as
+            # "<no detail available>". Re-raise as something unremarkable.
+            raise RuntimeError(f"Could not minify {path}: {e.msg}") from None
 
     def update_pane(message):
         return message.encode("utf-8"), render_template(f"analysis/{message}.html")
@@ -284,6 +326,7 @@ def run_simulation(
             )
 
             assert mass_spec is not None
+            # event_recorder = EventRecorder(db, group["pathway_ids"])
             with mass_spec_iter(
                 mass_spec,
                 subs,
@@ -297,6 +340,17 @@ def run_simulation(
                         survived = counters.n_fragmented_total.sum()
                         fragmented = counters.n_escaped_total
                         iterations = survived + fragmented
+                        yield update_pane("apitof")
+                        current_run_id = db.insert_run(config_id)
+                        # experiment_result_id =
+                        db.record_result(
+                            current_run_id,
+                            counters,
+                            cluster_id=group["cluster_id"],
+                            pathway_ids=group["pathway_ids"],
+                        )
+                    elif isinstance(result, MassSpecLogItem):
+                        log.append(f"{result.type}: {result.name}")
                         yield update_pane("apitof")
             break
     statuses["apitof"] = "done"

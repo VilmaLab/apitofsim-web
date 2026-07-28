@@ -3,3 +3,8 @@
 <p class="text-4xl">Fragmented: {{ fragmented }}</p>
 <p class="text-4xl">Survived: {{ survived }}</p>
 <p class="text-4xl">Survival Ratio: {{ ratio }}</p>
+<div class="mv-2">
+    <a class="px-4 py-3 bg-gray-50 hover:text-gray-900 hover:bg-gray-100" @click="log_open = !log_open" href="#">Toggle log</a>
+    <pre class="mh-2" x-show="log_open">{% for line in log %}{{ line }}
+{% endfor %}</pre>
+</div>

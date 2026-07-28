@@ -3,7 +3,7 @@ name = "vms"
 version = "0.0.1"
 description = "Web interface to APi-ToF mass spectrometer simulator code"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "apitofsim",
     "ase>=3.26.0",
