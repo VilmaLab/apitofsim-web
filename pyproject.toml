@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "apitofsim",
+    "anyio>=4.14.2",
     "ase>=3.26.0",
     "duckdb>=1.4.1",
     "holoviews>=1.21.0",

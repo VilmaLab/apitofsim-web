@@ -3,20 +3,22 @@ import tempfile
 
 os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 
-import asyncio
 import base64
 import os
 import typing
 import warnings
+from functools import partial
 from io import BytesIO, StringIO, UnsupportedOperation
 from os import environ
 from uuid import uuid4
 
+import anyio
 import holoviews as hv
 import matplotlib
 import numpy
 import pandas
 import ray
+from anyio import to_thread
 from apitofsim.api import ureg
 from apitofsim.workflow.db import SuperClusterDatabase, guess_ase_db_filename
 from ase.io import write as ase_write
@@ -61,14 +63,16 @@ def worker_process_setup_hook():
 
 @app.while_serving
 async def lifespan():
-    my_ray = await asyncio.to_thread(
-        ray.init,
-        address=environ.get("RAY_ADDRESS", "local"),
-        log_to_driver=False,
-        runtime_env={
-            "pip": ["jinja2", "minify-html-onepass"],
-            "worker_process_setup_hook": worker_process_setup_hook,
-        },
+    my_ray = await to_thread.run_sync(
+        partial(
+            ray.init,
+            address=environ.get("RAY_ADDRESS", "local"),
+            log_to_driver=False,
+            runtime_env={
+                "pip": ["jinja2", "minify-html-onepass"],
+                "worker_process_setup_hook": worker_process_setup_hook,
+            },
+        )
     )
     print("Dashboard url", my_ray.dashboard_url)
     # XXX: This complains about blocking in debug mode on shutdown since the shutdown blocks
@@ -710,7 +714,7 @@ async def update_analysis():
         while True:
             info = status[jobid]  # type: ignore
             if info["status"] == "pending":
-                await asyncio.sleep(1)
+                await anyio.sleep(1)
             elif info["status"] == "running":
                 if not sent_something:
                     if "last_update" in info:
@@ -745,4 +749,4 @@ async def update_analysis():
 
 
 if __name__ == "__main__":
-    asyncio.run(app.run_task())
+    anyio.run(app.run_task())
