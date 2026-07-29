@@ -1,0 +1,23 @@
+[[pathways]]
+type = "csv"
+pathways_path = "atomprod/pathways.csv"
+clusters_path = "atomprod/clusters.csv"
+
+[pathways.clusters]
+default_source = "orca_spectra"
+electronic_energy = "orca_energy.final_single_point_energy + orca_spectra.zero_point_energy"
+
+[pathways.clusters.sources.orca_energy]
+type = "orca"
+append_to_common_prefix = ".out"
+
+[pathways.clusters.sources.orca_spectra]
+type = "orca"
+append_to_common_prefix = ".log"
+ignore_unicode_errors = true
+
+[[densityandrate_configs]]
+name = "reallycoarse"
+bin_width = "16.0 kelvin"
+energy_max = "2.0e5 kelvin"
+energy_max_rate = "1.0e5 kelvin"

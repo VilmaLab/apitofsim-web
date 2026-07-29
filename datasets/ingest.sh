@@ -25,3 +25,5 @@ fi
 
 rclone copy database.duckdb :s3,env_auth:apitofsim-data
 rclone copy database.ase.sqlite.db :s3,env_auth:apitofsim-data
+rclone copy database_test.duckdb :s3,env_auth:apitofsim-data-public
+rclone copy database_test.ase.sqlite.db :s3,env_auth:apitofsim-data-public
