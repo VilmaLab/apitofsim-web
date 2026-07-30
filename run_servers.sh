@@ -120,6 +120,17 @@ fi
 # when a server is already running, so replay our own environment into them.
 ENV_DUMP="$(export -p | grep -vE '^declare -x (PWD|OLDPWD|SHLVL|_|TMUX|TMUX_PANE)=')"
 
+# Keep a pane alive after its process exits so the error output stays readable.
+HOLD="
+status=\$?
+echo
+if [ \"\$status\" -eq 0 ]; then
+	echo \"[exited 0 -- pane held open, Ctrl-D to close]\"
+else
+	echo \"[exited \$status -- pane held open, Ctrl-D to close]\" >&2
+fi
+exec bash"
+
 RAY_CMD="micromamba run -p '$ENV_PREFIX' ray start \
 --head \
 --object-store-memory 512000000 \
@@ -131,25 +142,37 @@ RAY_CMD="micromamba run -p '$ENV_PREFIX' ray start \
 
 WEB_CMD="
 echo 'Waiting for ray on 127.0.0.1:6379...'
+ray_up=0
 for i in \$(seq 1 120); do
 	if (exec 3<>/dev/tcp/127.0.0.1/6379) 2>/dev/null; then
 		exec 3>&-
-		echo 'Ray is up.'
-		RAY_ADDRESS="localhost:6379" exec micromamba run -p '$ENV_PREFIX' quart --debug --app vms run
+		ray_up=1
+		break
 	fi
 	sleep 1
 done
-echo 'Timed out waiting for ray after 120s.' >&2
-exec bash"
+if [ \"\$ray_up\" -eq 1 ]; then
+	echo 'Ray is up.'
+	RAY_ADDRESS="localhost:6379" micromamba run -p '$ENV_PREFIX' quart --debug --app vms run
+else
+	echo 'Timed out waiting for ray after 120s.' >&2
+	false
+fi"
 
 tmux new-session -d -s "$SESSION" -n servers -c "$ROOT" \
 	bash -c "$ENV_DUMP
-$RAY_CMD; echo; echo '[ray exited]'; exec bash"
+$RAY_CMD
+$HOLD"
 
 tmux split-window -t "$SESSION:servers" -h -c "$ROOT" \
 	bash -c "$ENV_DUMP
-$WEB_CMD"
+$WEB_CMD
+$HOLD"
 
 tmux select-layout -t "$SESSION:servers" even-vertical
+
+# Belt and braces: if the held shell itself goes away, leave the dead pane (and
+# its scrollback) on screen rather than closing the window.
+tmux set-option -w -t "$SESSION:servers" remain-on-exit on
 
 exec tmux attach-session -t "$SESSION"
