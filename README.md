@@ -35,10 +35,17 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
     micromamba activate ./cenv
     ```
 
-4. **Start Ray:**
+4. **Start the servers** (this will start both the Ray server and the webserver in tmux):
+    ```bash
+    ./run_servers.sh
+    ```
+
+Alternatively you can manually start them in separate terminals:
+
+**Start Ray:**
     ```bash
     mkdir -p /tmp/raytmp
-    uv run ray start \
+    micromamba run -p ./cenv ray start \
     --head \
     --object-store-memory 512000000 \
     --temp-dir /tmp/raytmp \
@@ -48,12 +55,12 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
     --block
     ```
 
-5. **Run the webserver:**
+**Run the webserver:**
     ```bash
-    quart --debug --app vms run
+    micromamba run -p ./cenv quart --debug --app vms run
     ```
 
-6.  **Access the application:**
+**Access the application:**
 
     Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
 
