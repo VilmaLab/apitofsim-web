@@ -3,12 +3,10 @@ import tempfile
 
 os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 
-import base64
 import os
 import typing
-import warnings
 from functools import partial
-from io import BytesIO, StringIO, UnsupportedOperation
+from io import BytesIO
 from os import environ
 from uuid import uuid4
 
@@ -21,15 +19,15 @@ import ray
 from anyio import to_thread
 from apitofsim.api import ureg
 from apitofsim.workflow.db import SuperClusterDatabase, guess_ase_db_filename
-from ase.io import write as ase_write
 from lxml import etree
-from molify import ase2rdkit
 from pint import set_application_registry
 from quart import Quart, abort, g, make_response, redirect, render_template, request
-from rdkit import Chem as rdchem
-from rdkit.Chem import Draw as rddraw
 
+from .cluster_info import enrich_cluster
 from .forms import BuiltInInstrumentForm, CustomInstrumentForm, SettingsForm
+
+database_path = environ["DATABASE"]
+results_path = environ["RESULTS"]
 
 matplotlib.use("SVG")
 hv.extension("matplotlib")  # type: ignore
@@ -43,7 +41,6 @@ status = {}
 
 
 def connect_db():
-    database_path = environ["DATABASE"]
     return SuperClusterDatabase(
         database_path, ase_filename=guess_ase_db_filename(database_path), readonly=True
     )
@@ -365,7 +362,7 @@ def start_job(job_id):
     info = status[job_id]  # type: ignore
 
     simulation_call = run_simulation.remote(
-        **info["arguments"], database_path=environ["DATABASE"]
+        **info["arguments"], database_path=database_path
     )
     new_info = {
         **info,  # type: ignore
@@ -466,74 +463,6 @@ def hypothetical_spectrogram(cluster_ids, masses, max_mass=None):
     )
 
 
-def ase_write_string(atoms, format):
-    f = StringIO()
-    try:
-        ase_write(f, atoms, format=format)
-    except UnsupportedOperation:
-        if not hasattr(os, "memfd_create"):
-            warnings.warn(
-                f"Could not convert to {format}. StringIO failed and memfd_create not supported."
-            )
-            return None
-        fd = os.memfd_create("ase_convert_" + format)
-        f = os.fdopen(fd, "w+")
-        ase_write(f, atoms, format=format)
-        f.seek(0)
-        return f.read()
-    else:
-        return f.getvalue()
-
-
-def rddraw_html(rdkit_atoms, image_type="png", **kwargs):
-    if image_type not in ("png", "svg", "acs1996svg"):
-        raise ValueError(f"Unknown image type {image_type}")
-    drawfn = None
-    if image_type == "png":
-        drawfn = rddraw._moltoimg
-        kwargs["returnPNG"] = True
-    elif image_type == "svg":
-        drawfn = rddraw._moltoSVG
-    if image_type == "acs1996svg":
-        img = rddraw.MolToACS1996SVG(rdkit_atoms, **kwargs)
-    else:
-        assert drawfn is not None
-        kwargs.setdefault("sz", kwargs.get("size", (300, 300)))
-        kwargs.setdefault("highlights", kwargs.get("highlightBonds", []))
-        kwargs.setdefault("legend", "")
-        kwargs.setdefault("kekulize", True)
-        kwargs.setdefault("wedgeBonds", True)
-        img = drawfn(rdkit_atoms, **kwargs, options={"bgColor": (1, 1, 1, 0)})
-    if image_type == "png":
-        encoded = base64.b64encode(img).decode("utf-8")
-        return f'<img src="data:image/png;base64, {encoded}">'
-    else:
-        return img
-
-
-def enrich_cluster(cluster):
-    cluster["has_ase"] = cluster["ase_mol_id"] is not None
-    if not cluster["has_ase"]:
-        return
-    atoms = g.db.ase_db.get_atoms(cluster["ase_mol_id"])
-    cluster["formula"] = atoms.get_chemical_formula()
-    cluster["symbols"] = str(atoms.symbols)
-    cluster["ase_xyz"] = ase_write_string(atoms, "xyz")
-    cluster["ase_cube"] = ase_write_string(atoms, "cube")
-    try:
-        rdkit_atoms = ase2rdkit(atoms)
-    except ValueError as e:
-        cluster["conversion_error"] = e.args[0]
-        cluster["has_rdkit"] = False
-    else:
-        cluster["has_rdkit"] = True
-        cluster["smiles"] = rdchem.MolToSmiles(rdkit_atoms)
-        cluster["rd_molblock"] = rdchem.MolToMolBlock(rdkit_atoms)
-        cluster["rd_png"] = rddraw_html(rdkit_atoms, size=(400, 400))
-        cluster["rd_svg"] = rddraw_html(rdkit_atoms, size=(400, 400), image_type="svg")
-        cluster["rd_svgacs"] = rddraw_html(rdkit_atoms, image_type="acs1996svg")
-
-
 @app.route("/fragments/pathways")
 async def pathways_fragment():
     form = await SettingsForm.create_form()
@@ -568,7 +497,7 @@ async def pathways_fragment():
     print(cluster_df)
     for cluster in cluster_df.itertuples():
         cluster = cluster._asdict()
-        enrich_cluster(cluster)
+        enrich_cluster(g.db.ase_db, cluster)
         clusters[cluster["id"]] = cluster
     pathways_relations = g.db.db.sql(
         """select * from pathway where cluster_id = ?""",
