@@ -5,3 +5,7 @@
 /.venv/
 /uv.lock
 /node_modules/
+tests/server.log
+/test-results/
+/.pytest_cache/
+/warnings_skimmer.dat

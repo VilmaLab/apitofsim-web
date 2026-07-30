@@ -64,6 +64,27 @@ Alternatively you can manually start them in separate terminals:
 
     Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
 
+## Running the tests
+
+The test suite drives a real browser through a short simulation run against a small
+test database, which is downloaded automatically on first run.
+
+1.  **Make an environment** (as above) and install a browser:
+
+    ```bash
+    micromamba create -f env.yaml -p ./cenv
+    micromamba run -p ./cenv playwright install chromium
+    ```
+
+2.  **Run the tests:**
+
+    ```bash
+    micromamba run -p ./cenv pytest
+    ```
+
+The suite starts its own web server and its own Ray cluster, so `run_servers.sh` must
+not be running, and `RAY_ADDRESS` must not be set in the environment.
+
 ## Developing apitofsim-web and apitofsim using micromamba
 
 ```bash

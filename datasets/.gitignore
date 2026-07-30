@@ -6,3 +6,5 @@ besel2020/
 besel2020.7z
 tunning/
 tunning.7z
+*.duckdb
+*.sqlite.db

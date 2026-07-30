@@ -3,7 +3,7 @@ name = "vms"
 version = "0.0.1"
 description = "Web interface to APi-ToF mass spectrometer simulator code"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
     "apitofsim",
     "anyio>=4.14.2",
@@ -28,6 +28,9 @@ dependencies = [
 deploy = [
     "hypercorn>=0.17.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
