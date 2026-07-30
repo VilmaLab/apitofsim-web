@@ -32,6 +32,7 @@ jobs:
         with:
           environment-file: env.yaml
           cache-environment: true
+          micromamba-version: 2.6.0-0
 
       - name: Install Chromium
         shell: micromamba-shell {0}
