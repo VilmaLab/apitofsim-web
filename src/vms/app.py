@@ -78,32 +78,6 @@ async def lifespan():
         yield
 
 
-"""
-def vibrations_plot(particle):
-    from matplotlib import pyplot as plt
-    from io import StringIO
-
-    if particle.vibrational_temperatures is None:
-        return
-
-    plt.figure()
-    plt.hlines(1, 1, 20)
-    plt.eventplot(
-        particle.vibrational_temperatures, orientation="horizontal", colors="b"
-    )
-    plt.axis("off")
-    f = StringIO()
-    plt.savefig(f, format="svg")
-    particle["vibrations_plot"] = f.getvalue()
-
-
-for config in DATA.values():
-    for pathway in config["pathways"]:
-        for particle in pathway:
-            vibrations_plot(particle)
-"""
-
-
 jinja_loader = app.jinja_loader
 
 
