@@ -203,9 +203,13 @@ def get_histogram_precision_choices():
     ).fetchall()
 
     NAMES = ["superfine (slow)", "fine", "coarse (fast)"]
+    # Databases built from a reduced dataset (such as the test database) can have
+    # a different number of histogram configurations, in which case the only
+    # meaningful label is the bin width.
+    names = NAMES if len(dos_histograms) == len(NAMES) else [""] * len(dos_histograms)
     choices = []
     for name, dos_hist, k_rate_hist in zip(
-        NAMES, dos_histograms, k_rate_histograms, strict=True
+        names, dos_histograms, k_rate_histograms, strict=True
     ):
         if dos_hist[1] != k_rate_hist[1]:
             raise ValueError(
@@ -214,9 +218,17 @@ def get_histogram_precision_choices():
         dos_hid = dos_hist[0]
         k_rate_hid = k_rate_hist[0]
         choices.append(
-            (f"{dos_hid},{k_rate_hid}", f"{name} [bin width = {dos_hist[1]:.1f} K]")
+            (
+                f"{dos_hid},{k_rate_hid}",
+                f"{name} [bin width = {dos_hist[1]:.1f} K]".strip(),
+            )
         )
     return choices
+
+
+def get_default_histogram_precision():
+    choices = get_histogram_precision_choices()
+    return choices[1 if len(choices) > 1 else 0][0]
 
 
 class SkimmerPrecisionForm(Form):
@@ -232,7 +244,7 @@ class SimulationForm(Form):
         "Histogram precision",
         choices=get_histogram_precision_choices,
         validators=[InputRequired()],
-        default=lambda: get_histogram_precision_choices()[1][0],
+        default=get_default_histogram_precision,
     )
     skimmer = FormField(SkimmerPrecisionForm)
 

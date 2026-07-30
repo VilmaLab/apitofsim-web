@@ -1,0 +1,52 @@
+name: Tests (end-to-end)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+
+  playwright:
+    name: Playwright end-to-end test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache test database
+        uses: actions/cache@v4
+        with:
+          path: |
+            datasets/database_test.duckdb
+            datasets/database_test.ase.sqlite.db
+          key: test-dbs-${{ hashFiles('datasets/datasets_test.toml') }}
+
+      - name: Set up environment
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: env.yaml
+          cache-environment: true
+
+      - name: Install Chromium
+        shell: micromamba-shell {0}
+        run: playwright install --with-deps chromium
+
+      - name: Run tests
+        shell: micromamba-shell {0}
+        run: pytest -v
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs
+          path: |
+            tests/server.log
+            test-results/
+          if-no-files-found: ignore

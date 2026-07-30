@@ -74,4 +74,9 @@ def enrich_cluster(ase_db, cluster):
         cluster["rd_molblock"] = rdchem.MolToMolBlock(rdkit_atoms)
         cluster["rd_png"] = rddraw_html(rdkit_atoms, size=(400, 400))
         cluster["rd_svg"] = rddraw_html(rdkit_atoms, size=(400, 400), image_type="svg")
-        cluster["rd_svgacs"] = rddraw_html(rdkit_atoms, image_type="acs1996svg")
+        try:
+            cluster["rd_svgacs"] = rddraw_html(rdkit_atoms, image_type="acs1996svg")
+        except ValueError:
+            # The ACS style needs a mean bond length, so it cannot draw
+            # atom-like products
+            pass
