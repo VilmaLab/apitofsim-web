@@ -127,16 +127,14 @@ fi
 # when a server is already running, so replay our own environment into them.
 ENV_DUMP="$(export -p | grep -vE '^declare -x (PWD|OLDPWD|SHLVL|_|TMUX|TMUX_PANE)=')"
 
-# Keep a pane alive after its process exits so the error output stays readable.
-HOLD="
-status=\$?
-echo
-if [ \"\$status\" -eq 0 ]; then
-	echo \"[exited 0 -- pane held open, Ctrl-D to close]\"
-else
-	echo \"[exited \$status -- pane held open, Ctrl-D to close]\" >&2
-fi
-exec bash"
+# Each pane loops: when its command exits, report the code and wait for Enter
+# before restarting, so the output stays readable.
+LOOP_HEAD='while true; do'
+LOOP_TAIL='	status=$?
+	echo
+	echo "Exited with exit code: $status. Press enter to restart."
+	read -r || exit "$status"
+done'
 
 RAY_CMD="uv run --project '$ROOT' ray start \
 --head \
@@ -168,17 +166,19 @@ fi"
 
 tmux new-session -d -s "$SESSION" -n servers -c "$ROOT" \
 	bash -c "$ENV_DUMP
+$LOOP_HEAD
 $RAY_CMD
-$HOLD"
+$LOOP_TAIL"
 
 tmux split-window -t "$SESSION:servers" -h -c "$ROOT" \
 	bash -c "$ENV_DUMP
+$LOOP_HEAD
 $WEB_CMD
-$HOLD"
+$LOOP_TAIL"
 
 tmux select-layout -t "$SESSION:servers" even-vertical
 
-# Belt and braces: if the held shell itself goes away, leave the dead pane (and
+# Belt and braces: if a pane shell itself goes away, leave the dead pane (and
 # its scrollback) on screen rather than closing the window.
 tmux set-option -w -t "$SESSION:servers" remain-on-exit on
 
