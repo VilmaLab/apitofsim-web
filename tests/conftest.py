@@ -56,7 +56,7 @@ def wait_until_serving(base_url, process, log_path):
             with urllib.request.urlopen(base_url, timeout=5) as response:
                 if response.status == 200:
                     return
-        except (urllib.error.URLError, ConnectionError, TimeoutError, OSError):
+        except urllib.error.URLError, ConnectionError, TimeoutError, OSError:
             pass
         time.sleep(1)
     raise TimeoutError(
