@@ -9,3 +9,4 @@ tests/server.log
 /test-results/
 /.pytest_cache/
 /warnings_skimmer.dat
+/attic/

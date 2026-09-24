@@ -114,7 +114,7 @@
 {% endmacro %}
 
 {% macro cluster_link(id, name) %}
-    <a 
+    <a
         href="#"
         class="px-2 py-1 rounded-lg box-decoration-clone"
         @mouseover="active_cluster = {{ id }}"
@@ -143,7 +143,7 @@
                         <svg width="300" height="60" xmlns="http://www.w3.org/2000/svg">
                             <!-- Breaking/splitting arrows -->
                             <path d="M 150 10 L 150 50" stroke="#e74c3c" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
-                            
+
                             <!-- Arrow marker definition -->
                             <defs>
                                 <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">

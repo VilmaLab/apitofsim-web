@@ -3,7 +3,7 @@
 #SBATCH --job-name=prepare-database
 #SBATCH --partition=short
 #SBATCH --exclusive
-#SBATCH --mem=0 
+#SBATCH --mem=0
 #SBATCH --nodes=1
 
 set -euo pipefail

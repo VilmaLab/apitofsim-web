@@ -20,22 +20,16 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
 
     Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
 
-## Running the Application Locally with micromamba
+## Running the Application Locally with uv
 
-1.  **Install micromamba**
+1. **Install uv**
 
-2.  **Make an environment:**
-
+2. **Install packages:**
     ```bash
-    micromamba create -f env.yaml -p ./cenv
+    uv sync --all-groups --all-extras
     ```
 
-3. **Activate the environment:**
-    ```bash
-    micromamba activate ./cenv
-    ```
-
-4. **Start the servers** (this will start both the Ray server and the webserver in tmux):
+3. **Start the servers** (this will start both the Ray server and the webserver in tmux):
     ```bash
     ./run_servers.sh
     ```
@@ -45,7 +39,7 @@ Alternatively you can manually start them in separate terminals:
 **Start Ray:**
     ```bash
     mkdir -p /tmp/raytmp
-    micromamba run -p ./cenv ray start \
+    uv run ray start \
     --head \
     --object-store-memory 512000000 \
     --temp-dir /tmp/raytmp \
@@ -57,7 +51,7 @@ Alternatively you can manually start them in separate terminals:
 
 **Run the webserver:**
     ```bash
-    micromamba run -p ./cenv quart --debug --app vms run
+    uv run quart --debug --app vms run
     ```
 
 **Access the application:**
@@ -69,23 +63,24 @@ Alternatively you can manually start them in separate terminals:
 The test suite drives a real browser through a short simulation run against a small
 test database, which is downloaded automatically on first run.
 
-1.  **Make an environment** (as above) and install a browser:
+1.  **Install a browser:**
 
     ```bash
-    micromamba create -f env.yaml -p ./cenv
-    micromamba run -p ./cenv playwright install chromium
+    uv run playwright install chromium
     ```
 
 2.  **Run the tests:**
 
     ```bash
-    micromamba run -p ./cenv pytest
+    uv run pytest
     ```
 
 The suite starts its own web server and its own Ray cluster, so `run_servers.sh` must
 not be running, and `RAY_ADDRESS` must not be set in the environment.
 
 ## Developing apitofsim-web and apitofsim using micromamba
+
+TODO: old micromamba instructions, update to uv/pixi
 
 ```bash
 micromamba activate ./cenv

@@ -3,8 +3,10 @@ set -euo pipefail
 
 SESSION=apitofsim-web
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_PREFIX="$ROOT/cenv"
+VENV="$ROOT/.venv"
 RAY_TMP=/tmp/raytmp
+# Run tools from the project environment whatever the invoker's cwd is.
+UV_RUN=(uv run --project "$ROOT")
 PORTS=(6379 5000)
 
 usage() {
@@ -19,8 +21,13 @@ case "${1-}" in
 	*) usage ;;
 esac
 
-if [ ! -x "$ENV_PREFIX/bin/ray" ]; then
-	echo "No micromamba env at $ENV_PREFIX (see README: micromamba create -f env.yaml -p ./cenv)" >&2
+if ! command -v uv >/dev/null 2>&1; then
+	echo "uv not found on PATH (see README: uv sync --all-groups --all-extras)" >&2
+	exit 1
+fi
+
+if [ ! -x "$VENV/bin/ray" ]; then
+	echo "No uv environment at $VENV (see README: uv sync --all-groups --all-extras)" >&2
 	exit 1
 fi
 
@@ -54,7 +61,7 @@ wait_ports_free() {
 
 teardown() {
 	echo "Stopping ray..."
-	micromamba run -p "$ENV_PREFIX" ray stop --grace-period 15 >/dev/null 2>&1 || true
+	"${UV_RUN[@]}" ray stop --grace-period 15 >/dev/null 2>&1 || true
 
 	if tmux has-session -t "$SESSION" 2>/dev/null; then
 		echo "Killing tmux session '$SESSION'..."
@@ -67,7 +74,7 @@ teardown() {
 	fi
 
 	echo "Ports ${PORTS[*]} still busy; forcing." >&2
-	micromamba run -p "$ENV_PREFIX" ray stop --force >/dev/null 2>&1 || true
+	"${UV_RUN[@]}" ray stop --force >/dev/null 2>&1 || true
 
 	local sig pid port
 	for sig in TERM KILL; do
@@ -131,7 +138,7 @@ else
 fi
 exec bash"
 
-RAY_CMD="micromamba run -p '$ENV_PREFIX' ray start \
+RAY_CMD="uv run --project '$ROOT' ray start \
 --head \
 --object-store-memory 512000000 \
 --temp-dir $RAY_TMP \
@@ -153,7 +160,7 @@ for i in \$(seq 1 120); do
 done
 if [ \"\$ray_up\" -eq 1 ]; then
 	echo 'Ray is up.'
-	RAY_ADDRESS="localhost:6379" micromamba run -p '$ENV_PREFIX' quart --debug --app vms run
+	RAY_ADDRESS="localhost:6379" uv run --project '$ROOT' quart --debug --app vms run
 else
 	echo 'Timed out waiting for ray after 120s.' >&2
 	false

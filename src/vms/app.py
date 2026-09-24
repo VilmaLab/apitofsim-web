@@ -60,15 +60,17 @@ def worker_process_setup_hook():
 
 @app.while_serving
 async def lifespan():
+    runtime_env = {
+        "worker_process_setup_hook": worker_process_setup_hook,
+    }
+    if os.environ.get("RAY_USE_PIP") == "1":
+        runtime_env["pip"] = ["jinja2", "minify-html-onepass"]
     my_ray = await to_thread.run_sync(
         partial(
             ray.init,
             address=environ.get("RAY_ADDRESS", "local"),
             log_to_driver=False,
-            runtime_env={
-                "pip": ["jinja2", "minify-html-onepass"],
-                "worker_process_setup_hook": worker_process_setup_hook,
-            },
+            runtime_env=runtime_env,
         )
     )
     print("Dashboard url", my_ray.dashboard_url)
