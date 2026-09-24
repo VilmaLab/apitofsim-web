@@ -1,8 +1,8 @@
 {% macro lightbox(src, img_class="", link_class="") %}
-    <a href="{{ url_for('static', filename=src) }}" target="_blank" onclick="event.preventDefault(); this.nextElementSibling.showModal();" class="{{ link_class }}">
-        <img class="{{ img_class }}" src="{{ url_for('static', filename=src) }}">
+    <a href="{{ url_for('static', path='/' + src) }}" target="_blank" onclick="event.preventDefault(); this.nextElementSibling.showModal();" class="{{ link_class }}">
+        <img class="{{ img_class }}" src="{{ url_for('static', path='/' + src) }}">
     </a>
     <dialog closedby="any" class="m-auto p-4">
-        <img src="{{ url_for('static', filename=src) }}">
+        <img src="{{ url_for('static', path='/' + src) }}">
     </dialog>
 {% endmacro %}

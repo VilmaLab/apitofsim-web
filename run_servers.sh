@@ -158,7 +158,7 @@ for i in \$(seq 1 120); do
 done
 if [ \"\$ray_up\" -eq 1 ]; then
 	echo 'Ray is up.'
-	RAY_ADDRESS="localhost:6379" uv run --project '$ROOT' quart --debug --app vms run
+	RAY_ADDRESS="localhost:6379" uv run --project '$ROOT' uvicorn vms:app --reload --port 5000
 else
 	echo 'Timed out waiting for ray after 120s.' >&2
 	false

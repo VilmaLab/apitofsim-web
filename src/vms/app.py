@@ -4,10 +4,12 @@ import tempfile
 os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 
 import os
-import typing
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from functools import partial
 from io import BytesIO
 from os import environ
+from pathlib import Path
 from uuid import uuid4
 
 import anyio
@@ -21,7 +23,15 @@ from apitofsim.api import ureg
 from apitofsim.workflow.db import SuperClusterDatabase, guess_ase_db_filename
 from lxml import etree
 from pint import set_application_registry
-from quart import Quart, abort, g, make_response, redirect, render_template, request
+from starlette.applications import Starlette
+from starlette.exceptions import HTTPException
+from starlette.middleware import Middleware
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
+from starlette.templating import Jinja2Templates
+from starlette_wtf import CSRFProtectMiddleware, csrf_protect
 
 from .cluster_info import enrich_cluster
 from .forms import BuiltInInstrumentForm, CustomInstrumentForm, SettingsForm
@@ -34,9 +44,9 @@ hv.extension("matplotlib")  # type: ignore
 
 set_application_registry(ureg)
 
-app = Quart(__name__)
-app.config["SECRET_KEY"] = "a-secret-key"
-app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+jinja_loader = templates.env.loader
+current_db = ContextVar("current_db")
 status = {}
 
 
@@ -46,9 +56,19 @@ def connect_db():
     )
 
 
-@app.before_request
-async def before_request():
-    g.db = connect_db()
+class DatabaseMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        token = current_db.set(connect_db())
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            current_db.reset(token)
 
 
 def worker_process_setup_hook():
@@ -58,8 +78,8 @@ def worker_process_setup_hook():
     set_application_registry(ureg)
 
 
-@app.while_serving
-async def lifespan():
+@asynccontextmanager
+async def lifespan(app):
     runtime_env = {
         "worker_process_setup_hook": worker_process_setup_hook,
     }
@@ -78,9 +98,6 @@ async def lifespan():
     # Maybe try to get ray to add an __aexit__ method?
     with my_ray:
         yield
-
-
-jinja_loader = app.jinja_loader
 
 
 def build_input_pathways(
@@ -358,7 +375,6 @@ def pump_jobs():
             start_job(job_id)
 
 
-@app.template_filter("join_abbrv")
 def join_abbrv_filter(s, sep="<br>"):
     from itertools import chain
 
@@ -371,11 +387,16 @@ def join_abbrv_filter(s, sep="<br>"):
         return joined(chain(s[:2], ["..."], s[-2:]))
 
 
-@app.route("/", methods=["GET", "POST"])
-async def settings():
-    form = await SettingsForm.create_form()
-    if typing.TYPE_CHECKING:
-        form = typing.cast(SettingsForm, form)
+templates.env.filters["join_abbrv"] = join_abbrv_filter
+
+
+def render_template(request, path, **context):
+    return templates.TemplateResponse(request, path, context)
+
+
+@csrf_protect
+async def settings(request):
+    form = await SettingsForm.from_formdata(request)
     if await form.validate_on_submit():
         arguments = form.get_data()
         job_id = uuid4()
@@ -385,8 +406,9 @@ async def settings():
             "last_update": {},
         }
         pump_jobs()
-        return redirect("/analysis?jobid=" + job_id.hex)
-    return await render_template(
+        return RedirectResponse("/analysis?jobid=" + job_id.hex, status_code=303)
+    return render_template(
+        request,
         "settings/settings.html",
         form=form,
         primary_cluster=None,
@@ -395,7 +417,11 @@ async def settings():
 
 def hypothetical_spectrogram(cluster_ids, masses, max_mass=None):
     if max_mass is None:
-        max_mass = g.db.db.sql("select max(atomic_mass) from cluster").fetchone()[0]
+        max_mass = (
+            current_db.get()
+            .db.sql("select max(atomic_mass) from cluster")
+            .fetchone()[0]
+        )
     spectrogram = hv.Spikes(
         (masses, 1),
         hv.Dimension("m/z", soft_range=(0, max_mass)),
@@ -439,18 +465,17 @@ def hypothetical_spectrogram(cluster_ids, masses, max_mass=None):
     )
 
 
-@app.route("/fragments/pathways")
-async def pathways_fragment():
-    form = await SettingsForm.create_form()
-    if typing.TYPE_CHECKING:
-        form = typing.cast(SettingsForm, form)
-    if "cluster" not in request.args:
-        abort(400, description="Missing cluster parameter")
+async def pathways_fragment(request):
+    form = await SettingsForm.from_formdata(request)
+    if "cluster" not in request.query_params:
+        raise HTTPException(400, detail="Missing cluster parameter")
 
-    cluster_id = int(request.args["cluster"])
-    if cluster_id is None:
-        abort(400, description="Invalid cluster parameter")
-    relevant_cluster_ids = g.db.db.sql(
+    try:
+        cluster_id = int(request.query_params["cluster"])
+    except ValueError:
+        raise HTTPException(400, detail="Invalid cluster parameter") from None
+    db = current_db.get()
+    relevant_cluster_ids = db.db.sql(
         """
         select distinct unnest([cluster_id, product1_id, product2_id]) as relevant_cluster_id
         from pathway
@@ -459,9 +484,9 @@ async def pathways_fragment():
         params=(cluster_id,),
     ).fetchdf()
     cluster_df = (
-        g.db.db.table("cluster")
+        db.db.table("cluster")
         .join(
-            g.db.db.from_df(relevant_cluster_ids).set_alias("relevant"),
+            db.db.from_df(relevant_cluster_ids).set_alias("relevant"),
             condition="relevant.relevant_cluster_id = cluster.id",
         )
         .fetchdf()
@@ -473,9 +498,9 @@ async def pathways_fragment():
     print(cluster_df)
     for cluster in cluster_df.itertuples():
         cluster = cluster._asdict()
-        enrich_cluster(g.db.ase_db, cluster)
+        enrich_cluster(db.ase_db, cluster)
         clusters[cluster["id"]] = cluster
-    pathways_relations = g.db.db.sql(
+    pathways_relations = db.db.sql(
         """select * from pathway where cluster_id = ?""",
         params=(cluster_id,),
     ).fetchdf()
@@ -501,7 +526,8 @@ async def pathways_fragment():
             }
         )
 
-    return await render_template(
+    return render_template(
+        request,
         "settings/_render_pathways.html",
         pathways=pathways,
         clusters=clusters.values(),
@@ -510,13 +536,10 @@ async def pathways_fragment():
     )
 
 
-@app.route("/fragments/hypothetical-spectrogram")
-async def hypothetical_spectrogram_fragment():
-    form = SettingsForm(request.args)
-    if typing.TYPE_CHECKING:
-        form = typing.cast(SettingsForm, form)
+async def hypothetical_spectrogram_fragment(request):
+    form = SettingsForm(request, formdata=request.query_params)
     if not form.pathways.validate(form) or not form.cluster.validate(form):
-        abort(400, description="Invalid pathways data")
+        raise HTTPException(400, detail="Invalid pathways data")
     # cluster_id = int(form.cluster.data)
     pathway_ids = numpy.array(
         [
@@ -526,41 +549,47 @@ async def hypothetical_spectrogram_fragment():
         ]
     )
     cluster_infos = (
-        g.db.clusters_query(pathways=pathway_ids).select("id, atomic_mass").fetchnumpy()
+        current_db.get()
+        .clusters_query(pathways=pathway_ids)
+        .select("id, atomic_mass")
+        .fetchnumpy()
     )
-    return hypothetical_spectrogram(cluster_infos["id"], cluster_infos["atomic_mass"])
+    return HTMLResponse(
+        hypothetical_spectrogram(cluster_infos["id"], cluster_infos["atomic_mass"])
+    )
 
 
-@app.route("/fragments/instrument")
-async def instrument_fragment():
-    instrument = request.args.get("instrument")
+async def instrument_fragment(request):
+    instrument = request.query_params.get("instrument")
     if instrument == "custom":
-        return await render_template(
+        return render_template(
+            request,
             "settings/_render_instrument.html",
             form=CustomInstrumentForm(prefix="instrument-"),
         )
     elif instrument == "default3000":
-        return await render_template(
+        return render_template(
+            request,
             "settings/_render_instrument.html",
             form=BuiltInInstrumentForm(prefix="instrument-"),
         )
     else:
-        abort(400, description="Invalid instrument parameter")
+        raise HTTPException(400, detail="Invalid instrument parameter")
 
 
 def process_jobid(request):
-    jobid = request.args.get("jobid")
+    jobid = request.query_params.get("jobid")
     if jobid is None:
-        abort(400, description="Missing jobid parameter")
+        raise HTTPException(400, detail="Missing jobid parameter")
     if jobid not in status:  # type: ignore
-        abort(404, description="Job ID not found")
+        raise HTTPException(404, detail="Job ID not found")
     return jobid
 
 
-@app.route("/analysis")
-async def analysis():
+async def analysis(request):
     jobid = process_jobid(request)
-    return await render_template(
+    return render_template(
+        request,
         "analysis/analysis.html",
         jobid=jobid,
         statuses={
@@ -605,10 +634,9 @@ def sse_yolo(data, event=None):
     yield b"\r\n\r\n"
 
 
-@app.route("/analysis/updates")
-async def update_analysis():
-    if "text/event-stream" not in request.accept_mimetypes:
-        abort(400)
+async def update_analysis(request):
+    if "text/event-stream" not in request.headers.get("accept", ""):
+        raise HTTPException(400)
 
     jobid = process_jobid(request)
     print("jobid", jobid)
@@ -639,19 +667,44 @@ async def update_analysis():
                 for bit in sse_safe(data, event):
                     yield bit
 
-    response = await make_response(
+    return StreamingResponse(
         send_events(),
-        {
-            "Content-Type": "text/event-stream",
+        media_type="text/event-stream",
+        headers={
             "Cache-Control": "no-cache",
-            "Transfer-Encoding": "chunked",
-            "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
     )
-    response.timeout = None  # type: ignore
-    return response
+
+
+app = Starlette(
+    routes=[
+        Route("/", settings, methods=["GET", "POST"]),
+        Route("/fragments/pathways", pathways_fragment),
+        Route("/fragments/hypothetical-spectrogram", hypothetical_spectrogram_fragment),
+        Route("/fragments/instrument", instrument_fragment),
+        Route("/analysis", analysis),
+        Route("/analysis/updates", update_analysis),
+        Mount(
+            "/static",
+            StaticFiles(directory=Path(__file__).parent / "static"),
+            name="static",
+        ),
+    ],
+    middleware=[
+        Middleware(
+            SessionMiddleware, secret_key=environ.get("SECRET_KEY", "a-secret-key")
+        ),
+        Middleware(
+            CSRFProtectMiddleware, csrf_secret=environ.get("SECRET_KEY", "a-secret-key")
+        ),
+        Middleware(DatabaseMiddleware),
+    ],
+    lifespan=lifespan,
+)
 
 
 if __name__ == "__main__":
-    anyio.run(app.run_task())
+    import uvicorn
+
+    uvicorn.run(app)

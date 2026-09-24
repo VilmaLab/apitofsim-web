@@ -51,7 +51,7 @@ Alternatively you can manually start them in separate terminals:
 
 **Run the webserver:**
     ```bash
-    uv run quart --debug --app vms run
+    uv run uvicorn vms:app --reload --port 5000
     ```
 
 **Access the application:**

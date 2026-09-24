@@ -1,8 +1,8 @@
 import functools
 
 from apitofsim.api import ureg
-from quart import Markup, g
-from quart_wtf import QuartForm
+from markupsafe import Markup
+from starlette_wtf import StarletteForm
 from wtforms import (
     BooleanField,
     FieldList,
@@ -178,7 +178,10 @@ class GasForm(Form):
 
 @functools.cache
 def get_histogram_precision_choices():
-    dos_histograms = g.db.db.execute(
+    from vms.app import current_db
+
+    db = current_db.get()
+    dos_histograms = db.db.execute(
         """
         with dos_histogram_ids as (
             select distinct histogram_params_id from cluster_dos
@@ -192,7 +195,7 @@ def get_histogram_precision_choices():
         order by bin_width
         """
     ).fetchall()
-    k_rate_histograms = g.db.db.execute(
+    k_rate_histograms = db.db.execute(
         """
         select distinct histogram_params_id, bin_width
         from histogram_params
@@ -250,9 +253,15 @@ class SimulationForm(Form):
 
 
 def get_cluster_choices():
-    clusters = g.db.db.execute(
-        "SELECT cluster.id, cluster.common_name FROM cluster JOIN pathway ON pathway.cluster_id = cluster.id"
-    ).fetchall()
+    from vms.app import current_db
+
+    clusters = (
+        current_db.get()
+        .db.execute(
+            "SELECT cluster.id, cluster.common_name FROM cluster JOIN pathway ON pathway.cluster_id = cluster.id"
+        )
+        .fetchall()
+    )
 
     return [(None, "")] + clusters
 
@@ -266,7 +275,7 @@ class SingleFragmentationPathwayForm(Form):
     fragmentation_energy = FloatField(validators=[Optional()])
 
 
-class SettingsForm(QuartForm):
+class SettingsForm(StarletteForm):
     voltage = FormField(VoltageForm)
     instrument = FormField(BuiltInInstrumentForm)
     cluster = SelectField("Cluster", choices=get_cluster_choices)
@@ -277,6 +286,8 @@ class SettingsForm(QuartForm):
     def get_data(self):
         from apitofsim import Gas, Quadrupole
         from numpy import array
+
+        from vms.app import current_db
 
         data = self.data
         result = {}
@@ -355,6 +366,6 @@ class SettingsForm(QuartForm):
             "histogram_precision": histogram_precision,
         }
         result["histograms"] = tuple(
-            (g.db.get_histogram_params(x) for x in histogram_precision)
+            (current_db.get().get_histogram_params(x) for x in histogram_precision)
         )
         return result
