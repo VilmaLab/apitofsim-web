@@ -23,6 +23,7 @@ dependencies = [
     "virtualenv>=20.34.0",
     "wtforms>=3.2.1",
     "sympy>=1.14.0",
+    "apitofsim-resultviewer",
 ]
 
 [project.optional-dependencies]
@@ -58,3 +59,4 @@ apitofsim = [
   # be written with De Morgan (or the sdist used as the only source).
   # { url = "https://github.com/VilmaLab/apitofsim/archive/refs/tags/v0.0.16.tar.gz", marker = "(sys_platform != 'linux' or platform_machine != 'x86_64') and (sys_platform != 'darwin' or platform_machine != 'arm64') and (sys_platform != 'win32' or platform_machine != 'AMD64')" },
 ]
+apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git" }
