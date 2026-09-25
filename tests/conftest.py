@@ -72,6 +72,9 @@ def server(test_db, tmp_path_factory):
         **os.environ,
         "DATABASE": str(test_db),
         "RESULTS": str(tmp_path_factory.mktemp("results") / "results.duckdb"),
+        "PYTHONPATH": str(REPO_ROOT / "src")
+        + os.pathsep
+        + os.environ.get("PYTHONPATH", ""),
     }
     # Unset so that ray.init() falls back to address="local" and brings up its
     # own single node cluster rather than looking for an external one

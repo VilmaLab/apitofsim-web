@@ -3,14 +3,14 @@
 
 <div
     class="md:flex md:justify-center"
-    x-data="{ current_tab: '{{ default}}', log_open: false }"
-    x-init="current_tab = window.location.hash?.replace('#', '') || '{{ default }}'"
+    x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }} }"
+    x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
 >
     <ul
         sse-swap="tabs"
         class="flex-col space-y space-y-4 md:me-4 mb-4 md:mb-0 mt-6"
         role="tablist">
-        {# {{ tabs|safe }} #}
+        {% include "analysis/tabs.html" %}
     </ul>
     <div id="default-tab-content" class="p-6 w-full max-w-5xl">
         {% call tab_content_sse('queue') %}
@@ -22,5 +22,18 @@
         {% call tab_content_sse('apitof') %}
             {# {{ apitof|safe }} #}
         {% endcall %}
+        <div x-show="results_ready && current_tab == 'explorer'" name="explorer" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
+            <template x-if="results_ready && current_tab == 'explorer'">
+                <iframe title="Explorer plot" src="/analysis/plots/{{ jobid }}/explorer" class="w-full min-h-screen border-0"></iframe>
+            </template>
+        </div>
+        <div x-show="results_ready && current_tab == 'spectrogram'" name="spectrogram" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
+            <template x-if="results_ready && current_tab == 'spectrogram'">
+                <iframe title="Spectrogram plot" src="/analysis/plots/{{ jobid }}/spectrogram" class="w-full min-h-screen border-0"></iframe>
+            </template>
+        </div>
+        <div x-show="results_ready && current_tab == 'but-wait'" name="but-wait" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
+            <p>Coming soon.</p>
+        </div>
     </div>
 </div>

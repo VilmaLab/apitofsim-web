@@ -10,6 +10,14 @@
     Simulating APi-ToF MS
 {% endcall %}
 
+{% if completed %}
+    {% from "ui/_tabs.html" import tab %}
+    {% call tab('explorer') %}Explorer{% endcall %}
+    {% call tab('spectrogram') %}Spectrogram{% endcall %}
+    {% call tab('but-wait') %}But wait!{% endcall %}
+    <script x-init="results_ready = true"></script>
+{% endif %}
+
 <li role="button" class="mt-20">
     <button type="submit" class="
         cursor-pointer
@@ -21,6 +29,6 @@
     </button>
 </li>
 
-{% if processing is defined %}
+{% if processing is defined and not completed %}
     <script x-init="current_tab = '{{ processing }}'"></script>
 {% endif %}
