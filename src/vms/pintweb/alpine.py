@@ -1,17 +1,16 @@
 from typing import List
 
-from jinja2 import Environment
 from markupsafe import Markup
 from pint import Quantity
 from pint._typing import UnitLike
-from quart import current_app
 
 from vms.pintweb.pint import _make_unitsystem
 
 
 def get_jinja_env():
-    jinja_loader = current_app.jinja_loader
-    return Environment(loader=jinja_loader)
+    from vms.app import templates
+
+    return templates.env
 
 
 def quantity_display(value: Quantity, units: List[UnitLike]):

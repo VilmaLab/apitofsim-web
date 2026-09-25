@@ -37,7 +37,7 @@ jobs:
         uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: env.yaml
-          cache-environment: true
+          cache-downloads: true
           micromamba-version: 2.6.0-0
 
       - name: Install Chromium

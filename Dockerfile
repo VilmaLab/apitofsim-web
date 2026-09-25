@@ -25,7 +25,7 @@ ENV PATH="/env/bin:$PATH"
 ENV DATABASE_DIR="/database/"
 ENV RAY_USE_PIP="1"
 
-# Run Quart
+# Run the ASGI application
 EXPOSE 8080
 # Only ever use 1 worker since it is stateful
 CMD ["/env/bin/bash", "fetch-and-start.sh"]

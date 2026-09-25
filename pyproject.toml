@@ -10,19 +10,22 @@ dependencies = [
     "ase>=3.26.0",
     "duckdb>=1.4.1",
     "holoviews>=1.21.0",
+    "jinja2>=3.1.6",
     "lxml>=6.0.2",
     "matplotlib>=3.10.6",
     "minify-html-onepass>=0.16.4",
     "molify>=0.2.1",
     "pint>=0.25",
     "pip>=25.2",
-    "quart>=0.20.0",
-    "quart-wtforms>=1.0.3",
+    "starlette>=1.4.1",
+    "starlette-wtf>=0.4.5",
     "ray[default]>=2.58.0",
     "rdkit>=2025.9.1",
     "virtualenv>=20.34.0",
     "wtforms>=3.2.1",
     "sympy>=1.14.0",
+    "uvicorn>=0.52.1",
+    "apitofsim-resultviewer",
 ]
 
 [project.optional-dependencies]
@@ -58,3 +61,4 @@ apitofsim = [
   # be written with De Morgan (or the sdist used as the only source).
   # { url = "https://github.com/VilmaLab/apitofsim/archive/refs/tags/v0.0.16.tar.gz", marker = "(sys_platform != 'linux' or platform_machine != 'x86_64') and (sys_platform != 'darwin' or platform_machine != 'arm64') and (sys_platform != 'win32' or platform_machine != 'AMD64')" },
 ]
+apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git" }

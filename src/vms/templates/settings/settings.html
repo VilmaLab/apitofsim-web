@@ -13,13 +13,13 @@ document.addEventListener("click", () => {
 </script>
 {% endblock %}
 
-{% from "ui/_lightbox.html" import lightbox %}
+{% from "ui/_lightbox.html" import lightbox with context %}
 {% from "ui/_tabs.html" import tab_container, tab, tab_content %}
 
 {% block content %}
     {# TODO: Decide whether autocomplete should be on and fix up conflicts with htmx #}
     <form method="POST" class="mt-4" autocomplete="off">
-        {{ form.hidden_tag() }}
+        {{ form.csrf_token }}
         {% call tab_container(default='voltagecontrols') %}
             <ul
                 class="flex-col space-y space-y-4 md:me-4 mb-4 md:mb-0 mt-6"

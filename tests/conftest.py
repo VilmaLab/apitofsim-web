@@ -66,7 +66,7 @@ def wait_until_serving(base_url, process, log_path):
 
 @pytest.fixture(scope="session")
 def server(test_db, tmp_path_factory):
-    """A real Quart server, with Ray started automatically inside it."""
+    """A real Starlette server, with Ray started automatically inside it."""
     port = free_port()
     env = {
         **os.environ,
@@ -83,7 +83,7 @@ def server(test_db, tmp_path_factory):
         # No --debug: the reloader would fork a second copy of the app, and so
         # of Ray too
         process = subprocess.Popen(
-            [sys.executable, "-m", "quart", "--app", "vms", "run", "--port", str(port)],
+            [sys.executable, "-m", "uvicorn", "vms:app", "--port", str(port)],
             cwd=REPO_ROOT,
             env=env,
             stdout=log,
