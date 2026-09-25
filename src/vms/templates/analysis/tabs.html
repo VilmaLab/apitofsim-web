@@ -1,33 +1,31 @@
 {% from "ui/_tabs.html" import progress_tab %}
 
-{% call progress_tab('queue', statuses['queue']) %}
+{% call progress_tab('queue', statuses['queue'], 'Queue') %}
     Queue
 {% endcall %}
-{% call progress_tab('skimmer', statuses['skimmer']) %}
+{% call progress_tab('skimmer', statuses['skimmer'], 'Simulating skimmer') %}
     Simulating skimmer
 {% endcall %}
-{% call progress_tab('apitof', statuses['apitof']) %}
+{% call progress_tab('apitof', statuses['apitof'], 'Simulating APi-ToF MS') %}
     Simulating APi-ToF MS
 {% endcall %}
 
 {% if completed %}
     {% from "ui/_tabs.html" import tab %}
-    {% call tab('explorer') %}Explorer{% endcall %}
-    {% call tab('spectrogram') %}Spectrogram{% endcall %}
-    {% call tab('but-wait') %}But wait!{% endcall %}
+    {% call tab('explorer', 'Explorer') %}
+        <svg aria-hidden="true" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+        <span class="tab-label">Explorer</span>
+    {% endcall %}
+    {% call tab('spectrogram', 'Spectrogram') %}
+        <svg aria-hidden="true" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20V9m4 11V4m4 16v-8m4 8V3m4 17v-11m2 11H2"/></svg>
+        <span class="tab-label">Spectrogram</span>
+    {% endcall %}
+    {% call tab('but-wait', 'But wait!') %}
+        <svg aria-hidden="true" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4m0 3v1"/></svg>
+        <span class="tab-label">But wait!</span>
+    {% endcall %}
     <script x-init="results_ready = true"></script>
 {% endif %}
-
-<li role="button" class="mt-20">
-    <button type="submit" class="
-        cursor-pointer
-        hover:scale-105
-        bg-red-500 text-white
-        inline-flex items-center px-4 py-3
-        rounded-lg w-full">
-        &nbsp;Cancel
-    </button>
-</li>
 
 {% if processing is defined and not completed %}
     <script x-init="current_tab = '{{ processing }}'"></script>

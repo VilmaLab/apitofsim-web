@@ -2,17 +2,14 @@
 {% from "ui/_tabs.html" import tab_container, tab, tab_content_sse %}
 
 <div
-    class="md:flex md:justify-center"
+    class="tab-page"
     x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }} }"
     x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
 >
-    <ul
-        sse-swap="tabs"
-        class="flex-col space-y space-y-4 md:me-4 mb-4 md:mb-0 mt-6"
-        role="tablist">
+    <ul sse-swap="tabs" class="top-tabs" role="tablist" data-responsive-tabs>
         {% include "analysis/tabs.html" %}
     </ul>
-    <div id="default-tab-content" class="p-6 w-full max-w-5xl">
+    <div id="default-tab-content" class="p-6 w-full max-w-5xl mx-auto">
         {% call tab_content_sse('queue') %}
             {# {{ queue|safe }} #}
         {% endcall %}
@@ -36,4 +33,7 @@
             <p>Coming soon.</p>
         </div>
     </div>
+</div>
+<div class="page-action">
+    <button type="button" class="cursor-pointer hover:scale-105 bg-red-500 text-white inline-flex items-center px-4 py-3 rounded-lg">Cancel</button>
 </div>
