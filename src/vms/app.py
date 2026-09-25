@@ -36,6 +36,7 @@ from starlette_wtf import CSRFProtectMiddleware, csrf_protect
 
 from .cluster_info import enrich_cluster
 from .forms import BuiltInInstrumentForm, CustomInstrumentForm, SettingsForm
+from .markdown_ext import MarkdownExtension
 from .result_plots import make_bokeh_app
 
 database_path = environ["DATABASE"]
@@ -47,6 +48,7 @@ hv.extension("matplotlib")  # type: ignore
 set_application_registry(ureg)
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates.env.add_extension(MarkdownExtension)
 jinja_loader = templates.env.loader
 current_db = ContextVar("current_db")
 status = {}
@@ -226,6 +228,8 @@ def run_simulation(
     db = setup_result_db(database_path, result_db_path)
     config_id = db.insert_config("webrun", {**config, "quadrupole": quadrupole})
     jinja_env = Environment(loader=jinja_loader)
+    # Same templates as templates.env, so it needs the same extensions
+    jinja_env.add_extension(MarkdownExtension)
 
     processing = "queue"
     statuses = {

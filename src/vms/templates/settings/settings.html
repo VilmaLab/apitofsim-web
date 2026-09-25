@@ -62,17 +62,29 @@ document.addEventListener("click", () => {
                 {% endif %}
                 {% call tab_content('about') %}
                     <h1 class="text-4xl font-bold text-center p-8">APi-ToF MS Simulation</h1>
-                    <p class="mb-4">
-                        This site allows you to configure and run simulations of an Atmospheric Pressure Ionization Time-of-Flight Mass Spectrometer (APi-ToF MS).
-                    </p>
-                    <p class="mb-4">
-                        You can adjust voltage settings, define the compound chain, select the instrument model, and modify constants and simulation parameters.
-                    </p>
+                    {% markdown %}
+This site allows you to configure and run simulations of
+an Atmospheric Pressure Ionization Time-of-Flight Mass Spectrometer (APi-ToF MS).
+
+You can adjust voltage settings,
+define the compound chain,
+select the instrument model,
+and modify constants and simulation parameters.
+
+The underlying tools are available on GitHub:
+
+* [The apitofsim package](https://github.com/VilmaLab/apitofsim) which you can use to run simulations.
+* [The apitofsim-resultviewer package](https://github.com/VilmaLab/apitofsim-resultviewer) which allows the same plots as are shown on this website after running apitofsim.
+
+A history of the simulator, which includes a bibliography with the original publications
+can be found on
+[the background section of the apitofsim documentation](https://vilmalab.github.io/apitofsim/background/).
+                    {% endmarkdown %}
                 {% endcall %}
                 {% call tab_content('voltagecontrols') %}
                     <h2 class="text-2xl font-bold text-center p-4">Voltage Controls</h2>
                     <div class="w-fit max-w-full mx-auto py-4">
-                        {{ lightbox('img/voltages.png', 'w-full h-auto py-4', 'block w-full [contain:inline-size]') }}
+                        {{ lightbox('img/voltages.png', 'w-full h-auto mb-4 border border-black bg-white', 'block w-full [contain:inline-size]') }}
                         <div class="grid grid-cols-5 gap-2 px-8 sm:gap-4 sm:px-20 [&_input[type=number]]:w-20 [&_input[type=number]]:max-w-full">
                             {% for field in form.voltage %}
                                 <div class="flex flex-col items-center gap-2">
