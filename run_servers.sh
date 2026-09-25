@@ -164,6 +164,8 @@ else
 	false
 fi"
 
+NPM_CMD="npm run watch"
+
 tmux new-session -d -s "$SESSION" -n servers -c "$ROOT" \
 	bash -c "$ENV_DUMP
 $LOOP_HEAD
@@ -174,6 +176,12 @@ tmux split-window -t "$SESSION:servers" -h -c "$ROOT" \
 	bash -c "$ENV_DUMP
 $LOOP_HEAD
 $WEB_CMD
+$LOOP_TAIL"
+
+tmux split-window -t "$SESSION:servers" -h -c "$ROOT" \
+	bash -c "$ENV_DUMP
+$LOOP_HEAD
+$NPM_CMD
 $LOOP_TAIL"
 
 tmux select-layout -t "$SESSION:servers" even-vertical
