@@ -51,8 +51,14 @@ Alternatively you can manually start them in separate terminals:
 
 **Run the webserver:**
     ```bash
-    uv run uvicorn vms:app --reload --port 5000
+    RAY_ADDRESS="localhost:6379" uv run uvicorn vms:app --reload --port 5000
     ```
+
+It's also possible to run the webserver in a single command, which will start Ray if it is not already running:
+
+```bash
+uv run uvicorn vms:app --reload --port 5000
+```
 
 **Access the application:**
 
