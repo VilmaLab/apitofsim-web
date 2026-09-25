@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plot|capitalize }}{% endblock %}
+
+{% block content %}
+    <div class="overflow-x-auto">{{ plot_script|safe }}</div>
+{% endblock %}

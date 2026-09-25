@@ -3,6 +3,7 @@ import tempfile
 
 os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 
+import json
 import os
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -35,6 +36,7 @@ from starlette_wtf import CSRFProtectMiddleware, csrf_protect
 
 from .cluster_info import enrich_cluster
 from .forms import BuiltInInstrumentForm, CustomInstrumentForm, SettingsForm
+from .result_plots import make_bokeh_app
 
 database_path = environ["DATABASE"]
 results_path = environ["RESULTS"]
@@ -48,6 +50,7 @@ templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 jinja_loader = templates.env.loader
 current_db = ContextVar("current_db")
 status = {}
+bokeh_application = make_bokeh_app(status, database_path)
 
 
 def connect_db():
@@ -61,7 +64,9 @@ class DatabaseMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] != "http" or scope.get("path", "").startswith(
+            "/analysis/bokeh/"
+        ):
             await self.app(scope, receive, send)
             return
         token = current_db.set(connect_db())
@@ -97,7 +102,11 @@ async def lifespan(app):
     # XXX: This complains about blocking in debug mode on shutdown since the shutdown blocks
     # Maybe try to get ray to add an __aexit__ method?
     with my_ray:
-        yield
+        await bokeh_application.core.start()
+        try:
+            yield
+        finally:
+            await bokeh_application.core.stop()
 
 
 def build_input_pathways(
@@ -159,17 +168,16 @@ def build_input_pathways(
     return retval
 
 
-def setup_result_db(database_path):
-    from tempfile import mkdtemp
-
+def setup_result_db(database_path, result_db_path):
     import apitofsim.workflow.sql_files as sql_files
     import duckdb
     from apitofsim.workflow.db import RealizationDatabase
 
-    results_path = mkdtemp(prefix="apitofsim") + "/results.duckdb"
+    database_path = str(database_path).replace("'", "''")
+    result_db_path = str(result_db_path).replace("'", "''")
     duckdb_db = duckdb.connect()
     duckdb_db.execute(f"ATTACH '{database_path}' AS clusters_db (READ_ONLY);")
-    duckdb_db.execute(f"ATTACH '{results_path}' AS results_db;")
+    duckdb_db.execute(f"ATTACH '{result_db_path}' AS results_db;")
     duckdb_db.execute("USE results_db;")
     duckdb_db.execute("SET search_path = 'results_db,clusters_db'")
     sql = "\n".join(
@@ -184,29 +192,39 @@ def setup_result_db(database_path):
     sql = "\n".join((line for line in sql.split("\n") if "foreign key" not in line))
     duckdb_db.execute(sql)
 
-    return RealizationDatabase(((duckdb_db, None))), results_path
+    return RealizationDatabase(((duckdb_db, None)))
 
 
 @ray.remote
 def run_simulation(
-    voltage, pathways, gas, quadrupole, histograms, config, database_path
+    voltage,
+    pathways,
+    gas,
+    quadrupole,
+    histograms,
+    config,
+    database_path,
+    result_db_path,
 ):
     from time import sleep
 
     from apitofsim.api import (
+        CollisionEvent,
+        EscapeEvent,
+        FragmentationEvent,
+        MassSpecFinalResult,
         MassSpecIntermediateCounter,
         MassSpecLogItem,
         MassSpectrometer,
         mass_spec_iter,
     )
-
-    # from apitofsim.workflow.db import EventRecorder
+    from apitofsim.workflow.db import EventRecorder
     from apitofsim.workflow.runners import DerivedDataPreparer
     from jinja2 import Environment
     from minify_html_onepass import minify
 
-    db, results_db_path = setup_result_db(database_path)
-    config_id = db.insert_config("webrun", config)
+    db = setup_result_db(database_path, result_db_path)
+    config_id = db.insert_config("webrun", {**config, "quadrupole": quadrupole})
     jinja_env = Environment(loader=jinja_loader)
 
     processing = "queue"
@@ -245,6 +263,7 @@ def run_simulation(
             realizations=config["realizations"],
             iterations=iterations,
             ratio=survived / iterations if iterations > 0 else 0,
+            completed=statuses["apitof"] == "done",
         )
         try:
             return minify(html)
@@ -320,13 +339,16 @@ def run_simulation(
             )
 
             assert mass_spec is not None
-            # event_recorder = EventRecorder(db, group["pathway_ids"])
+            event_recorder = EventRecorder(db, group["pathway_ids"])
+            current_run_id = db.insert_run(config_id)
+            experiment_result_id = None
             with mass_spec_iter(
                 mass_spec,
                 subs,
                 realizations,
                 sample_mode=2,
                 strict=True,
+                logconf=(0, True),
             ) as it:
                 for result in it:
                     if isinstance(result, MassSpecIntermediateCounter):
@@ -335,18 +357,36 @@ def run_simulation(
                         fragmented = counters.n_escaped_total
                         iterations = survived + fragmented
                         yield update_pane("apitof")
-                        current_run_id = db.insert_run(config_id)
-                        # experiment_result_id =
-                        db.record_result(
+                    elif isinstance(result, MassSpecFinalResult):
+                        counters = result.counters
+                        survived = counters.n_fragmented_total.sum()
+                        fragmented = counters.n_escaped_total
+                        iterations = survived + fragmented
+                        experiment_result_id = db.record_result(
                             current_run_id,
                             counters,
+                            timings=result.timings,
                             cluster_id=group["cluster_id"],
                             pathway_ids=group["pathway_ids"],
                         )
+                        event_recorder.relate_realizations(experiment_result_id)
+                        yield update_pane("apitof")
+                    elif isinstance(
+                        result, (CollisionEvent, FragmentationEvent, EscapeEvent)
+                    ):
+                        event_recorder(result)
                     elif isinstance(result, MassSpecLogItem):
                         log.append(f"{result.type}: {result.name}")
                         yield update_pane("apitof")
+            if experiment_result_id is None:
+                raise RuntimeError("Simulation ended without a final result")
             break
+    db.db.execute("CHECKPOINT results_db")
+    db.close()
+    yield (
+        b"result",
+        json.dumps({"experiment": current_run_id, "cluster": group["cluster_id"]}),
+    )
     statuses["apitof"] = "done"
     yield update_pane("tabs")
 
@@ -355,7 +395,9 @@ def start_job(job_id):
     info = status[job_id]  # type: ignore
 
     simulation_call = run_simulation.remote(
-        **info["arguments"], database_path=database_path
+        **info["arguments"],
+        database_path=database_path,
+        result_db_path=info["result_db_path"],
     )
     new_info = {
         **info,  # type: ignore
@@ -400,9 +442,12 @@ async def settings(request):
     if await form.validate_on_submit():
         arguments = form.get_data()
         job_id = uuid4()
+        result_db_path = Path(results_path).with_name(f"{job_id.hex}.duckdb")
+        result_db_path.parent.mkdir(parents=True, exist_ok=True)
         status[job_id.hex] = {  # type: ignore
             "status": "pending",
             "arguments": arguments,
+            "result_db_path": str(result_db_path),
             "last_update": {},
         }
         pump_jobs()
@@ -588,16 +633,17 @@ def process_jobid(request):
 
 async def analysis(request):
     jobid = process_jobid(request)
+    completed = "result" in status[jobid]
     return render_template(
         request,
         "analysis/analysis.html",
         jobid=jobid,
-        statuses={
-            "queue": "processing",
-            "skimmer": "pending",
-            "densityandr": "pending",
-            "apitof": "pending",
-        },
+        completed=completed,
+        statuses=(
+            {"queue": "done", "skimmer": "done", "apitof": "done"}
+            if completed
+            else {"queue": "processing", "skimmer": "pending", "apitof": "pending"}
+        ),
         infos={
             "queue": "Queuing",
             "skimmer": "",
@@ -609,6 +655,27 @@ async def analysis(request):
         realizations=0,
         iterations=0,
         ratio=0,
+    )
+
+
+async def result_plot(request):
+    jobid = request.path_params["jobid"]
+    plot = request.path_params["plot"]
+    if plot not in ("explorer", "spectrogram"):
+        raise HTTPException(404)
+    info = status.get(jobid)
+    if info is None or "result" not in info:
+        raise HTTPException(404)
+    from bokeh.embed import server_document
+
+    result = info["result"]
+    plot_url = str(request.url_for("bokeh", path=f"/{plot}"))
+    plot_script = server_document(plot_url, arguments={"jobid": jobid, **result})
+    return render_template(
+        request,
+        "analysis/plot.html",
+        plot=plot,
+        plot_script=plot_script,
     )
 
 
@@ -639,8 +706,6 @@ async def update_analysis(request):
         raise HTTPException(400)
 
     jobid = process_jobid(request)
-    print("jobid", jobid)
-    print(status)
 
     async def send_events():
         sent_something = False
@@ -663,9 +728,19 @@ async def update_analysis(request):
                     for bit in sse_safe("", event=b"done"):
                         yield bit
                     return
+                if event == b"result":
+                    info["result"] = json.loads(data)
+                    continue
                 info["last_update"][event] = data
                 for bit in sse_safe(data, event):
                     yield bit
+            elif info["status"] == "done":
+                for event, data in info["last_update"].items():
+                    for bit in sse_safe(data, event):
+                        yield bit
+                for bit in sse_safe("", event=b"done"):
+                    yield bit
+                return
 
     return StreamingResponse(
         send_events(),
@@ -685,6 +760,8 @@ app = Starlette(
         Route("/fragments/instrument", instrument_fragment),
         Route("/analysis", analysis),
         Route("/analysis/updates", update_analysis),
+        Route("/analysis/plots/{jobid}/{plot}", result_plot),
+        Mount("/analysis/bokeh", bokeh_application, name="bokeh"),
         Mount(
             "/static",
             StaticFiles(directory=Path(__file__).parent / "static"),
