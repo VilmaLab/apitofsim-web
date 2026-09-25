@@ -71,11 +71,9 @@ document.addEventListener("click", () => {
                 {% endcall %}
                 {% call tab_content('voltagecontrols') %}
                     <h2 class="text-2xl font-bold text-center p-4">Voltage Controls</h2>
-                    <div class="flex flex-row gap-8 py-4">
-                        <div class="basis-1/2">
-                            {{ lightbox('img/voltages.png', 'max-h-[320px] m-auto py-4') }}
-                        </div>
-                        <div class="grid grid-cols-5 gap-2 grow">
+                    <div class="w-fit max-w-full mx-auto py-4">
+                        {{ lightbox('img/voltages.png', 'w-full h-auto py-4', 'block w-full [contain:inline-size]') }}
+                        <div class="grid grid-cols-5 gap-2 px-8 sm:gap-4 sm:px-20 [&_input[type=number]]:w-20 [&_input[type=number]]:max-w-full">
                             {% for field in form.voltage %}
                                 <div class="flex flex-col items-center gap-2">
                                     {{ field.label(class_="block mb-2") }}
