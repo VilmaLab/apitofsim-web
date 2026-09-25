@@ -18,7 +18,7 @@ document.addEventListener("click", () => {
 
 {% block content %}
     {# TODO: Decide whether autocomplete should be on and fix up conflicts with htmx #}
-    <form method="POST" class="mt-4" autocomplete="off">
+    <form method="POST" autocomplete="off">
         {{ form.csrf_token }}
         {% call tab_container(default='voltagecontrols') %}
             <ul class="top-tabs" role="tablist" data-responsive-tabs data-has-about>
@@ -47,7 +47,7 @@ document.addEventListener("click", () => {
                     <span class="tab-label">Simulation</span>
                 {% endcall %}
             </ul>
-            <div id="default-tab-content" class="p-6 w-full max-w-5xl mx-auto">
+            <div id="default-tab-content" class="w-full mx-auto p-2 sm:p-6" :class="current_tab == 'fragmentationpathways' ? 'max-w-none' : 'max-w-5xl'">
                 {% if form.errors %}
                     <div class="px-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">
                         <span class="font-medium">The form has the following errors:</span>
@@ -85,7 +85,7 @@ can be found on
                 {% call tab_content('voltagecontrols') %}
                     <h2 class="text-2xl font-bold text-center p-4">Voltage Controls</h2>
                     <div class="w-fit max-w-full mx-auto py-4">
-                        {{ lightbox('img/voltages.png', 'w-full h-auto mb-4 border border-black bg-white', 'block w-full [contain:inline-size]') }}
+                        {{ lightbox('img/voltages.png', 'w-full h-auto mb-4 border border-gray-300 bg-white', 'block w-full [contain:inline-size]') }}
                         <div class="grid grid-cols-5 gap-2 px-8 sm:gap-4 sm:px-20 [&_input[type=number]]:w-20 [&_input[type=number]]:max-w-full">
                             {% for field in form.voltage %}
                                 <div class="flex flex-col items-center gap-2">
@@ -98,11 +98,11 @@ can be found on
                 {% endcall %}
                 {% call tab_content('fragmentationpathways') %}
                     <h2 class="text-2xl font-bold text-center p-4">Fragmentation pathways</h2>
-                    <div class="flex flex-row items-center gap-4 py-4 px-20">
-                        {{ form.cluster.label(class_="block mb-2") }}
-                        {{ form.cluster(class_="mt-1 rounded-md border border-black p-1", hx_get="/fragments/pathways", hx_target="#pathways-target") }}
+                    <div class="m-4 flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-4">
+                        {{ form.cluster.label(class_="shrink-0") }}
+                        {{ form.cluster(class_="w-full min-w-0 max-w-md rounded-md border border-black p-2", hx_get="/fragments/pathways", hx_target="#pathways-target") }}
                     </div>
-                    <div id="pathways-target">
+                    <div id="pathways-target" class="border-t border-gray-300">
                         {% include "settings/_render_pathways.html" %}
                     </div>
                 {% endcall %}

@@ -1,8 +1,9 @@
 {% macro cluster_3dmol(cluster, format, width, height, viewer_id, show_atom_indices=False) -%}
-    <div id="{{ viewer_id }}" style="width: {{ width }}px; height: {{ height }}px;"></div>
+    <div id="{{ viewer_id }}" style="width: min(100%, {{ width }}px); aspect-ratio: {{ width }} / {{ height }};"></div>
     <script>
         (function() {
-            let viewer = $3Dmol.createViewer(document.getElementById("{{ viewer_id }}"), {
+            let element = document.getElementById("{{ viewer_id }}");
+            let viewer = $3Dmol.createViewer(element, {
                 backgroundColor: "white"
             });
             let molblock = `{{ cluster }}`;
@@ -19,6 +20,12 @@
             {% endif %}
             viewer.zoomTo();
             viewer.render();
+            new ResizeObserver(() => {
+                if (element.clientWidth && element.clientHeight) {
+                    viewer.resize();
+                    viewer.render();
+                }
+            }).observe(element);
         })();
     </script>
 {%- endmacro %}
