@@ -35,7 +35,7 @@ from starlette.templating import Jinja2Templates
 from starlette_wtf import CSRFProtectMiddleware, csrf_protect
 
 from .cluster_info import enrich_cluster
-from .forms import BuiltInInstrumentForm, CustomInstrumentForm, SettingsForm
+from .forms import INSTRUMENT_FORMS, SettingsForm, instrument_form_class
 from .markdown_ext import MarkdownExtension
 from .result_plots import make_bokeh_app
 
@@ -609,21 +609,14 @@ async def hypothetical_spectrogram_fragment(request):
 
 
 async def instrument_fragment(request):
-    instrument = request.query_params.get("instrument")
-    if instrument == "custom":
-        return render_template(
-            request,
-            "settings/_render_instrument.html",
-            form=CustomInstrumentForm(prefix="instrument-"),
-        )
-    elif instrument == "default3000":
-        return render_template(
-            request,
-            "settings/_render_instrument.html",
-            form=BuiltInInstrumentForm(prefix="instrument-"),
-        )
-    else:
+    model = request.query_params.get("instrument_model")
+    if model not in INSTRUMENT_FORMS:
         raise HTTPException(400, detail="Invalid instrument parameter")
+    return render_template(
+        request,
+        "settings/_render_instrument.html",
+        form=instrument_form_class(model)(prefix="instrument-"),
+    )
 
 
 def process_jobid(request):

@@ -119,15 +119,11 @@ can be found on
                 {% call tab_content('instrument') %}
                     <h2 class="text-2xl font-bold text-center p-4">Instrument</h2>
                     <div class="md:w-l flex-none">
-                        {# md:w-l flex-none  ||| basis-1/2 #}
                         {{ lightbox('img/measurements.svg', img_class='max-h-[320px] m-auto py-4') }}
                     </div>
                     <div class="flex flex-row items-center gap-4 py-4 px-20">
                         <label class="block mb-2" for="instrument-select">Instrument</label>
-                        <select id="instrument-select" name="instrument" hx-get="/fragments/instrument" hx-target="#instrument-target" class="mt-1 block mt-1 rounded-md border border-black p-1">
-                            <option selected value="default3000">Default 3000</option>
-                            <option value="custom">Custom</option>
-                        </select>
+                        {{ form.instrument_model(id="instrument-select", hx_get="/fragments/instrument", hx_target="#instrument-target", class_="mt-1 block rounded-md border border-black p-1") }}
                     </div>
                     <div id="instrument-target">
                         {% with form=form.instrument %}

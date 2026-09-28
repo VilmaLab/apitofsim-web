@@ -2,7 +2,7 @@
     {% for field in form %}
         <tr>
             <td class="p-1">{{ field.label }}</td>
-            {% if field.type == "HiddenField" %}
+            {% if field.widget.input_type == "hidden" %}
                 <td class="p-2">{{ field.default }}{{ field }}</td>
             {% else %}
                 <td class="p-1">{{ field(class_="border border-black p-1 text-right w-50") }}</td>

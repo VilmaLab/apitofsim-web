@@ -67,71 +67,85 @@ class HiddenFloatField(FloatField):
     widget = HiddenInput()
 
 
+class HiddenQuantityField(QuantityField):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # QuantityField.__init__ installs a QuantityInput on the instance, so the
+        # class-level widget would otherwise be shadowed.
+        self.widget = HiddenInput()
+
+
 def mk_instrument_form(hidden):
-    def maybe_field(*args, **kwargs):
+    def maybe_quantity_field(*args, **kwargs):
+        if hidden:
+            return HiddenQuantityField(*args, **kwargs)
+        else:
+            return QuantityField(*args, **kwargs)
+
+    def maybe_float_field(*args, **kwargs):
         if hidden:
             return HiddenFloatField(*args, **kwargs)
         else:
             return FloatField(*args, **kwargs)
 
     class InstrumentGeometryForm(Form):
-        length_of_first_chamber = maybe_field(
-            "Length of 1st chamber (meters)",
-            default=1.0e-3,
+        length_of_first_chamber = maybe_quantity_field(
+            "Length of 1st chamber",
+            default=Q_(1.0e-3, "m"),
             validators=[InputRequired()],
         )
-        length_of_skimmer = maybe_field(
-            "Length of skimmer (meters)",
-            default=5.0e-4,
+        length_of_skimmer = maybe_quantity_field(
+            "Length of skimmer",
+            default=Q_(5.0e-4, "m"),
             validators=[InputRequired()],
         )
-        length_between_skimmer_and_front_quadrupole = maybe_field(
+        length_between_skimmer_and_front_quadrupole = maybe_quantity_field(
             "Length between skimmer and front quadrupole",
-            default=2.44e-3,
+            default=Q_(2.44e-3, "m"),
             validators=[InputRequired()],
         )
-        length_between_front_quadrupole_and_back_quadrupole = maybe_field(
-            "Length between front quadrupole and back quadrupole (meters)",
-            default=0.101,
+        length_between_front_quadrupole_and_back_quadrupole = maybe_quantity_field(
+            "Length between front quadrupole and back quadrupole",
+            default=Q_(0.101, "m"),
             validators=[InputRequired()],
         )
-        length_between_back_quadrupole_and_2nd_skimmer = maybe_field(
-            "Length between back quadrupole and 2nd skimmer (meters)",
-            default=4.48e-3,
+        length_between_back_quadrupole_and_2nd_skimmer = maybe_quantity_field(
+            "Length between back quadrupole and 2nd skimmer",
+            default=Q_(4.48e-3, "m"),
             validators=[InputRequired()],
         )
 
     class SkimmerGeometryForm(Form):
-        radius_at_smallest_cross_section_skimmer = maybe_field(
-            "Radius at smallest cross section skimmer (m)",
-            default=5.0e-4,
+        radius_at_smallest_cross_section_skimmer = maybe_quantity_field(
+            "Radius at smallest cross section skimmer)",
+            default=Q_(5.0e-4, "m"),
             validators=[InputRequired()],
         )
-        angle_of_skimmer = maybe_field(
+        angle_of_skimmer = maybe_float_field(
             "Angle of skimmer (multiple of PI)",
             default=0.25,
             validators=[InputRequired()],
         )
 
     class QuadrupoleForm(Form):
-        dc_quadrupole = maybe_field(
+        dc_quadrupole = maybe_quantity_field(
             "DC quadrupole",
-            default=0.0,
+            default=Q_(0.0, "V"),
             validators=[InputRequired()],
         )
-        ac_quadrupole = maybe_field(
+        ac_quadrupole = maybe_quantity_field(
             "AC quadrupole",
-            default=200.0,
+            default=Q_(200.0, "V"),
             validators=[InputRequired()],
         )
-        radiofrequency_quadrupole = maybe_field(
+        radiofrequency_quadrupole = maybe_quantity_field(
             "Radiofrequency quadrupole",
-            default=1.3e6,
+            default=Q_(1.3e6, "Hz"),
             validators=[InputRequired()],
         )
-        half_distance_between_quadrupole_rods = maybe_field(
+        half_distance_between_quadrupole_rods = maybe_quantity_field(
             "Half-distance between quadrupole rods",
-            default=6.0e-3,
+            default=Q_(6.0e-3, "m"),
             validators=[InputRequired()],
         )
 
@@ -145,6 +159,17 @@ def mk_instrument_form(hidden):
 
 BuiltInInstrumentForm = mk_instrument_form(hidden=True)
 CustomInstrumentForm = mk_instrument_form(hidden=False)
+
+INSTRUMENT_CHOICES = [("default3000", "Default 3000"), ("custom", "Custom")]
+INSTRUMENT_FORMS = {
+    "default3000": BuiltInInstrumentForm,
+    "custom": CustomInstrumentForm,
+}
+
+
+def instrument_form_class(model):
+    # Unknown or missing models fall back to the fixed default instrument
+    return INSTRUMENT_FORMS.get(model, BuiltInInstrumentForm)
 
 
 class GasForm(Form):
@@ -275,13 +300,34 @@ class SingleFragmentationPathwayForm(Form):
     fragmentation_energy = FloatField(validators=[Optional()])
 
 
+def canonical_numpy_quantity(unit, *quantities):
+    from numpy import array
+
+    return Q_(array([quantity.to(unit).magnitude for quantity in quantities]), unit)
+
+
 class SettingsForm(StarletteForm):
     voltage = FormField(VoltageForm)
+    instrument_model = SelectField(
+        "Instrument", choices=INSTRUMENT_CHOICES, default="default3000"
+    )
     instrument = FormField(BuiltInInstrumentForm)
     cluster = SelectField("Cluster", choices=get_cluster_choices)
     pathways = FieldList(FormField(SingleFragmentationPathwayForm), min_entries=1)
     gas = FormField(GasForm)
     simulation = FormField(SimulationForm)
+
+    def __init__(self, request, *args, **kwargs):
+        formdata = kwargs.get("formdata")
+        model = formdata.get("instrument_model") if formdata is not None else None
+        instrument_cls = instrument_form_class(model)
+        # Bind the same instrument schema the rendered fragment used, so the
+        # server parses and validates what the client actually submitted.
+        self._unbound_fields = [
+            (name, FormField(instrument_cls) if name == "instrument" else field)
+            for name, field in type(self)._unbound_fields
+        ]
+        super().__init__(request, *args, **kwargs)
 
     def get_data(self):
         from apitofsim import Gas, Quadrupole
@@ -302,41 +348,31 @@ class SettingsForm(StarletteForm):
                 for k in ("gas_molecule_radius", "gas_molecule_mass", "adiabatic_index")
             )
         )
-        pressures = Q_(
-            array(
-                [
-                    data["gas"]["pressure_first_chamber"].to("Pa").magnitude,
-                    data["gas"]["pressure_second_chamber"].to("Pa").magnitude,
-                ]
-            ),
+        pressures = canonical_numpy_quantity(
             "Pa",
+            gas["pressure_first_chamber"],
+            gas["pressure_second_chamber"],
         )
-        lengths = Q_(
-            array(
-                [
-                    data["instrument"]["instrument_geometry"][
-                        "length_of_first_chamber"
-                    ],
-                    data["instrument"]["instrument_geometry"]["length_of_skimmer"],
-                    data["instrument"]["instrument_geometry"][
-                        "length_between_skimmer_and_front_quadrupole"
-                    ],
-                    data["instrument"]["instrument_geometry"][
-                        "length_between_front_quadrupole_and_back_quadrupole"
-                    ],
-                    data["instrument"]["instrument_geometry"][
-                        "length_between_back_quadrupole_and_2nd_skimmer"
-                    ],
-                ]
-            ),
+        lengths = canonical_numpy_quantity(
             "m",
+            data["instrument"]["instrument_geometry"]["length_of_first_chamber"],
+            data["instrument"]["instrument_geometry"]["length_of_skimmer"],
+            data["instrument"]["instrument_geometry"][
+                "length_between_skimmer_and_front_quadrupole"
+            ],
+            data["instrument"]["instrument_geometry"][
+                "length_between_front_quadrupole_and_back_quadrupole"
+            ],
+            data["instrument"]["instrument_geometry"][
+                "length_between_back_quadrupole_and_2nd_skimmer"
+            ],
         )
         quadrupole_dict = data["instrument"]["quadrupole"]
         quadrupole = Quadrupole(
-            Q_(quadrupole_dict["dc_quadrupole"], "V"),
-            Q_(quadrupole_dict["ac_quadrupole"], "V"),
-            Q_(quadrupole_dict["radiofrequency_quadrupole"], "Hz"),
-            Q_(quadrupole_dict["half_distance_between_quadrupole_rods"], "m"),
+            quadrupole_dict["dc_quadrupole"],
+            quadrupole_dict["ac_quadrupole"],
+            quadrupole_dict["radiofrequency_quadrupole"],
+            quadrupole_dict["half_distance_between_quadrupole_rods"],
         )
         result["quadrupole"] = quadrupole
         histogram_precision = tuple(
