@@ -1,0 +1,17 @@
+{% macro tooltip(text, id, label, small=False) -%}
+<span class="relative inline-flex align-middle" x-data="{ open: false, pinned: false }"
+      @mouseenter="open = true" @mouseleave="if (!pinned) open = false"
+      @click.outside="open = false; pinned = false"
+      @keydown.escape.window="open = false; pinned = false">
+    <button type="button" class="inline-flex items-center justify-center rounded-full text-gray-500 hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black {{ 'h-5 w-5' if small else 'h-7 w-7' }}"
+            aria-label="More information about {{ label }}" aria-describedby="{{ id }}" :aria-expanded="open.toString()"
+            @focus="open = true" @blur="if (!pinned) open = false"
+            @click="open = true; pinned = true">
+        <svg aria-hidden="true" class="h-4 w-4 {{ '' if small else 'sm:h-5 sm:w-5' }}" viewBox="0 0 640 640"><use href="#fa-info-circle"></use></svg>
+    </button>
+    <span id="{{ id }}" role="tooltip" hidden :hidden="!open"
+          class="absolute left-1/2 top-full z-20 mt-1 w-max max-w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-sm font-normal leading-snug text-gray-900 shadow-lg">
+        {{ text }}
+    </span>
+</span>
+{%- endmacro %}

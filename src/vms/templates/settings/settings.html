@@ -15,6 +15,7 @@ document.addEventListener("click", () => {
 
 {% from "ui/_lightbox.html" import lightbox with context %}
 {% from "ui/_tabs.html" import tab_container, tab, tab_content %}
+{% from "ui/_tooltip.html" import tooltip %}
 
 {% block content %}
     {# TODO: Decide whether autocomplete should be on and fix up conflicts with htmx #}
@@ -61,7 +62,9 @@ document.addEventListener("click", () => {
                     </div>
                 {% endif %}
                 {% call tab_content('about') %}
-                    <h1 class="text-4xl font-bold text-center p-8">APi-ToF MS Simulation</h1>
+                    <h1 class="flex items-center justify-center gap-2 p-8 text-center text-4xl font-bold">
+                        APi-ToF MS Simulation
+                    </h1>
                     {# clip the 25px left / 23px right white padding baked into the webp (1600x800) #}
                     <img class="pb-4 [clip-path:inset(0_1.4375%_0_1.5625%)]" src="{{ url_for('static', path='/img/tofwerk.webp') }}">
                     {% markdown %}
@@ -84,24 +87,44 @@ can be found on
                     {% endmarkdown %}
                 {% endcall %}
                 {% call tab_content('voltagecontrols') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Voltage Controls</h2>
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Voltage Controls
+                        {{ tooltip(
+                            'The clusters are accelerated through the atmospheric pressured interface by fields created by voltages applied at the indicated points on the instrument; Adjust their value in Volts on this screen.',
+                            'voltages-tooltip',
+                            'Voltage Controls'
+                        ) }}
+                    </h2>
                     <div class="w-fit max-w-full mx-auto py-4">
                         {{ lightbox('img/voltages.png', 'w-full h-auto mb-4 border border-gray-300 bg-white', 'block w-full [contain:inline-size]') }}
                         <div class="grid grid-cols-5 gap-2 px-8 sm:gap-4 sm:px-20 [&_input[type=number]]:w-20 [&_input[type=number]]:max-w-full">
                             {% for field in form.voltage %}
                                 <div class="flex flex-col items-center gap-2">
-                                    {{ field.label(class_="block mb-2") }}
-                                    {{ field(range__class="vertical") }}
+                                    <div class="mb-2 flex items-center gap-1">
+                                        {{ field.label }}
+                                        {% if field.description %}
+                                            {{ tooltip(field.description, field.id ~ '-tooltip', 'Voltage V' ~ loop.index0, small=True) }}
+                                        {% endif %}
+                                    </div>
+                                    {{ field(range__class="vertical", number__class="text-center") }}
                                 </div>
                             {% endfor %}
                         </div>
                     </div>
                 {% endcall %}
                 {% call tab_content('fragmentationpathways') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Substance</h2>
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Substance
+                        {{ tooltip('In our experiments.', 'substance-tooltip', 'Substance') }}
+                    </h2>
                     <img class="p-4 bg-white mx-auto border border-gray-300" src="{{ url_for('static', path='/img/fragmentation.png') }}">
                     <div class="m-4 flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-4">
-                        {{ form.cluster.label(class_="shrink-0") }}
+                        <div class="flex shrink-0 items-center gap-1">
+                            {{ form.cluster.label }}
+                            {% if form.cluster.description %}
+                                {{ tooltip(form.cluster.description, form.cluster.id ~ '-tooltip', form.cluster.label.text, small=True) }}
+                            {% endif %}
+                        </div>
                         {{ form.cluster(class_="w-full min-w-0 max-w-md rounded-md border border-black p-2", hx_get="/fragments/pathways", hx_target="#pathways-target") }}
                     </div>
                     <div id="pathways-target" class="border-t border-gray-300">
@@ -109,7 +132,10 @@ can be found on
                     </div>
                 {% endcall %}
                 {% call tab_content('gas') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Substrate</h2>
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Substrate
+                        {{ tooltip('Set the gas properties, temperature, and chamber pressures used in the simulation.', 'substrate-tooltip', 'Substrate') }}
+                    </h2>
                     {{ lightbox('img/substrate.png', 'mx-auto p-4 max-w-md h-auto border border-gray-300 bg-white', 'block w-full [contain:inline-size]') }}
                     <div class="py-4 px-20">
                         {% with form=form.gas %}
@@ -118,12 +144,20 @@ can be found on
                     </div>
                 {% endcall %}
                 {% call tab_content('instrument') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Instrument</h2>
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Instrument
+                        {{ tooltip('On this screen you can modify properties of the instrument such as its geometry as well as quadrupole settings.', 'instrument-tooltip', 'Instrument') }}
+                    </h2>
                     <div class="md:w-l flex-none">
                         {{ lightbox('img/measurements.svg', img_class='max-h-[320px] m-auto py-4') }}
                     </div>
                     <div class="flex flex-row items-center gap-4 py-4 px-20">
-                        <label class="block mb-2" for="instrument-select">Instrument</label>
+                        <span class="flex items-center gap-1">
+                            <label class="block" for="instrument-select">Instrument</label>
+                            {% if form.instrument_model.description %}
+                                {{ tooltip(form.instrument_model.description, 'instrument-model-tooltip', form.instrument_model.label.text, small=True) }}
+                            {% endif %}
+                        </span>
                         {{ form.instrument_model(id="instrument-select", hx_get="/fragments/instrument", hx_target="#instrument-target", class_="mt-1 block rounded-md border border-black p-1") }}
                     </div>
                     <div id="instrument-target">
@@ -133,7 +167,10 @@ can be found on
                     </div>
                 {% endcall %}
                 {% call tab_content('simulation') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Simulation</h2>
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Simulation
+                        {{ tooltip('Choose the number of realizations and numerical settings for the simulation.', 'simulation-tooltip', 'Simulation') }}
+                    </h2>
                     <div class="py-4 px-20">
                         {% with form=form.simulation %}
                             {% include "ui/_table_form.html" %}

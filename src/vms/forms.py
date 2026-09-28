@@ -90,39 +90,46 @@ def mk_instrument_form(hidden):
 
     class InstrumentGeometryForm(Form):
         length_of_first_chamber = maybe_quantity_field(
-            "Length of 1st chamber",
+            Markup("L<sub>0</sub>"),
+            description="Length of the first chamber (up until the skimmer)",
             default=Q_(1.0e-3, "m"),
             validators=[InputRequired()],
         )
         length_of_skimmer = maybe_quantity_field(
-            "Length of skimmer",
+            Markup("L<sub>sk</sub>"),
+            description="Axial length of the skimmer",
             default=Q_(5.0e-4, "m"),
             validators=[InputRequired()],
         )
         length_between_skimmer_and_front_quadrupole = maybe_quantity_field(
-            "Length between skimmer and front quadrupole",
+            Markup("L<sub>1</sub>"),
+            description="Distance from the skimmer to the front of the quadrupole in the second chamber",
             default=Q_(2.44e-3, "m"),
             validators=[InputRequired()],
         )
         length_between_front_quadrupole_and_back_quadrupole = maybe_quantity_field(
-            "Length between front quadrupole and back quadrupole",
+            Markup("L<sub>2</sub>"),
+            description="Length of the quadrupole in the second chamber",
             default=Q_(0.101, "m"),
             validators=[InputRequired()],
         )
         length_between_back_quadrupole_and_2nd_skimmer = maybe_quantity_field(
-            "Length between back quadrupole and 2nd skimmer",
+            Markup("L<sub>3</sub>"),
+            description="Distance from the back of the quadrupole in the second chamber up to the end of the chamber (up to the second skimmer)",
             default=Q_(4.48e-3, "m"),
             validators=[InputRequired()],
         )
 
     class SkimmerGeometryForm(Form):
         radius_at_smallest_cross_section_skimmer = maybe_quantity_field(
-            "Radius at smallest cross section skimmer)",
+            "Radius",
+            description="Radius of the skimmer opening at its narrowest point.",
             default=Q_(5.0e-4, "m"),
             validators=[InputRequired()],
         )
         angle_of_skimmer = maybe_float_field(
-            "Angle of skimmer (multiple of PI)",
+            "Angle",
+            description="Skimmer angle expressed as a multiple of pi; 0.25 means pi/4.",
             default=0.25,
             validators=[InputRequired()],
         )
@@ -130,21 +137,25 @@ def mk_instrument_form(hidden):
     class QuadrupoleForm(Form):
         dc_quadrupole = maybe_quantity_field(
             "DC quadrupole",
+            description="Direct-current voltage applied to the quadrupole.",
             default=Q_(0.0, "V"),
             validators=[InputRequired()],
         )
         ac_quadrupole = maybe_quantity_field(
             "AC quadrupole",
+            description="Alternating-current voltage applied to the quadrupole.",
             default=Q_(200.0, "V"),
             validators=[InputRequired()],
         )
         radiofrequency_quadrupole = maybe_quantity_field(
             "Radiofrequency quadrupole",
+            description="Frequency of the quadrupole's alternating voltage.",
             default=Q_(1.3e6, "Hz"),
             validators=[InputRequired()],
         )
         half_distance_between_quadrupole_rods = maybe_quantity_field(
             "Half-distance between quadrupole rods",
+            description="Half of the spacing between opposing quadrupole rods.",
             default=Q_(6.0e-3, "m"),
             validators=[InputRequired()],
         )
@@ -160,9 +171,9 @@ def mk_instrument_form(hidden):
 BuiltInInstrumentForm = mk_instrument_form(hidden=True)
 CustomInstrumentForm = mk_instrument_form(hidden=False)
 
-INSTRUMENT_CHOICES = [("default3000", "Default 3000"), ("custom", "Custom")]
+INSTRUMENT_CHOICES = [("default", "Default"), ("custom", "Custom")]
 INSTRUMENT_FORMS = {
-    "default3000": BuiltInInstrumentForm,
+    "default": BuiltInInstrumentForm,
     "custom": CustomInstrumentForm,
 }
 
@@ -175,27 +186,38 @@ def instrument_form_class(model):
 class GasForm(Form):
     gas_molecule_radius = QuantityField(
         "Gas molecule radius",
+        description="Effective radius of a gas molecule used by the model.",
         validators=[InputRequired()],
         default=Q_(2.46e-10, "meters"),
     )
     gas_molecule_mass = QuantityField(
-        "Gas molecule mass", default=Q_(4.8506e-26, "kg"), validators=[InputRequired()]
+        "Gas molecule mass",
+        description="Mass of one gas molecule.",
+        default=Q_(4.8506e-26, "kg"),
+        validators=[InputRequired()],
     )
-    adiabatic_index = FloatField(default=1.4, validators=[InputRequired()])
+    adiabatic_index = FloatField(
+        description="Ratio of the gas heat capacities at constant pressure and volume.",
+        default=1.4,
+        validators=[InputRequired()],
+    )
 
     temperature_ = QuantityField(
         "Temperature",
+        description="Gas temperature; you can enter it in kelvin or degrees Celsius.",
         validators=[InputRequired()],
         default=Q_(300.0, "K"),
         units=["K", "°C"],
     )
     pressure_first_chamber = QuantityField(
         "Pressure first chamber",
+        description="Gas pressure in the first chamber.",
         default=Q_(300.0, "Pa"),
         validators=[InputRequired()],
     )
     pressure_second_chamber = QuantityField(
         "Pressure second chamber",
+        description="Gas pressure in the second chamber.",
         default=Q_(3.53, "Pa"),
         validators=[InputRequired()],
     )
@@ -260,16 +282,37 @@ def get_default_histogram_precision():
 
 
 class SkimmerPrecisionForm(Form):
-    iterations_eq1 = IntegerField(default=1000, validators=[InputRequired()])
-    iterations_eq2 = IntegerField(default=1000, validators=[InputRequired()])
-    solved_points = IntegerField(default=1000, validators=[InputRequired()])
-    tolerance = FloatField(default=1.0e-8, validators=[InputRequired()])
+    iterations_eq1 = IntegerField(
+        description="Iteration limit for the first skimmer equation.",
+        default=1000,
+        validators=[InputRequired()],
+    )
+    iterations_eq2 = IntegerField(
+        description="Iteration limit for the second skimmer equation.",
+        default=1000,
+        validators=[InputRequired()],
+    )
+    solved_points = IntegerField(
+        description="Number of points used to solve the skimmer equations.",
+        default=1000,
+        validators=[InputRequired()],
+    )
+    tolerance = FloatField(
+        description="Numerical tolerance for the skimmer calculation.",
+        default=1.0e-8,
+        validators=[InputRequired()],
+    )
 
 
 class SimulationForm(Form):
-    realizations = IntegerField(default=1000, validators=[InputRequired()])
+    realizations = IntegerField(
+        description="Number of simulated particle runs.",
+        default=1000,
+        validators=[InputRequired()],
+    )
     histogram_precision = SelectField(
         "Histogram precision",
+        description="Bin width for the input histograms; finer bins take longer to process.",
         choices=get_histogram_precision_choices,
         validators=[InputRequired()],
         default=get_default_histogram_precision,
@@ -309,10 +352,16 @@ def canonical_numpy_quantity(unit, *quantities):
 class SettingsForm(StarletteForm):
     voltage = FormField(VoltageForm)
     instrument_model = SelectField(
-        "Instrument", choices=INSTRUMENT_CHOICES, default="default3000"
+        "Instrument",
+        choices=INSTRUMENT_CHOICES,
+        default="default3000",
     )
     instrument = FormField(BuiltInInstrumentForm)
-    cluster = SelectField("Cluster", choices=get_cluster_choices)
+    cluster = SelectField(
+        "Cluster",
+        description="Select the starting cluster for the fragmentation pathways.",
+        choices=get_cluster_choices,
+    )
     pathways = FieldList(FormField(SingleFragmentationPathwayForm), min_entries=1)
     gas = FormField(GasForm)
     simulation = FormField(SimulationForm)
