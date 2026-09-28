@@ -1,10 +1,6 @@
 {% from "ui/_lightbox.html" import lightbox with context %}
 
 <div class="flex flex-row gap-4 py-8">
-    <div class="md:w-l flex-none">
-        {# md:w-l flex-none  ||| basis-1/2 #}
-        {{ lightbox('img/measurements.svg', img_class='max-h-[320px] m-auto py-4') }}
-    </div>
     <div>
         <fieldset>
         {% with form=form.instrument_geometry %}
