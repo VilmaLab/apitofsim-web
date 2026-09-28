@@ -97,7 +97,8 @@ can be found on
                     </div>
                 {% endcall %}
                 {% call tab_content('fragmentationpathways') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Fragmentation pathways</h2>
+                    <h2 class="text-2xl font-bold text-center p-4">Substance</h2>
+                    <img class="p-4 bg-white mx-auto border border-gray-300" src="{{ url_for('static', path='/img/fragmentation.png') }}">
                     <div class="m-4 flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-4">
                         {{ form.cluster.label(class_="shrink-0") }}
                         {{ form.cluster(class_="w-full min-w-0 max-w-md rounded-md border border-black p-2", hx_get="/fragments/pathways", hx_target="#pathways-target") }}
