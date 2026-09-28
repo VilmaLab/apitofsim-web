@@ -382,9 +382,6 @@
   .shrink-0 {
     flex-shrink: 0;
   }
-  .basis-1\/2 {
-    flex-basis: calc(1 / 2 * 100%);
-  }
   .table-fixed {
     table-layout: fixed;
   }
@@ -701,6 +698,9 @@
   }
   .\[contain\:inline-size\] {
     contain: inline-size;
+  }
+  .\[clip-path\:inset\(0_1\.4375\%_0_1\.5625\%\)\] {
+    clip-path: inset(0 1.4375% 0 1.5625%);
   }
   .last\:mb-0 {
     &:last-child {

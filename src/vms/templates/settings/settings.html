@@ -62,7 +62,8 @@ document.addEventListener("click", () => {
                 {% endif %}
                 {% call tab_content('about') %}
                     <h1 class="text-4xl font-bold text-center p-8">APi-ToF MS Simulation</h1>
-                    <img class="pb-4" src="{{ url_for('static', path='/img/tofwerk.webp') }}">
+                    {# clip the 25px left / 23px right white padding baked into the webp (1600x800) #}
+                    <img class="pb-4 [clip-path:inset(0_1.4375%_0_1.5625%)]" src="{{ url_for('static', path='/img/tofwerk.webp') }}">
                     {% markdown %}
 This site allows you to configure and run simulations of
 an Atmospheric Pressure Ionization Time-of-Flight Mass Spectrometer (APi-ToF MS).
