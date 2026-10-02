@@ -359,7 +359,6 @@ class SettingsForm(StarletteForm):
     instrument = FormField(BuiltInInstrumentForm)
     cluster = SelectField(
         "Cluster",
-        description="Select the starting cluster for the fragmentation pathways.",
         choices=get_cluster_choices,
     )
     pathways = FieldList(FormField(SingleFragmentationPathwayForm), min_entries=1)
