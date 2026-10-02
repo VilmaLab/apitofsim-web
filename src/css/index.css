@@ -3,6 +3,7 @@
 
 .top-tabs {
     --tab-label-gap: 4px;
+    justify-content: safe center;
     display: flex;
     gap: 1rem;
     width: 100%;

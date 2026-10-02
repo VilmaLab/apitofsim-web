@@ -6,10 +6,11 @@
   "scripts": {
     "build": "npm run build-css && npm run build-js",
     "build-css": "npx @tailwindcss/cli -i src/css/index.css -o src/vms/static/index.css",
-    "build-js": "esbuild src/js/index.ts --bundle --outfile=src/vms/static/index.js",
+    "build-js": "esbuild src/js/index.ts --bundle --target=es2023 --outfile=src/vms/static/index.js",
+    "build-diagram": "uv run python scripts/build_diagram.py",
     "watch": "./watch.sh",
     "watch-css": "npx @tailwindcss/cli -i src/css/index.css -o src/vms/static/index.css --watch",
-    "watch-js": "esbuild src/js/index.ts --bundle --outfile=src/vms/static/index.js --watch"
+    "watch-js": "esbuild src/js/index.ts --bundle --target=es2023 --outfile=src/vms/static/index.js --watch"
   },
   "devDependencies": {
     "@types/alpinejs": "^3.13.11",
@@ -22,6 +23,7 @@
     "esbuild": "^0.27.4",
     "htmx-ext-sse": "^2.2.4",
     "htmx.org": "^2.0.8",
+    "lit": "^3.3.3",
     "tailwindcss": "^4.2.2"
   }
 }

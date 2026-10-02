@@ -11,6 +11,7 @@ document.addEventListener("click", () => {
     }
 });
 </script>
+{% include "settings/_diagram_source.html" %}
 {% endblock %}
 
 {% from "ui/_lightbox.html" import lightbox with context %}
@@ -131,7 +132,7 @@ can be found on
                         </div>
                         {{ form.cluster(class_="w-full min-w-0 max-w-md rounded-md border border-black p-2", hx_get="/fragments/pathways", hx_target="#pathways-target", **{'@change': 'clusterSelected = $event.target.selectedIndex > 0'}) }}
                     </div>
-                    <div id="pathways-target" class="border-t border-gray-300">
+                    <div id="pathways-target" class="border-t border-gray-300 pt-4">
                         {% include "settings/_render_pathways.html" %}
                     </div>
                 {% endcall %}
@@ -141,7 +142,8 @@ can be found on
                         {{ tooltip('Set the gas properties, temperature, and chamber pressures used in the simulation.', 'substrate-tooltip', 'Substrate') }}
                     </h2>
                     {{ lightbox('img/substrate.png', 'mx-auto p-4 max-w-md h-auto border border-gray-300 bg-white', 'block w-full [contain:inline-size]') }}
-                    <div class="mx-auto w-fit max-w-full px-2 py-4 sm:px-10">
+                    <div class="mx-auto flex w-fit max-w-full flex-wrap items-start justify-center gap-4 px-2 py-4 sm:px-10">
+                        <svg-focus class="w-56 shrink-0" diagram="#diagram" region="#region-pressure_temperature" labels="#labels-pressure_temperature" title="Gas pressure and temperature"></svg-focus>
                         {% with form=form.gas %}
                             {% include "ui/_table_form.html" %}
                         {% endwith %}
@@ -176,7 +178,10 @@ can be found on
                         {{ tooltip('Choose the number of realizations and numerical settings for the simulation.', 'simulation-tooltip', 'Simulation') }}
                     </h2>
                     <div class="mx-auto w-fit max-w-full px-2 py-4 sm:px-10">
-                        {% with form=form.simulation %}
+                        {% with form=form.simulation, exclude_fields=['simulation-skimmer'] %}
+                            {% include "ui/_table_form.html" %}
+                        {% endwith %}
+                        {% with form=form.simulation.skimmer %}
                             {% include "ui/_table_form.html" %}
                         {% endwith %}
                     </div>

@@ -1,21 +1,31 @@
-{% from "ui/_lightbox.html" import lightbox with context %}
-
 <div class="flex flex-row gap-4 py-8">
     <div>
-        <fieldset>
-        {% with form=form.instrument_geometry %}
-            {% include "ui/_table_form.html" %}
-        {% endwith %}
+        <fieldset class="rounded-md border border-gray-300 p-4 my-4">
+            <legend>Instrument geometry</legend>
+            <div class="flex flex-wrap items-start gap-4">
+                <svg-focus class="w-56 shrink-0" diagram="#diagram" region="#region-geometry" labels="#labels-geometry" title="Instrument geometry"></svg-focus>
+                {% with form=form.instrument_geometry %}
+                    {% include "ui/_table_form.html" %}
+                {% endwith %}
+            </div>
         </fieldset>
-        <fieldset>
-        {% with form=form.skimmer_geometry %}
-            {% include "ui/_table_form.html" %}
-        {% endwith %}
+        <fieldset class="rounded-md border border-gray-300 p-4 my-4">
+            <legend>Skimmer geometry</legend>
+            <div class="flex flex-wrap items-start gap-4">
+                <svg-focus class="w-56 shrink-0" diagram="#diagram" region="#region-skimmer" padding="60" title="Skimmer geometry"></svg-focus>
+                {% with form=form.skimmer_geometry %}
+                    {% include "ui/_table_form.html" %}
+                {% endwith %}
+            </div>
         </fieldset>
-        <fieldset>
-        {% with form=form.quadrupole %}
-            {% include "ui/_table_form.html" %}
-        {% endwith %}
+        <fieldset class="rounded-md border border-gray-300 p-4 my-4">
+            <legend>Quadrupole</legend>
+            <div class="flex flex-wrap items-start gap-4">
+                <svg-focus class="w-56 shrink-0" diagram="#diagram" region="#region-quadrupole" title="Quadrupole"></svg-focus>
+                {% with form=form.quadrupole %}
+                    {% include "ui/_table_form.html" %}
+                {% endwith %}
+            </div>
         </fieldset>
     </div>
 </div>

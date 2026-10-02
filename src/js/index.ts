@@ -5,6 +5,7 @@ import $3DmolModule from '3dmol';
 import {UnitSystem as UnitSystemCls} from './unitsystem.ts';
 import quantityinput from './quantityinput.js';
 import unitswitcher from './unitswitcher.js';
+import './svg-focus.ts';
 
 declare global {
   var Alpine: typeof AlpineModule;
