@@ -1,8 +1,8 @@
 {% from "ui/_tooltip.html" import tooltip %}
 <table class="text-right">
     {% for field in form %}
-        {% if exclude_fields and field.name in exclude_fields %}
-        {% else %}
+        {% if exclude_fields and field.short_name in exclude_fields %}
+        {% elif not include_fields or (include_fields and field.short_name in include_fields) %}
             <tr>
                 <td class="p-1">
                     {{ field.label }}

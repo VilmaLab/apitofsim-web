@@ -185,13 +185,13 @@ def instrument_form_class(model):
 
 class GasForm(Form):
     gas_molecule_radius = QuantityField(
-        "Gas molecule radius",
+        "Radius",
         description="Effective radius of a gas molecule used by the model.",
         validators=[InputRequired()],
         default=Q_(2.46e-10, "meters"),
     )
     gas_molecule_mass = QuantityField(
-        "Gas molecule mass",
+        "Mass",
         description="Mass of one gas molecule.",
         default=Q_(4.8506e-26, "kg"),
         validators=[InputRequired()],
@@ -203,20 +203,20 @@ class GasForm(Form):
     )
 
     temperature_ = QuantityField(
-        "Temperature",
+        "T",
         description="Gas temperature; you can enter it in kelvin or degrees Celsius.",
         validators=[InputRequired()],
         default=Q_(300.0, "K"),
         units=["K", "°C"],
     )
     pressure_first_chamber = QuantityField(
-        "Pressure first chamber",
+        Markup("P<sub>1</sub>"),
         description="Gas pressure in the first chamber.",
         default=Q_(300.0, "Pa"),
         validators=[InputRequired()],
     )
     pressure_second_chamber = QuantityField(
-        "Pressure second chamber",
+        Markup("P<sub>2</sub>"),
         description="Gas pressure in the second chamber.",
         default=Q_(3.53, "Pa"),
         validators=[InputRequired()],

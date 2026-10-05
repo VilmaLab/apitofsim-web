@@ -1,28 +1,26 @@
-<div class="flex flex-col gap-4">
+<div class="flex flex-row gap-6">
     <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
         <legend>Instrument geometry</legend>
-        <div class="flex flex-wrap items-center gap-4">
-            <svg-focus class="min-w-56 shrink-0" diagram="#diagram" region="#region-geometry" labels="#labels-geometry" title="Instrument geometry"></svg-focus>
-            <div class="flex grow justify-center-safe">
-                {% with form=form.instrument_geometry %}
-                    {% include "ui/_table_form.html" %}
-                {% endwith %}
-            </div>
+        <div class="flex flex-col items-center gap-4">
+            <svg-focus diagram="#diagram" region="#region-geometry" labels="#labels-geometry" title="Instrument geometry"></svg-focus>
+            {% with form=form.instrument_geometry %}
+                {% include "ui/_table_form.html" %}
+            {% endwith %}
         </div>
     </fieldset>
     <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
         <legend>Skimmer geometry</legend>
-        <div class="flex flex-wrap items-center gap-4">
+        <div class="flex flex-col items-center gap-4">
             <svg-focus class="w-56 shrink-0" diagram="#diagram" region="#region-skimmer" padding="60" title="Skimmer geometry"></svg-focus>
-                {% with form=form.skimmer_geometry %}
-                    {% include "ui/_table_form.html" %}
-                {% endwith %}
+            {% with form=form.skimmer_geometry %}
+                {% include "ui/_table_form.html" %}
+            {% endwith %}
         </div>
     </fieldset>
     <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
         <legend>Quadrupole</legend>
-        <div class="flex flex-wrap items-center gap-4">
-            <svg-focus class="w-56 shrink-0" diagram="#diagram" region="#region-quadrupole" title="Quadrupole"></svg-focus>
+        <div class="flex flex-col items-center gap-4">
+            <svg-focus diagram="#diagram" region="#region-quadrupole" title="Quadrupole"></svg-focus>
             {% with form=form.quadrupole %}
                 {% include "ui/_table_form.html" %}
             {% endwith %}
