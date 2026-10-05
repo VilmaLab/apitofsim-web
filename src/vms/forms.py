@@ -136,25 +136,25 @@ def mk_instrument_form(hidden):
 
     class QuadrupoleForm(Form):
         dc_quadrupole = maybe_quantity_field(
-            "DC quadrupole",
+            "DC",
             description="Direct-current voltage applied to the quadrupole.",
             default=Q_(0.0, "V"),
             validators=[InputRequired()],
         )
         ac_quadrupole = maybe_quantity_field(
-            "AC quadrupole",
+            "AC",
             description="Alternating-current voltage applied to the quadrupole.",
             default=Q_(200.0, "V"),
             validators=[InputRequired()],
         )
         radiofrequency_quadrupole = maybe_quantity_field(
-            "Radiofrequency quadrupole",
-            description="Frequency of the quadrupole's alternating voltage.",
+            "RF",
+            description="Radio frequency of the quadrupole's alternating voltage.",
             default=Q_(1.3e6, "Hz"),
             validators=[InputRequired()],
         )
         half_distance_between_quadrupole_rods = maybe_quantity_field(
-            "Half-distance between quadrupole rods",
+            "Radius",
             description="Half of the spacing between opposing quadrupole rods.",
             default=Q_(6.0e-3, "m"),
             validators=[InputRequired()],
