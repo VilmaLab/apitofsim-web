@@ -4,6 +4,7 @@ import 'htmx-ext-sse'
 import $3DmolModule from '3dmol';
 import {UnitSystem as UnitSystemCls} from './unitsystem.ts';
 import quantityinput from './quantityinput.js';
+import settingsform from './settingsform.js';
 import unitswitcher from './unitswitcher.js';
 import './svg-focus.ts';
 
@@ -18,6 +19,7 @@ window.htmx = HtmxModule;
 window.UnitSystem = UnitSystemCls;
 
 AlpineModule.data('quantityinput', quantityinput);
+AlpineModule.data('settingsForm', settingsform);
 AlpineModule.data('unitswitcher', unitswitcher);
 
 window.Alpine = AlpineModule;

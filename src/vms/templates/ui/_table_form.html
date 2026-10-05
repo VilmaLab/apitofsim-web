@@ -12,7 +12,7 @@
                 </td>
                 {% if field.widget.input_type == "hidden" %}
                     <td class="p-1">
-                        {% if field.units is defined %}
+                        {% if field.units is defined and field.data is not none %}
                             {{ field.data|quantity_display(field.units, class_="border border-gray-300 w-50 p-1") }}
                             {{ field }}
                         {% else %}

@@ -45549,6 +45549,57 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   };
 
+  // src/js/settingsform.js
+  var settingsform_default = (errors) => ({
+    current_tab: window.location.hash.replace("#", "") || "about",
+    uneditableErrors: [],
+    async init() {
+      await this.$nextTick();
+      for (const error2 of errors) {
+        const control = Array.from(this.$el.elements).find((control2) => (control2.id === error2.id || control2.name === error2.name) && control2.willValidate && control2.type !== "range");
+        if (control) {
+          control.setCustomValidity(error2.message);
+          control.setAttribute("aria-invalid", "true");
+        } else {
+          this.uneditableErrors.push(error2);
+        }
+      }
+      if (errors.length) this.showErrors(true);
+    },
+    clearError(event) {
+      const target = event.target;
+      const quantity = target.closest('[x-data^="quantityinput"]');
+      const controls = quantity ? quantity.querySelectorAll("input") : target.type === "range" ? [target, target.nextElementSibling] : [target];
+      for (const control of controls) {
+        if (typeof control?.setCustomValidity === "function") {
+          control.setCustomValidity("");
+          control.removeAttribute("aria-invalid");
+        }
+      }
+    },
+    showErrors(includeUneditable = false) {
+      const invalid = Array.from(this.$el.elements).filter((control) => control.willValidate && !control.validity.valid);
+      const panels = Array.from(this.$el.querySelectorAll('.tab-page > div > [role="tabpanel"]'));
+      const panel = panels.find((panel2) => invalid.some((control) => panel2.contains(control)) || includeUneditable && this.uneditableErrors.some((error2) => error2.tab === panel2.getAttribute("name")));
+      if (!panel) return invalid.length > 0;
+      const name = panel.getAttribute("name");
+      this.current_tab = name;
+      this.$nextTick().then(() => {
+        const control = invalid.find((control2) => panel.contains(control2));
+        if (control) {
+          control.focus();
+          control.reportValidity();
+        } else {
+          this.$el.querySelector(`a[href="#${name}"]`).focus();
+        }
+      });
+      return true;
+    },
+    submit(event) {
+      if (this.showErrors()) event.preventDefault();
+    }
+  });
+
   // src/js/unitswitcher.js
   var unitswitcher_default = ({ unit, dropdown, system } = {}) => {
     return {
@@ -46560,6 +46611,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   window.htmx = htmx_esm_default;
   window.UnitSystem = UnitSystem2;
   module_default.data("quantityinput", quantityinput_default);
+  module_default.data("settingsForm", settingsform_default);
   module_default.data("unitswitcher", unitswitcher_default);
   window.Alpine = module_default;
   module_default.start();

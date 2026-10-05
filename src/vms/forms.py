@@ -14,7 +14,7 @@ from wtforms import (
     IntegerField,
     SelectField,
 )
-from wtforms.validators import InputRequired, Optional
+from wtforms.validators import DataRequired, InputRequired, Optional
 from wtforms.widgets import HiddenInput
 from wtforms.widgets import core as wtforms_widgets_core_module
 
@@ -355,7 +355,7 @@ def get_cluster_choices():
         .fetchall()
     )
 
-    return [(None, "")] + clusters
+    return [("", "")] + clusters
 
 
 class SingleFragmentationPathwayForm(Form):
@@ -374,19 +374,21 @@ def canonical_numpy_quantity(unit, *quantities):
 
 
 class SettingsForm(StarletteForm):
-    voltage = FormField(VoltageForm)
+    cluster = SelectField(
+        "Cluster",
+        choices=get_cluster_choices,
+        validators=[DataRequired()],
+        coerce=lambda value: "" if value in (None, "None", "") else str(value),
+    )
+    pathways = FieldList(FormField(SingleFragmentationPathwayForm), min_entries=1)
+    gas = FormField(GasForm)
     instrument_model = SelectField(
         "Instrument",
         choices=INSTRUMENT_CHOICES,
         default="default3000",
     )
     instrument = FormField(BuiltInInstrumentForm)
-    cluster = SelectField(
-        "Cluster",
-        choices=get_cluster_choices,
-    )
-    pathways = FieldList(FormField(SingleFragmentationPathwayForm), min_entries=1)
-    gas = FormField(GasForm)
+    voltage = FormField(VoltageForm)
     simulation = FormField(SimulationForm)
 
     def __init__(self, request, *args, **kwargs):
@@ -477,3 +479,45 @@ class SettingsForm(StarletteForm):
             (current_db.get().get_histogram_params(x) for x in histogram_precision)
         )
         return result
+
+
+def settings_errors(form):
+    """Separate form-wide messages from leaf errors, retaining their owning tab."""
+    form_errors = []
+    field_errors = []
+    tabs = {
+        "cluster": "fragmentationpathways",
+        "pathways": "fragmentationpathways",
+        "gas": "gas",
+        "instrument_model": "instrument",
+        "instrument": "instrument",
+        "voltage": "voltagecontrols",
+        "simulation": "simulation",
+    }
+
+    def visit_form(current, tab=None):
+        form_errors.extend(current.form_errors)
+        for field in current:
+            if field is form.pathways and form.cluster.data in (None, "None", ""):
+                continue
+            visit_field(field, tab or tabs.get(field.short_name))
+
+    def visit_field(field, tab):
+        if isinstance(field, FormField):
+            visit_form(field.form, tab)
+        elif isinstance(field, FieldList):
+            for entry in field:
+                visit_field(entry, tab)
+        elif field.errors:
+            field_errors.append(
+                {
+                    "id": field.id,
+                    "name": field.name,
+                    "label": Markup(field.label.text).striptags(),
+                    "tab": tab,
+                    "message": "\n".join(field.errors),
+                }
+            )
+
+    visit_form(form)
+    return form_errors, field_errors

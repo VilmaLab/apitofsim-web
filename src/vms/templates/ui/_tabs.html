@@ -1,8 +1,10 @@
-{% macro tab_container(default) %}
+{% macro tab_container(default, inherit=False) %}
     <div
         class="tab-page"
+        {% if not inherit %}
         x-data="{ current_tab: '{{ default}}' }"
         x-init="current_tab = window.location.hash?.replace('#', '') || '{{ default }}'"
+        {% endif %}
     >
         {{ caller() }}
     </div>

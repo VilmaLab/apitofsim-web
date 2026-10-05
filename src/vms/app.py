@@ -35,7 +35,12 @@ from starlette.templating import Jinja2Templates
 from starlette_wtf import CSRFProtectMiddleware, csrf_protect
 
 from .cluster_info import enrich_cluster
-from .forms import INSTRUMENT_FORMS, SettingsForm, instrument_form_class
+from .forms import (
+    INSTRUMENT_FORMS,
+    SettingsForm,
+    instrument_form_class,
+    settings_errors,
+)
 from .markdown_ext import MarkdownExtension
 from .pintweb.alpine import quantity_display
 from .result_plots import make_bokeh_app
@@ -458,11 +463,21 @@ async def settings(request):
         }
         pump_jobs()
         return RedirectResponse("/analysis?jobid=" + job_id.hex, status_code=303)
+    context = {"primary_cluster": None}
+    if (
+        request.method == "POST"
+        and not form.cluster.errors
+        and form.cluster.data not in (None, "None", "")
+    ):
+        context = pathways_context(form, int(form.cluster.data), submitted=True)
+    form_errors, field_errors = settings_errors(form)
     return render_template(
         request,
         "settings/settings.html",
         form=form,
-        primary_cluster=None,
+        form_errors=form_errors,
+        field_errors=field_errors,
+        **context,
     )
 
 
@@ -525,6 +540,12 @@ async def pathways_fragment(request):
         cluster_id = int(request.query_params["cluster"])
     except ValueError:
         raise HTTPException(400, detail="Invalid cluster parameter") from None
+    return render_template(
+        request, "settings/_render_pathways.html", **pathways_context(form, cluster_id)
+    )
+
+
+def pathways_context(form, cluster_id, *, submitted=False):
     db = current_db.get()
     relevant_cluster_ids = db.db.sql(
         """
@@ -546,7 +567,6 @@ async def pathways_fragment(request):
     cluster_ids = cluster_df["id"].to_numpy()
     masses = cluster_df["atomic_mass"].to_numpy()
     clusters = {}
-    print(cluster_df)
     for cluster in cluster_df.itertuples():
         cluster = cluster._asdict()
         enrich_cluster(db.ase_db, cluster)
@@ -557,6 +577,14 @@ async def pathways_fragment(request):
     ).fetchdf()
     pathways = []
 
+    submitted_entries = (
+        {entry.form.pathway.data: entry.form for entry in form.pathways}
+        if submitted
+        else {}
+    )
+    if not submitted:
+        # FieldList's placeholder is not a real pathway and must not be submitted.
+        form.pathways.entries.clear()
     for pathway in pathways_relations.itertuples():
         cluster = clusters[pathway.cluster_id]
         product1 = clusters[pathway.product1_id]
@@ -573,14 +601,14 @@ async def pathways_fragment(request):
                 "product1": (pathway.product1_id, product1["common_name"]),
                 "product2": (pathway.product2_id, product2["common_name"]),
                 "bonding_energy": bonding_energy,
-                "form": form.pathways.append_entry({"pathway": pathway.id}),
+                "form": submitted_entries.get(str(pathway.id))
+                if submitted
+                else form.pathways.append_entry({"pathway": pathway.id}).form,
             }
         )
 
-    return render_template(
-        request,
-        "settings/_render_pathways.html",
-        pathways=pathways,
+    return dict(
+        pathways=[pathway for pathway in pathways if pathway["form"] is not None],
         clusters=clusters.values(),
         mass_spectrogram=hypothetical_spectrogram(cluster_ids, masses),
         primary_cluster=(cluster_id, clusters[cluster_id]["common_name"]),

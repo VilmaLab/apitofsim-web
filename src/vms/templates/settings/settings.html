@@ -18,11 +18,22 @@ document.addEventListener("click", () => {
 {% from "ui/_tabs.html" import tab_container, tab, tab_content %}
 {% from "ui/_tooltip.html" import tooltip %}
 
+{% macro uneditable_errors(tab) %}
+    <template x-for="error in uneditableErrors.filter(error => error.tab === '{{ tab }}')" :key="error.name">
+        <p class="mb-2 text-sm text-red-800" x-text="error.label + ': ' + error.message"></p>
+    </template>
+{% endmacro %}
+
 {% block content %}
     {# TODO: Decide whether autocomplete should be on and fix up conflicts with htmx #}
-    <form method="POST" autocomplete="off">
+    <form method="POST" autocomplete="off" novalidate
+          x-data='settingsForm({{ field_errors|tojson }})'
+          @submit="submit($event)" @input="clearError($event)" @change="clearError($event)" @unit-change="clearError($event)">
+        <template x-for="error in uneditableErrors.filter(error => !error.tab)" :key="error.name">
+            <p class="mb-2 text-sm text-red-800" x-text="error.label + ': ' + error.message"></p>
+        </template>
         {{ form.csrf_token }}
-        {% call tab_container(default='voltagecontrols') %}
+        {% call tab_container(default='about', inherit=True) %}
             <ul class="top-tabs" role="tablist" data-responsive-tabs data-has-about>
                 {% call tab('about', 'About') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-info-circle"></use></svg>
@@ -52,16 +63,17 @@ document.addEventListener("click", () => {
             <div id="default-tab-content" class="mx-auto p-2 sm:p-6"
                  x-data="{ clusterSelected: {{ 'true' if form.cluster.data not in (none, 'None', '') else 'false' }} }"
                  :class="current_tab == 'about' ? 'max-w-5xl' : (current_tab == 'fragmentationpathways' && clusterSelected ? 'w-full' : 'w-fit')">
-                {% if form.errors %}
-                    <div class="px-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">
-                        <span class="font-medium">The form has the following errors:</span>
-                        <ul class="px-4 list-disc">
-                            {% for field_name, field_errors in form.errors|dictsort if field_errors %}
-                                {% for error in field_errors %}
-                                    <li>{{ form[field_name].label }}: {{ error }}</li>
-                                {% endfor %}
-                            {% endfor %}
-                        </ul>
+                {% if form_errors %}
+                    <div x-data="{ dismissed: false }" x-show="!dismissed"
+                         class="mb-4 flex w-full max-w-[min(42rem,calc(100vw-3rem))] items-start gap-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800" role="alert">
+                        <div class="min-w-0 flex-1">
+                            <h2 class="font-semibold">Unable to run simulation</h2>
+                            <ul class="mt-2 list-disc space-y-1 pl-5">
+                                {% for error in form_errors %}<li>{{ error }}</li>{% endfor %}
+                            </ul>
+                        </div>
+                        <button type="button" @click="dismissed = true" aria-label="Dismiss errors"
+                                class="shrink-0 cursor-pointer rounded px-2 py-1 hover:bg-red-100 focus-visible:outline-2">&times;</button>
                     </div>
                 {% endif %}
                 {% call tab_content('about') %}
@@ -89,33 +101,8 @@ can be found on
 [the background section of the apitofsim documentation](https://vilmalab.github.io/apitofsim/background/).
                     {% endmarkdown %}
                 {% endcall %}
-                {% call tab_content('voltagecontrols') %}
-                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
-                        Voltage Controls
-                        {{ tooltip(
-                            'The clusters are accelerated through the atmospheric pressured interface by fields created by voltages applied at the indicated points on the instrument; Adjust their value in Volts on this screen.',
-                            'voltages-tooltip',
-                            'Voltage Controls'
-                        ) }}
-                    </h2>
-                    <div class="w-fit max-w-full mx-auto py-4">
-                        {{ lightbox('img/voltages.png', 'w-full h-auto mb-4 border border-gray-300 bg-white', 'block w-full [contain:inline-size]') }}
-                        <div class="grid grid-cols-5 gap-2 px-8 sm:gap-4 sm:px-20 [&_input[type=number]]:w-20 [&_input[type=number]]:max-w-full">
-                            {% for field in form.voltage %}
-                                <div class="flex flex-col items-center gap-2">
-                                    <div class="mb-2 flex items-center gap-1">
-                                        {{ field.label }}
-                                        {% if field.description %}
-                                            {{ tooltip(field.description, field.id ~ '-tooltip', 'Voltage V' ~ loop.index0, small=True) }}
-                                        {% endif %}
-                                    </div>
-                                    {{ field(range__class="vertical", number__class="text-center") }}
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                {% endcall %}
                 {% call tab_content('fragmentationpathways') %}
+                    {{ uneditable_errors('fragmentationpathways') }}
                     {% set substance_help = 'This is the substance which will enter the APi-ToF MS and is the object being measured when using the instrument. Once the substance is selected, the fragmentation pathways can be inspected and included/excluded from the simulation.' %}
                     <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold" x-show="!clusterSelected">
                         Substance
@@ -137,6 +124,7 @@ can be found on
                     </div>
                 {% endcall %}
                 {% call tab_content('gas') %}
+                    {{ uneditable_errors('gas') }}
                     <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
                         Substrate
                         {{ tooltip('Set the gas properties, temperature, and chamber pressures used in the simulation.', 'substrate-tooltip', 'Substrate') }}
@@ -163,6 +151,7 @@ can be found on
                     </div>
                 {% endcall %}
                 {% call tab_content('instrument') %}
+                    {{ uneditable_errors('instrument') }}
                     <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
                         Instrument
                         {{ tooltip('On this screen you can modify properties of the instrument such as its geometry as well as quadrupole settings.', 'instrument-tooltip', 'Instrument') }}
@@ -182,7 +171,35 @@ can be found on
                         {% endwith %}
                     </div>
                 {% endcall %}
+                {% call tab_content('voltagecontrols') %}
+                    {{ uneditable_errors('voltagecontrols') }}
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Voltage Controls
+                        {{ tooltip(
+                            'The clusters are accelerated through the atmospheric pressured interface by fields created by voltages applied at the indicated points on the instrument; Adjust their value in Volts on this screen.',
+                            'voltages-tooltip',
+                            'Voltage Controls'
+                        ) }}
+                    </h2>
+                    <div class="w-fit max-w-full mx-auto py-4">
+                        {{ lightbox('img/voltages.png', 'w-full h-auto mb-4 border border-gray-300 bg-white', 'block w-full [contain:inline-size]') }}
+                        <div class="grid grid-cols-5 gap-2 px-8 sm:gap-4 sm:px-20 [&_input[type=number]]:w-20 [&_input[type=number]]:max-w-full">
+                            {% for field in form.voltage %}
+                                <div class="flex flex-col items-center gap-2">
+                                    <div class="mb-2 flex items-center gap-1">
+                                        {{ field.label }}
+                                        {% if field.description %}
+                                            {{ tooltip(field.description, field.id ~ '-tooltip', 'Voltage V' ~ loop.index0, small=True) }}
+                                        {% endif %}
+                                    </div>
+                                    {{ field(range__class="vertical", number__class="text-center") }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endcall %}
                 {% call tab_content('simulation') %}
+                    {{ uneditable_errors('simulation') }}
                     <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
                         Simulation
                         {{ tooltip('Choose the number of realizations and numerical settings for the simulation.', 'simulation-tooltip', 'Simulation') }}
