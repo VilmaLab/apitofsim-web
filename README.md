@@ -84,12 +84,16 @@ test database, which is downloaded automatically on first run.
 The suite starts its own web server and its own Ray cluster, so `run_servers.sh` must
 not be running, and `RAY_ADDRESS` must not be set in the environment.
 
-## Developing apitofsim-web and apitofsim using micromamba
+## Developing apitofsim-web and apitofsim
 
-TODO: old micromamba instructions, update to uv/pixi
+Checkout apitofsim and apitofsim-resultviewer as sibling direcotries of apitofsim-web, and run the following command to install them in development mode:
 
 ```bash
-micromamba activate ./cenv
-mamba install meson-python
-pip install -Csetup-args="-Dbuildtype=debugoptimized" -Ceditable-verbose=true --no-build-isolation -e /path/to/apitofsim
+./install_dev.sh
+```
+
+Then you need to set `UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local` before any commmands you run, e.g.:
+
+```
+UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local ./install_dev.sh
 ```
