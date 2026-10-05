@@ -1,15 +1,61 @@
 from pathlib import Path
 
+import pytest
 from apitofsim.api import ureg
 from lxml import html
 from markupsafe import Markup
+from pint import DimensionalityError
 from playwright.sync_api import expect
+from starlette.datastructures import FormData
 
 from vms.app import templates
-from vms.forms import BuiltInInstrumentForm, CustomInstrumentForm
+from vms.forms import BuiltInInstrumentForm, CustomInstrumentForm, GasForm
 
 STATIC_JS = Path(__file__).resolve().parents[1] / "src/vms/static/index.js"
 STATIC_CSS = STATIC_JS.with_suffix(".css")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "4.8506e-26 kg",
+        "4.8506e-23 g",
+        "29.210995970456 g/mol",
+        "29.210995970456 gram / mole",
+    ],
+)
+def test_gas_mass_submission_is_particle_mass(value):
+    field = GasForm(FormData({"gas_molecule_mass": value})).gas_molecule_mass
+    assert not field.process_errors
+    assert field.data.units == ureg.kg
+    assert field.data.magnitude == pytest.approx(4.8506e-26, rel=1e-12, abs=0)
+    # The particle-mass interpretation is local to this field.
+    with pytest.raises(DimensionalityError):
+        ureg.Quantity(1, "g/mol").to("kg")
+
+
+def test_gas_mass_switches_between_particle_and_molar_mass(page):
+    field = GasForm().gas_molecule_mass
+    page.set_content(f"<form>{field()}</form>")
+    page.add_script_tag(path=str(STATIC_JS))
+    selector = page.get_by_role("combobox", name="Unit")
+    value = page.locator("input[type=text]")
+    for unit, magnitude in [
+        ("gram / mole", "29.211"),
+        ("gram", "4.8506e-23"),
+        ("kilogram", "4.8506e-26"),
+    ]:
+        selector.select_option(unit)
+        expect(value).to_have_value(magnitude)
+    selector.select_option("gram / mole")
+    value.fill("28.014")
+    hidden = page.locator("input[type=hidden]")
+    expect(hidden).to_have_value("28.014 gram / mole")
+    submitted = hidden.input_value()
+    field = GasForm(FormData({"gas_molecule_mass": submitted})).gas_molecule_mass
+    assert field.data.to("kg").magnitude == pytest.approx(
+        28.014 / 6.02214076e26, rel=1e-12, abs=0
+    )
 
 
 def render_display(value, units, **attributes):

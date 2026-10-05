@@ -39,9 +39,10 @@ def quantity_input(
     container_params,
     wrapper_params="",
     unit_switcher="select",
+    contexts=(),
 ):
     jinja_env = get_jinja_env()
-    unit_system = _make_unitsystem(value, units)
+    unit_system = _make_unitsystem(value, units, contexts)
     magnitude = value.magnitude
     unit = value.units
 

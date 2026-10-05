@@ -2,6 +2,7 @@ import functools
 
 from apitofsim.api import ureg
 from markupsafe import Markup
+from pint import Context
 from starlette_wtf import StarletteForm
 from wtforms import (
     BooleanField,
@@ -21,6 +22,14 @@ from vms.pintweb.wtforms import QuantityField
 from vms.utils import PairedRangeInputWidget
 
 Q_ = ureg.Quantity
+
+particle_mass_context = Context()
+particle_mass_context.add_transformation(
+    "[mass]", "[mass] / [substance]", lambda ureg, value: value * ureg.avogadro_constant
+)
+particle_mass_context.add_transformation(
+    "[mass] / [substance]", "[mass]", lambda ureg, value: value / ureg.avogadro_constant
+)
 
 
 # Cheeky monkeypatch to allow usage of htmx/alpine
@@ -199,12 +208,15 @@ class GasForm(Form):
         description="Effective radius of a gas molecule used by the model.",
         validators=[InputRequired()],
         default=Q_(2.46e-10, "meters"),
+        units=["meters", "pm", "angstroms"],
     )
     gas_molecule_mass = QuantityField(
         "Mass",
-        description="Mass of one gas molecule.",
+        description="Particle specified as mass of single molecule or molar mass.",
         default=Q_(4.8506e-26, "kg"),
         validators=[InputRequired()],
+        units=["kg", "g", "g/mol"],
+        contexts=(particle_mass_context,),
     )
     adiabatic_index = FloatField(
         description="Ratio of the gas heat capacities at constant pressure and volume.",
@@ -223,12 +235,14 @@ class GasForm(Form):
         Markup("P<sub>1</sub>"),
         description="Gas pressure in the first chamber.",
         default=Q_(300.0, "Pa"),
+        units=["Pa", "mbar"],
         validators=[InputRequired()],
     )
     pressure_second_chamber = QuantityField(
         Markup("P<sub>2</sub>"),
         description="Gas pressure in the second chamber.",
         default=Q_(3.53, "Pa"),
+        units=["Pa", "mbar"],
         validators=[InputRequired()],
     )
 
