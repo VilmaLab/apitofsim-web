@@ -95,5 +95,5 @@ Checkout apitofsim and apitofsim-resultviewer as sibling direcotries of apitofsi
 Then you need to set `UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local` before any commmands you run, e.g.:
 
 ```
-UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local ./install_dev.sh
+UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local ./run_servers.sh
 ```
