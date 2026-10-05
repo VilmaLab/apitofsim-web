@@ -1,3 +1,4 @@
+from markupsafe import Markup
 from pint import get_application_registry
 from wtforms.fields import Field
 from wtforms.widgets.core import html_params
@@ -24,13 +25,9 @@ class QuantityInput:
         Q_ = ureg.Quantity
         kwargs.setdefault("id", field.id)
         value = kwargs.get("value", field._value())
-        # flags = getattr(field, "flags", {})
-        # for k in dir(flags):
-        # if k in self.validation_attrs and k not in kwargs:
-        # kwargs[k] = getattr(flags, k)
         kwargs.setdefault("class", "")
         kwargs["class"] += " inline-block relative text-right w-50 pr-10"
-        container_params = self.html_params(**kwargs)
+        container_params = Markup(self.html_params(**kwargs))
         if value:
             magnitude, unit = value.rsplit(" ", 1)
             magnitude = float(magnitude)
