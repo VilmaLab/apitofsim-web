@@ -11,7 +11,14 @@
                     {% endif %}
                 </td>
                 {% if field.widget.input_type == "hidden" %}
-                    <td class="p-2">{{ field.default }}{{ field }}</td>
+                    <td class="p-1">
+                        {% if field.units is defined %}
+                            {{ field.data|quantity_display(field.units, class_="border border-gray-300 w-50 p-1") }}
+                            {{ field }}
+                        {% else %}
+                            <div class="border border-gray-300 w-50 p-1">{{ field.data }}{{ field }}</div>
+                        {% endif %}
+                    </td>
                 {% else %}
                     <td class="p-1">{{ field(class_="border border-black p-1 text-right w-50") }}</td>
                 {% endif %}

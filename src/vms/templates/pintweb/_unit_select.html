@@ -3,11 +3,12 @@
         'system': {{ unit_system|escape }},
         'unit': '{{ unit }}'
     })"
-    class="absolute right-1 top-0 h-[34px]"
+    class="shrink-0 field-sizing-content p-0"
+    aria-label="Unit"
+    x-model="viewUnit"
     @change="setUnit($event.target.value)"
 >
     <template x-for="unit in system" :key="unit.name">
         <option :value="unit.name" x-text="unit.label"></option>
     </template>
 </select>
-

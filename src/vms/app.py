@@ -37,6 +37,7 @@ from starlette_wtf import CSRFProtectMiddleware, csrf_protect
 from .cluster_info import enrich_cluster
 from .forms import INSTRUMENT_FORMS, SettingsForm, instrument_form_class
 from .markdown_ext import MarkdownExtension
+from .pintweb.alpine import quantity_display
 from .result_plots import make_bokeh_app
 
 database_path = environ["DATABASE"]
@@ -434,6 +435,7 @@ def join_abbrv_filter(s, sep="<br>"):
 
 
 templates.env.filters["join_abbrv"] = join_abbrv_filter
+templates.env.filters["quantity_display"] = quantity_display
 
 
 def render_template(request, path, **context):

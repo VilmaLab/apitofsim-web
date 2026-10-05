@@ -93,30 +93,35 @@ def mk_instrument_form(hidden):
             Markup("L<sub>0</sub>"),
             description="Length of the first chamber (up until the skimmer)",
             default=Q_(1.0e-3, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
         length_of_skimmer = maybe_quantity_field(
             Markup("L<sub>sk</sub>"),
             description="Axial length of the skimmer",
             default=Q_(5.0e-4, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
         length_between_skimmer_and_front_quadrupole = maybe_quantity_field(
             Markup("L<sub>1</sub>"),
             description="Distance from the skimmer to the front of the quadrupole in the second chamber",
             default=Q_(2.44e-3, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
         length_between_front_quadrupole_and_back_quadrupole = maybe_quantity_field(
             Markup("L<sub>2</sub>"),
             description="Length of the quadrupole in the second chamber",
             default=Q_(0.101, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
         length_between_back_quadrupole_and_2nd_skimmer = maybe_quantity_field(
             Markup("L<sub>3</sub>"),
             description="Distance from the back of the quadrupole in the second chamber up to the end of the chamber (up to the second skimmer)",
             default=Q_(4.48e-3, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
 
@@ -125,6 +130,7 @@ def mk_instrument_form(hidden):
             "Radius",
             description="Radius of the skimmer opening at its narrowest point.",
             default=Q_(5.0e-4, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
         angle_of_skimmer = maybe_float_field(
@@ -139,24 +145,28 @@ def mk_instrument_form(hidden):
             "DC",
             description="Direct-current voltage applied to the quadrupole.",
             default=Q_(0.0, "V"),
+            units=["V", "kV"],
             validators=[InputRequired()],
         )
         ac_quadrupole = maybe_quantity_field(
             "AC",
             description="Alternating-current voltage applied to the quadrupole.",
             default=Q_(200.0, "V"),
+            units=["V", "kV"],
             validators=[InputRequired()],
         )
         radiofrequency_quadrupole = maybe_quantity_field(
             "RF",
             description="Radio frequency of the quadrupole's alternating voltage.",
             default=Q_(1.3e6, "Hz"),
+            units=["Hz", "kHz", "MHz"],
             validators=[InputRequired()],
         )
         half_distance_between_quadrupole_rods = maybe_quantity_field(
             "Radius",
             description="Half of the spacing between opposing quadrupole rods.",
             default=Q_(6.0e-3, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
 

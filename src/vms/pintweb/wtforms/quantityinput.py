@@ -25,8 +25,13 @@ class QuantityInput:
         Q_ = ureg.Quantity
         kwargs.setdefault("id", field.id)
         value = kwargs.get("value", field._value())
-        kwargs.setdefault("class", "")
-        kwargs["class"] += " inline-block relative text-right w-50 pr-10"
+        classes = kwargs.pop("class", kwargs.pop("class_", ""))
+        wrapper_params = Markup(
+            self.html_params(
+                class_=f"{classes} inline-flex items-center gap-[0.2em] w-50 max-w-full"
+            )
+        )
+        kwargs["class"] = "min-w-0 flex-1 w-0 bg-transparent p-0 text-right"
         container_params = Markup(self.html_params(**kwargs))
         if value:
             magnitude, unit = value.rsplit(" ", 1)
@@ -35,7 +40,11 @@ class QuantityInput:
         else:
             quantity = Q_(0, self.units[0])
         return quantity_input(
-            quantity, self.units, name=field.name, container_params=container_params
+            quantity,
+            self.units,
+            name=field.name,
+            container_params=container_params,
+            wrapper_params=wrapper_params,
         )
 
 

@@ -4,7 +4,7 @@
         'magnitude': {{ magnitude }},
         'unit': '{{ unit }}'
     })"
-    class="relative w-50"
+    {{ wrapper_params }}
     @unit-change="unitChange($event.detail)"
 >
     <input
@@ -12,7 +12,7 @@
         @input="input($event)"
         type="text"
         inputmode="numeric"
-    `   {{ container_params }}>
+        {{ container_params }}>
     {% if unit_select %}
         {% include "pintweb/_unit_select.html" %}
     {% else %}

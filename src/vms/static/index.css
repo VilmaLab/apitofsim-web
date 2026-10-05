@@ -241,9 +241,6 @@
   .top-full {
     top: 100%;
   }
-  .right-1 {
-    right: calc(var(--spacing) * 1);
-  }
   .left-1\/2 {
     left: calc(1 / 2 * 100%);
   }
@@ -328,6 +325,9 @@
   .table {
     display: table;
   }
+  .field-sizing-content {
+    field-sizing: content;
+  }
   .size-5 {
     width: calc(var(--spacing) * 5);
     height: calc(var(--spacing) * 5);
@@ -345,23 +345,20 @@
   .h-7 {
     height: calc(var(--spacing) * 7);
   }
-  .h-\[34px\] {
-    height: 34px;
-  }
   .h-\[min\(50dvh\,24rem\)\] {
     height: min(50dvh, 24rem);
   }
   .h-auto {
     height: auto;
   }
-  .max-h-\[320px\] {
-    max-height: 320px;
-  }
   .min-h-0 {
     min-height: calc(var(--spacing) * 0);
   }
   .min-h-screen {
     min-height: 100vh;
+  }
+  .w-0 {
+    width: calc(var(--spacing) * 0);
   }
   .w-4 {
     width: calc(var(--spacing) * 4);
@@ -380,9 +377,6 @@
   }
   .w-56 {
     width: calc(var(--spacing) * 56);
-  }
-  .w-96 {
-    width: calc(var(--spacing) * 96);
   }
   .w-fit {
     width: fit-content;
@@ -411,23 +405,11 @@
   .min-w-0 {
     min-width: calc(var(--spacing) * 0);
   }
-  .min-w-56 {
-    min-width: calc(var(--spacing) * 56);
-  }
   .flex-1 {
     flex: 1;
   }
-  .flex-none {
-    flex: none;
-  }
   .shrink-0 {
     flex-shrink: 0;
-  }
-  .grow {
-    flex-grow: 1;
-  }
-  .grow-0 {
-    flex-grow: 0;
   }
   .table-fixed {
     table-layout: fixed;
@@ -475,11 +457,8 @@
   .justify-center {
     justify-content: center;
   }
-  .justify-center-safe {
-    justify-content: safe center;
-  }
-  .justify-items-center-safe {
-    justify-items: safe center;
+  .justify-end {
+    justify-content: flex-end;
   }
   .gap-1 {
     gap: calc(var(--spacing) * 1);
@@ -496,8 +475,8 @@
   .gap-6 {
     gap: calc(var(--spacing) * 6);
   }
-  .gap-8 {
-    gap: calc(var(--spacing) * 8);
+  .gap-\[0\.2em\] {
+    gap: 0.2em;
   }
   .space-y-1 {
     :where(& > :not(:last-child)) {
@@ -591,12 +570,18 @@
   .bg-red-500 {
     background-color: var(--color-red-500);
   }
+  .bg-transparent {
+    background-color: transparent;
+  }
   .bg-white {
     background-color: var(--color-white);
   }
   .box-decoration-clone {
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
+  }
+  .p-0 {
+    padding: calc(var(--spacing) * 0);
   }
   .p-1 {
     padding: calc(var(--spacing) * 1);
@@ -637,17 +622,11 @@
   .py-4 {
     padding-block: calc(var(--spacing) * 4);
   }
-  .py-8 {
-    padding-block: calc(var(--spacing) * 8);
-  }
   .pt-4 {
     padding-top: calc(var(--spacing) * 4);
   }
   .pr-4 {
     padding-right: calc(var(--spacing) * 4);
-  }
-  .pr-10 {
-    padding-right: calc(var(--spacing) * 10);
   }
   .pb-4 {
     padding-bottom: calc(var(--spacing) * 4);
