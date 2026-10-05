@@ -141,17 +141,17 @@ can be found on
                         Substrate
                         {{ tooltip('Set the gas properties, temperature, and chamber pressures used in the simulation.', 'substrate-tooltip', 'Substrate') }}
                     </h2>
-                    <div class="flex flex-row gap-6">
-                        <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                    <div class="flex flex-col md:flex-row gap-6 md:gap-4">
+                        <fieldset class="min-w-0 rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
                             <legend>Gas</legend>
                             <div class="flex flex-col items-center gap-4">
-                                {{ lightbox('img/substrate.png', 'mx-auto p-4 max-w-md h-auto border border-gray-300 bg-white', 'block') }}
+                                {{ lightbox('img/substrate.png', 'w-full mx-auto p-4 max-w-md h-auto border border-gray-300 bg-white', 'block max-w-full') }}
                                 {% with form=form.gas, include_fields=['gas_molecule_radius', 'gas_molecule_mass', 'adiabatic_index'] %}
                                     {% include "ui/_table_form.html" %}
                                 {% endwith %}
                             </div>
                         </fieldset>
-                        <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                        <fieldset class="shrink-0 rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
                             <legend>Environment</legend>
                             <div class="flex flex-col items-center gap-4">
                                 <svg-focus class="shrink-0" diagram="#diagram" region="#region-pressure_temperature" labels="#labels-pressure_temperature" title="Gas pressure and temperature"></svg-focus>
