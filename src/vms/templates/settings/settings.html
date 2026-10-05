@@ -28,10 +28,6 @@ document.addEventListener("click", () => {
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-info-circle"></use></svg>
                     <span class="tab-label">About</span>
                 {% endcall %}
-                {% call tab('voltagecontrols', 'Voltages') %}
-                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-bolt"></use></svg>
-                    <span class="tab-label">Voltages</span>
-                {% endcall %}
                 {% call tab('fragmentationpathways', 'Substance') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-share-nodes"></use></svg>
                     <span class="tab-label">Substance</span>
@@ -43,6 +39,10 @@ document.addEventListener("click", () => {
                 {% call tab('instrument', 'Instrument') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-vials"></use></svg>
                     <span class="tab-label">Instrument</span>
+                {% endcall %}
+                {% call tab('voltagecontrols', 'Voltages') %}
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-bolt"></use></svg>
+                    <span class="tab-label">Voltages</span>
                 {% endcall %}
                 {% call tab('simulation', 'Simulation') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-arrows-rotate"></use></svg>
