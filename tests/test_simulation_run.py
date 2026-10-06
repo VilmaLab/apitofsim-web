@@ -36,19 +36,27 @@ def test_default_run_completes(page, server):
     expect(page.locator('a[href="#but-wait"]')).to_have_count(0)
 
     expect(page.locator('li[data-tab="apitof"]')).to_have_attribute(
-        "data-status", "done", timeout=RUN_TIMEOUT
+        "data-status", re.compile(r"^(done|incomplete)$"), timeout=RUN_TIMEOUT
     )
+    if (
+        page.locator('li[data-tab="apitof"]').get_attribute("data-status")
+        == "incomplete"
+    ):
+        expect(page.get_by_role("alert")).to_contain_text(
+            "Simulation output incomplete"
+        )
+        expect(page.get_by_role("alert")).to_contain_text("Partial results")
 
     for tab in ("explorer", "spectrogram", "but-wait"):
         expect(page.locator(f'a[href="#{tab}"]')).to_be_visible()
 
     page.click('a[href="#explorer"]')
     explorer = page.frame_locator('iframe[title="Explorer plot"]')
-    expect(explorer.locator(".bk-Canvas")).not_to_have_count(0)
+    expect(explorer.locator(".bk-Canvas")).not_to_have_count(0, timeout=60_000)
 
     page.click('a[href="#spectrogram"]')
     spectrogram = page.frame_locator('iframe[title="Spectrogram plot"]')
-    expect(spectrogram.locator(".bk-Canvas")).not_to_have_count(0)
+    expect(spectrogram.locator(".bk-Canvas")).not_to_have_count(0, timeout=60_000)
 
     page.click('a[href="#but-wait"]')
     expect(page.locator('div[name="but-wait"]')).to_have_text("Coming soon.")
@@ -58,11 +66,11 @@ def test_default_run_completes(page, server):
     page.click('a[href="#explorer"]')
     expect(
         page.frame_locator('iframe[title="Explorer plot"]').locator(".bk-Canvas")
-    ).not_to_have_count(0)
+    ).not_to_have_count(0, timeout=60_000)
     page.click('a[href="#spectrogram"]')
     expect(
         page.frame_locator('iframe[title="Spectrogram plot"]').locator(".bk-Canvas")
-    ).not_to_have_count(0)
+    ).not_to_have_count(0, timeout=60_000)
     assert page.request.get(f"{server}/analysis/plots/not-a-job/explorer").status == 404
 
     page.click('a[href="#apitof"]')

@@ -41,6 +41,7 @@ from .forms import (
     instrument_form_class,
     settings_errors,
 )
+from .job_failures import describe_failure, failure_path, save_failure, validate_output
 from .markdown_ext import MarkdownExtension
 from .pintweb.alpine import quantity_display
 from .result_plots import make_bokeh_app
@@ -203,8 +204,39 @@ def setup_result_db(database_path, result_db_path):
     return RealizationDatabase(((duckdb_db, None)))
 
 
+def simulation_events(**arguments):
+    context = {"stage": "queue"}
+    result_db_path = arguments["result_db_path"]
+    failure = None
+    try:
+        yield from _run_simulation(context=context, **arguments)
+    except Exception as exc:
+        failure = describe_failure(exc, context, result_db_path)
+        db = context.get("db")
+        if db is not None and "run_id" in context:
+            try:
+                db.record_failure(
+                    context["run_id"],
+                    failure["exception_type"],
+                    json.dumps(failure),
+                    cluster_id=context.get("cluster_id"),
+                )
+            except Exception as persistence_exc:
+                failure["database_error"] = str(persistence_exc)
+        save_failure(result_db_path, failure)
+    finally:
+        if "db" in context:
+            context["db"].close()
+    if failure is not None:
+        yield b"failure", json.dumps(failure)
+
+
 @ray.remote
-def run_simulation(
+def run_simulation(**arguments):
+    yield from simulation_events(**arguments)
+
+
+def _run_simulation(
     voltage,
     pathways,
     gas,
@@ -213,6 +245,7 @@ def run_simulation(
     config,
     database_path,
     result_db_path,
+    context,
 ):
     from time import sleep
 
@@ -231,8 +264,12 @@ def run_simulation(
     from jinja2 import Environment
     from minify_html_onepass import minify
 
+    context["counts"] = {"requested": int(config["realizations"])}
     db = setup_result_db(database_path, result_db_path)
+    context["db"] = db
     config_id = db.insert_config("webrun", {**config, "quadrupole": quadrupole})
+    current_run_id = db.insert_run(config_id)
+    context["run_id"] = current_run_id
     jinja_env = Environment(loader=jinja_loader)
     # Same templates as templates.env, so it needs the same extensions
     jinja_env.add_extension(MarkdownExtension)
@@ -292,6 +329,7 @@ def run_simulation(
     mass_spec = None
     while 1:
         if processing == "queue":
+            yield b"stage", processing
             yield update_pane("queue")
             sleep(1)
             statuses["queue"] = "done"
@@ -301,6 +339,8 @@ def run_simulation(
             processing = "skimmer"
             yield update_pane("tabs")
         elif processing == "skimmer":
+            context["stage"] = processing
+            yield b"stage", processing
             skimmer += "Skimming...<br>"
             yield update_pane("skimmer")
             skimmer_np, k_rates, cluster_dos = preparer.run_preliminaries(
@@ -324,6 +364,8 @@ def run_simulation(
                 quadrupole=quadrupole,
             )
         elif processing == "apitof":
+            context["stage"] = processing
+            yield b"stage", processing
             yield update_pane("apitof")
             yield update_pane("tabs")
             group = build_input_pathways(
@@ -336,6 +378,7 @@ def run_simulation(
                 cluster_dos,
             )
             assert group is not None
+            context["cluster_id"] = group["cluster_id"]
 
             from apitofsim.api import MassSpecSubstanceSingleInput
 
@@ -350,7 +393,6 @@ def run_simulation(
 
             assert mass_spec is not None
             event_recorder = EventRecorder(db, group["pathway_ids"])
-            current_run_id = db.insert_run(config_id)
             experiment_result_id = None
             with mass_spec_iter(
                 mass_spec,
@@ -361,6 +403,12 @@ def run_simulation(
                 logconf=(0, True),
             ) as it:
                 for result in it:
+                    if isinstance(
+                        result, (MassSpecIntermediateCounter, MassSpecFinalResult)
+                    ):
+                        context["counts"]["completed"] = int(
+                            result.counters.n_realizations
+                        )
                     if isinstance(result, MassSpecIntermediateCounter):
                         counters = result.counters
                         survived = counters.n_fragmented_total.sum()
@@ -390,9 +438,15 @@ def run_simulation(
                         yield update_pane("apitof")
             if experiment_result_id is None:
                 raise RuntimeError("Simulation ended without a final result")
+            context["result"] = {
+                "experiment": current_run_id,
+                "cluster": group["cluster_id"],
+            }
+            validate_output(db, counters, realizations, context)
             break
     db.db.execute("CHECKPOINT results_db")
     db.close()
+    context.pop("db")
     yield (
         b"result",
         json.dumps({"experiment": current_run_id, "cluster": group["cluster_id"]}),
@@ -654,20 +708,64 @@ def process_jobid(request):
     if jobid is None:
         raise HTTPException(400, detail="Missing jobid parameter")
     if jobid not in status:  # type: ignore
-        raise HTTPException(404, detail="Job ID not found")
+        # Only accept the UUID hex used for result filenames.
+        if len(jobid) != 32 or any(c not in "0123456789abcdef" for c in jobid):
+            raise HTTPException(404, detail="Job ID not found")
+        result_db_path = Path(results_path).with_name(f"{jobid}.duckdb")
+        try:
+            failure = json.loads(failure_path(result_db_path).read_text())
+        except FileNotFoundError, ValueError:
+            raise HTTPException(404, detail="Job ID not found") from None
+        info = {"result_db_path": str(result_db_path), "last_update": {}}
+        apply_failure(info, failure)
+        status[jobid] = info
     return jobid
+
+
+def failure_statuses(failure):
+    stages = ["queue", "skimmer", "apitof"]
+    stage = failure["stage"]
+    index = stages.index(stage) if stage in stages else 2
+    return {
+        name: ("done" if i < index else failure["status"] if i == index else "pending")
+        for i, name in enumerate(stages)
+    }
+
+
+def apply_failure(info, failure):
+    info["status"] = failure["status"]
+    info["failure"] = failure
+    if "result" in failure:
+        info["result"] = failure["result"]
+    else:
+        info.pop("result", None)
+    info["last_update"][b"failure"] = templates.env.get_template(
+        "analysis/failure.html"
+    ).render(failure=failure)
+    info["last_update"][b"tabs"] = templates.env.get_template(
+        "analysis/tabs.html"
+    ).render(
+        statuses=failure_statuses(failure),
+        completed="result" in info,
+    )
 
 
 async def analysis(request):
     jobid = process_jobid(request)
-    completed = "result" in status[jobid]
+    info = status[jobid]
+    completed = "result" in info
+    failure = info.get("failure")
     return render_template(
         request,
         "analysis/analysis.html",
         jobid=jobid,
         completed=completed,
+        failure=failure,
+        job_status=info["status"],
         statuses=(
-            {"queue": "done", "skimmer": "done", "apitof": "done"}
+            failure_statuses(failure)
+            if failure
+            else {"queue": "done", "skimmer": "done", "apitof": "done"}
             if completed
             else {"queue": "processing", "skimmer": "pending", "apitof": "pending"}
         ),
@@ -751,17 +849,38 @@ async def update_analysis(request):
                     # Really awaiting here(!)
                     event, data = await (await anext(info["aiter"]))
                 except StopAsyncIteration:
+                    if "result" not in info:
+                        exc = RuntimeError(
+                            "Simulation stream ended without a final result"
+                        )
+                        failure = describe_failure(exc, info, info["result_db_path"])
+                        save_failure(info["result_db_path"], failure)
+                        apply_failure(info, failure)
+                        continue
                     info["status"] = "done"
                     for bit in sse_safe("", event=b"done"):
                         yield bit
                     return
+                except Exception as exc:
+                    # Worker crashes and Ray transport errors never reach the
+                    # worker's own exception handler.
+                    failure = describe_failure(exc, info, info["result_db_path"])
+                    save_failure(info["result_db_path"], failure)
+                    apply_failure(info, failure)
+                    continue
+                if event == b"stage":
+                    info["stage"] = data
+                    continue
+                if event == b"failure":
+                    apply_failure(info, json.loads(data))
+                    continue
                 if event == b"result":
                     info["result"] = json.loads(data)
                     continue
                 info["last_update"][event] = data
                 for bit in sse_safe(data, event):
                     yield bit
-            elif info["status"] == "done":
+            elif info["status"] in ("done", "failed", "incomplete"):
                 for event, data in info["last_update"].items():
                     for bit in sse_safe(data, event):
                         yield bit

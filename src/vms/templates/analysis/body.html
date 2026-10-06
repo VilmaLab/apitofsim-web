@@ -3,9 +3,10 @@
 
 <div
     class="tab-page"
-    x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }} }"
+    x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}' }"
     x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
 >
+    <div sse-swap="failure">{% include "analysis/failure.html" %}</div>
     <ul sse-swap="tabs" class="top-tabs" role="tablist" data-responsive-tabs>
         {% include "analysis/tabs.html" %}
     </ul>

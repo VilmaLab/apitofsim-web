@@ -1,0 +1,21 @@
+{% if failure %}
+<div class="p-4 mb-4 text-red-800 rounded-lg bg-red-50" role="alert" x-init="job_status = '{{ failure.status }}'">
+    <h1 class="text-2xl font-bold">{{ 'Simulation output incomplete' if failure.status == 'incomplete' else 'Simulation failed' }}</h1>
+    <p>Stage: {{ failure.stage }}. {{ failure.message }}</p>
+    {% if failure.counts is defined and failure.counts.requested is defined %}
+        <p>Realizations completed: {{ failure.counts.completed|default('unknown') }}/{{ failure.counts.requested }}.</p>
+    {% endif %}
+    {% if failure.status == 'incomplete' and failure.result is defined %}
+        <p>Partial results are available below. Trajectories and plots may be incomplete.</p>
+    {% endif %}
+    {% if failure.persistence_error is defined %}
+        <p>Could not save failure diagnostics: {{ failure.persistence_error }}</p>
+    {% endif %}
+    <details class="mt-2">
+        <summary class="cursor-pointer">Failure details</summary>
+        <p>Job: {{ failure.job_id }} · {{ failure.time }} · {{ failure.exception_type }}</p>
+        {% if failure.database_error is defined %}<p>Could not record the failure in the database: {{ failure.database_error }}</p>{% endif %}
+        <pre class="overflow-auto whitespace-pre-wrap">{{ failure.traceback }}</pre>
+    </details>
+</div>
+{% endif %}

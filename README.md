@@ -84,16 +84,52 @@ test database, which is downloaded automatically on first run.
 The suite starts its own web server and its own Ray cluster, so `run_servers.sh` must
 not be running, and `RAY_ADDRESS` must not be set in the environment.
 
+## Run failures
+
+Failed runs show an alert with the stage, error message, and expandable traceback.
+Their diagnostics are saved as `<jobid>.failure.json` beside the run's DuckDB
+file, including counts and run/cluster IDs when available. Worker failures also
+write to `experiment_failure` when the database is available. Reopening the
+analysis URL restores the failure even after restarting the web server.
+
+A run whose final counters disagree with its recorded events is marked
+**incomplete**. Its available results remain accessible with a warning about
+missing trajectories.
+
 ## Developing apitofsim-web and apitofsim
 
-Checkout apitofsim and apitofsim-resultviewer as sibling direcotries of apitofsim-web, and run the following command to install them in development mode:
+Check out apitofsim and apitofsim-resultviewer as sibling directories of
+apitofsim-web. From the apitofsim-web directory, run:
 
 ```bash
 ./install_dev.sh
 ```
 
-Then you need to set `UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local` before any commmands you run, e.g.:
+This creates `.venv-local` from the release lockfile, installs Meson build tools,
+and installs both sibling checkouts as editable packages explicitly into
+`.venv-local/bin/python`. Building apitofsim also requires a C++ toolchain and
+its native dependencies, including TBB >=2023.0 and Eigen >=3.4.
 
+Set `UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local` when running development
+commands. Disabling sync preserves the editable installs instead of restoring
+the pinned release packages. Restart the servers when switching environments;
+attaching to an existing tmux session keeps its original processes.
+
+```bash
+UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local ./run_servers.sh restart
 ```
-UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local ./run_servers.sh
+
+To check the selected interpreter and simulator installation without importing
+or rebuilding apitofsim:
+
+```bash
+UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local uv run python -c \
+  'import sys, importlib.metadata as m; print(sys.executable); print(m.distribution("apitofsim").read_text("direct_url.json"))'
+```
+
+The output should show `.venv-local/bin/python`, the sibling apitofsim checkout,
+and `"editable": true`. To switch back to the pinned releases:
+
+```bash
+./run_servers.sh restart
 ```
