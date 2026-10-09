@@ -3,6 +3,7 @@
 import duckdb
 from apitofresview.webapp import explorer_bokeh, spectrogram_bokeh
 from apitofsim.workflow.db import RealizationDatabase
+from bokeh.models import InlineStyleSheet
 from bokeh.server.asgi import BokehASGI
 
 
@@ -38,6 +39,19 @@ def make_bokeh_app(jobs, cluster_path):
 
     def explorer(doc):
         explorer_bokeh(database_for(doc), doc)
+        frame = doc.select_one({"css_classes": ["explorer-bokeh-frame"]})
+        if frame is None:
+            return
+        layout = frame.children[0]
+        sidebar = layout.children[0]
+        layout.styles = {**layout.styles, "min-height": "calc(100vh - 2rem)"}
+        sidebar.height_policy = "max"
+        # Let controls grow with the page, including after fullscreen changes.
+        sidebar.children[1].stylesheets.append(
+            InlineStyleSheet(
+                css=":host { max-height: none !important; flex: 1 0 auto !important; }"
+            )
+        )
 
     def spectrogram(doc):
         spectrogram_bokeh(database_for(doc), doc)
