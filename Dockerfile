@@ -1,4 +1,4 @@
-FROM docker.io/mambaorg/micromamba:2.5.0 AS builder
+FROM docker.io/mambaorg/micromamba:2.9.0 AS builder
 
 ## Step 1. Build application
 COPY --chown=$MAMBA_USER:$MAMBA_USER . /tmp/apitofsim-web

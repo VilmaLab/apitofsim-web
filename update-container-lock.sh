@@ -11,7 +11,7 @@ trap 'rm -f "$tmp"' EXIT
 
 docker run --rm -v "$(pwd):/tmp/apitofsim-web-ro:Z" \
    "--platform=${DOCKER_PLATFORM}" \
-  docker.io/mambaorg/micromamba:2.5.0 /bin/bash -c "\
+  docker.io/mambaorg/micromamba:2.9.0 /bin/bash -c "\
      set -e; \
      cp -r /tmp/apitofsim-web-ro /tmp/apitofsim-web; \
      micromamba create --yes --name new_env --file /tmp/apitofsim-web/env.yaml >&2 \
