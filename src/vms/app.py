@@ -2,6 +2,7 @@ import os
 import tempfile
 
 os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
+os.environ["RAY_DISABLE_FAILURE_SIGNAL_HANDLER"] = "1"
 
 import json
 import os
