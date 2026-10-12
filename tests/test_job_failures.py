@@ -2,7 +2,6 @@ import asyncio
 import importlib
 import json
 from concurrent.futures import ThreadPoolExecutor
-from types import SimpleNamespace
 from urllib.parse import urlparse
 
 import duckdb
@@ -157,42 +156,105 @@ def test_incomplete_output_keeps_partial_results(job):
     assert read_stream() == stream
 
 
+def populate_output(output_db, recorded=3):
+    connection = output_db.db
+    connection.execute("INSERT INTO realization VALUES (1, NULL), (2, NULL), (3, NULL)")
+    connection.execute(
+        "INSERT INTO event_info (id, realization_id, event_type, postime, velocity, "
+        "omega, rot_energy, vibrational_energy, particle_index) "
+        "SELECT id, realization_id, event_type::event_type, "
+        "{'x': 0, 'y': 0, 'z': 0, 't': 0}, "
+        "{'x': 0, 'y': 0, 'z': 0}, {'x': 0, 'y': 0, 'z': 0}, 0, 0, 0 "
+        "FROM (VALUES (1, 1, 'init'), (2, 2, 'init'), (3, 3, 'init'), "
+        "(4, 1, 'collision'), (5, 2, 'collision'), (6, 3, 'collision'), "
+        "(7, 1, 'escape'), (8, 2, 'escape')) e(id, realization_id, event_type)"
+    )
+    if recorded == 3:
+        connection.execute(
+            "INSERT INTO event_info SELECT 9, 3, 'fragmentation', postime, velocity, "
+            "omega, rot_energy, vibrational_energy, particle_index FROM event_info LIMIT 1"
+        )
+        connection.execute("INSERT INTO fragmentation_event VALUES (9, NULL)")
+    connection.execute(
+        "INSERT INTO collision_event VALUES (4, 0, 0, true), (5, 0, 0, true), (6, 0, 0, true)"
+    )
+    counters = Counters(0, 3, 0, 3, 2, np.array([1]))
+    return counters
+
+
 @pytest.mark.parametrize("recorded", [2, 3])
-def test_validate_output_detects_missing_events(recorded):
-    with duckdb.connect() as connection:
-        connection.execute("CREATE TABLE realization (id INTEGER)")
-        connection.execute(
-            "CREATE TYPE event_type AS ENUM ('init', 'collision', 'fragmentation', 'escape')"
-        )
-        connection.execute(
-            "CREATE TABLE event_info (id INTEGER, realization_id INTEGER, event_type event_type)"
-        )
-        for table in ("fragmentation_event", "collision_event"):
-            connection.execute(f"CREATE TABLE {table} (id INTEGER)")
-        connection.execute("INSERT INTO realization VALUES (1), (2), (3)")
-        connection.execute(
-            "INSERT INTO event_info VALUES "
-            "(1, 1, 'init'), (2, 2, 'init'), (3, 3, 'init'), "
-            "(4, 1, 'collision'), (5, 2, 'collision'), (6, 3, 'collision'), "
-            "(7, 1, 'escape'), (8, 2, 'escape')"
-        )
-        if recorded == 3:
-            connection.execute("INSERT INTO event_info VALUES (9, 3, 'fragmentation')")
-            connection.execute("INSERT INTO fragmentation_event VALUES (9)")
-        connection.execute("INSERT INTO collision_event VALUES (4), (5), (6)")
-        counters = Counters(0, 3, 0, 3, 2, np.array([1]))
-        context = {}
-        if recorded == 2:
-            with pytest.raises(
-                IncompleteOutputError, match="terminal realizations: 2/3"
-            ):
-                validate_output(SimpleNamespace(db=connection), counters, 3, context)
-        else:
-            validate_output(SimpleNamespace(db=connection), counters, 3, context)
-        assert context["counts"]["terminal_realizations"] == recorded
-        assert context["counts"]["recorded_escapes"] == 2
-        assert context["counts"]["recorded_fragmentations"] == recorded - 2
-        assert context["counts"]["recorded_collisions"] == 3
+def test_validate_output_detects_missing_events(recorded, output_db):
+    counters = populate_output(output_db, recorded)
+    context = {}
+    if recorded == 2:
+        with pytest.raises(IncompleteOutputError, match="terminal realizations: 2/3"):
+            validate_output(output_db, counters, 3, context)
+    else:
+        validate_output(output_db, counters, 3, context)
+    assert context["counts"] == {
+        "requested": 3,
+        "completed": 3,
+        "escapes": 2,
+        "fragmentations": 1,
+        "collisions": 3,
+        "recorded_realizations": 3,
+        "recorded_escapes": 2,
+        "recorded_fragmentations": recorded - 2,
+        "recorded_collisions": 3,
+        "terminal_realizations": recorded,
+    }
+
+
+@pytest.mark.parametrize(
+    ("table", "message"),
+    [
+        ("collision_event", "recorded collisions: 2/3"),
+        ("fragmentation_event", "recorded fragmentations: 0/1"),
+    ],
+)
+def test_validate_output_detects_missing_subtypes(output_db, table, message):
+    counters = populate_output(output_db)
+    output_db.db.execute(
+        f"DELETE FROM {table} WHERE id = (SELECT max(id) FROM {table})"
+    )
+    with pytest.raises(IncompleteOutputError, match=message):
+        validate_output(output_db, counters, 3, {})
+
+
+def test_validate_output_compares_requested_count(output_db):
+    counters = populate_output(output_db)
+    with pytest.raises(IncompleteOutputError, match="completed: 3/4"):
+        validate_output(output_db, counters, 4, {})
+
+
+def test_validate_output_uses_database_scope(output_db):
+    counters = Counters(0, 0, 0, 1, 1, np.array([0]))
+    config_id = output_db.insert_config("test", {})
+    runs = [output_db.insert_run(config_id), output_db.insert_run(config_id)]
+    results = [
+        output_db.record_result(run, counters, cluster_id=18, pathway_ids=[1])
+        for run in runs
+    ]
+    output_db.db.execute(
+        "INSERT INTO realization VALUES (1, ?), (2, ?), (3, NULL)", results
+    )
+    # Context is for one run/result, but the web owns the whole database. Both
+    # other-run and unlinked records must be counted rather than hidden.
+    context = {"run_id": runs[0], "result": {"experiment": runs[0], "cluster": 18}}
+    with pytest.raises(IncompleteOutputError, match="recorded realizations: 3/1"):
+        validate_output(output_db, counters, 1, context)
+    assert context["counts"]["recorded_realizations"] == 3
+    assert output_db.recorded_output_query(run_id=runs[0]).fetchone()[0] == 1
+    assert output_db.recorded_output_query(result_id=results[1]).fetchone()[0] == 1
+
+
+def test_validate_empty_output(output_db):
+    counters = Counters(0, 0, 0, 0, 0, np.array([0]))
+    context = {}
+    validate_output(output_db, counters, 0, context)
+    assert set(context["counts"].values()) == {0}
+    with pytest.raises(IncompleteOutputError, match="completed: 0/1"):
+        validate_output(output_db, counters, 1, context)
 
 
 @pytest.mark.parametrize("outcome", ["failed", "incomplete"])

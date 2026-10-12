@@ -252,57 +252,38 @@ def get_histogram_precision_choices():
     from vms.app import current_db
 
     db = current_db.get()
-    dos_histograms = db.db.execute(
-        """
-        with dos_histogram_ids as (
-            select distinct histogram_params_id from cluster_dos
-            union
-            select distinct histogram_params_id from products_dos
-        )
-        select histogram_params_id, bin_width
-        from histogram_params
-        join dos_histogram_ids
-        on dos_histogram_ids.histogram_params_id = histogram_params.id
-        order by bin_width
-        """
-    ).fetchall()
-    k_rate_histograms = db.db.execute(
-        """
-        select distinct histogram_params_id, bin_width
-        from histogram_params
-        join k_rate
-        on k_rate.histogram_params_id = histogram_params.id
-        order by bin_width
-        """
-    ).fetchall()
+    dos_histograms = db.available_dos_histograms_query().fetchall()
+    rate_histograms = db.available_rate_histograms_query().fetchall()
+    # Configurations are independent; pair all matching widths, never row positions.
+    histograms = sorted(
+        (dos_width, dos_id, rate_id)
+        for dos_id, dos_width in dos_histograms
+        for rate_id, rate_width in rate_histograms
+        if dos_width == rate_width
+    )
 
     NAMES = ["superfine (slow)", "fine", "coarse (fast)"]
     # Databases built from a reduced dataset (such as the test database) can have
     # a different number of histogram configurations, in which case the only
     # meaningful label is the bin width.
-    names = NAMES if len(dos_histograms) == len(NAMES) else [""] * len(dos_histograms)
-    choices = []
-    for name, dos_hist, k_rate_hist in zip(
-        names, dos_histograms, k_rate_histograms, strict=True
-    ):
-        if dos_hist[1] != k_rate_hist[1]:
-            raise ValueError(
-                f"Mismatch in histogram precision choices: {dos_hist} vs {k_rate_hist}"
-            )
-        dos_hid = dos_hist[0]
-        k_rate_hid = k_rate_hist[0]
-        choices.append(
-            (
-                f"{dos_hid},{k_rate_hid}",
-                f"{name} [bin width = {dos_hist[1]:.1f} K]".strip(),
-            )
+    names = (
+        NAMES
+        if len(histograms) == len(NAMES) == len({width for width, _, _ in histograms})
+        else [""] * len(histograms)
+    )
+    choices = [
+        (
+            f"{dos_id},{rate_id}",
+            f"{name} [bin width = {width:.1f} K]".strip(),
         )
+        for name, (width, dos_id, rate_id) in zip(names, histograms, strict=True)
+    ]
     return choices
 
 
 def get_default_histogram_precision():
     choices = get_histogram_precision_choices()
-    return choices[1 if len(choices) > 1 else 0][0]
+    return choices[1 if len(choices) > 1 else 0][0] if choices else None
 
 
 class SkimmerPrecisionForm(Form):
