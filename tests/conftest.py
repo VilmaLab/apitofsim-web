@@ -116,3 +116,21 @@ def server(test_db, tmp_path_factory):
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
+
+
+@pytest.fixture
+def output_db(tmp_path):
+    """Use the same attached cluster/result schemas as a web worker."""
+    import duckdb
+    from apitofsim.workflow import sql_files_nofk as sql
+
+    from vms.app import setup_result_db
+
+    clusters = tmp_path / "clusters.duckdb"
+    with duckdb.connect(str(clusters)) as connection:
+        connection.execute(sql.pathway + sql.histograms + sql.pathway_report)
+    db = setup_result_db(clusters, tmp_path / "output.duckdb")
+    try:
+        yield db
+    finally:
+        db.close()

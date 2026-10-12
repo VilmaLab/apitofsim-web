@@ -68,21 +68,18 @@ def validate_output(db, counters, requested, context):
         "fragmentations": int(counters.n_fragmented_total.sum()),
         "collisions": int(counters.ncoll_total),
     }
-    for table, name in (
-        ("realization", "realizations"),
-        ("fragmentation_event", "fragmentations"),
-        ("collision_event", "collisions"),
+    # Each web job owns its result database. Database scope also includes
+    # unlinked realizations, which must remain visible when output is incomplete.
+    recorded = db.recorded_output_query(run_id=None, parent=None, result_id=None)
+    diagnostics = dict(zip(recorded.columns, recorded.fetchone(), strict=True))
+    for name, column in (
+        ("recorded_realizations", "realization_count"),
+        ("recorded_escapes", "escape_count"),
+        ("recorded_fragmentations", "fragmentation_subtype_count"),
+        ("recorded_collisions", "collision_subtype_count"),
+        ("terminal_realizations", "terminal_realization_count"),
     ):
-        counts[f"recorded_{name}"] = db.db.execute(
-            f"SELECT count(*) FROM {table}"
-        ).fetchone()[0]
-    counts["recorded_escapes"] = db.db.execute(
-        "SELECT count(*) FROM event_info WHERE event_type = 'escape'"
-    ).fetchone()[0]
-    counts["terminal_realizations"] = db.db.execute(
-        "SELECT count(DISTINCT realization_id) FROM event_info "
-        "WHERE event_type IN ('escape', 'fragmentation')"
-    ).fetchone()[0]
+        counts[name] = diagnostics[column]
     context["counts"] = counts
     checks = (
         ("completed", "requested"),
