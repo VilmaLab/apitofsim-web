@@ -34,19 +34,19 @@ jobs:
           key: test-dbs-${{ hashFiles('datasets/datasets_test.toml') }}
 
       - name: Set up environment
-        uses: mamba-org/setup-micromamba@v2
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
         with:
-          environment-file: env.yaml
-          cache-downloads: true
-          micromamba-version: 2.6.0-0
+          enable-cache: true
+
+      - name: Install project and test dependencies
+        run: uv sync --all-groups --all-extras
 
       - name: Install Chromium
-        shell: micromamba-shell {0}
-        run: playwright install --with-deps chromium
+        run: .venv/bin/playwright install --with-deps chromium
 
       - name: Run tests
-        shell: micromamba-shell {0}
-        run: pytest -v
+        # Use the installed environment directly so Ray workers reuse it.
+        run: .venv/bin/pytest -v
 
       - name: Upload logs
         if: failure()
