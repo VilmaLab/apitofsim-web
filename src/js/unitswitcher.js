@@ -1,4 +1,4 @@
-export default ({ unit, dropdown, system }) => {
+export default ({ unit, dropdown, system } = {}) => {
     return {
         unit,
         dropdown,

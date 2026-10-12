@@ -3,6 +3,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -17,6 +18,16 @@ TEST_DB_FILES = ["database_test.duckdb", "database_test.ase.sqlite.db"]
 
 # Ray's head node takes a while to come up inside the web process
 SERVER_STARTUP_TIMEOUT = 300
+
+
+def pytest_configure(config):
+    # App imports happen during collection, before the server fixture runs.
+    results_dir = tempfile.TemporaryDirectory(prefix="apitofsim-tests-")
+    config.add_cleanup(results_dir.cleanup)
+    env = pytest.MonkeyPatch()
+    config.add_cleanup(env.undo)
+    env.setenv("DATABASE", str(DATASETS_DIR / TEST_DB_FILES[0]))
+    env.setenv("RESULTS", str(Path(results_dir.name) / "results.duckdb"))
 
 
 def download_if_missing(name):

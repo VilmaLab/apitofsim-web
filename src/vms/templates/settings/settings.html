@@ -11,136 +11,221 @@ document.addEventListener("click", () => {
     }
 });
 </script>
+{% include "settings/_diagram_source.html" %}
 {% endblock %}
 
 {% from "ui/_lightbox.html" import lightbox with context %}
 {% from "ui/_tabs.html" import tab_container, tab, tab_content %}
+{% from "ui/_tooltip.html" import tooltip %}
+
+{% macro uneditable_errors(tab) %}
+    <template x-for="error in uneditableErrors.filter(error => error.tab === '{{ tab }}')" :key="error.name">
+        <p class="mb-2 text-sm text-red-800" x-text="error.label + ': ' + error.message"></p>
+    </template>
+{% endmacro %}
 
 {% block content %}
     {# TODO: Decide whether autocomplete should be on and fix up conflicts with htmx #}
-    <form method="POST" class="mt-4" autocomplete="off">
+    <form method="POST" autocomplete="off" novalidate
+          x-data='settingsForm({{ field_errors|tojson }})'
+          @submit="submit($event)" @input="clearError($event)" @change="clearError($event)" @unit-change="clearError($event)">
+        <template x-for="error in uneditableErrors.filter(error => !error.tab)" :key="error.name">
+            <p class="mb-2 text-sm text-red-800" x-text="error.label + ': ' + error.message"></p>
+        </template>
         {{ form.csrf_token }}
-        {% call tab_container(default='voltagecontrols') %}
-            <ul
-                class="flex-col space-y space-y-4 md:me-4 mb-4 md:mb-0 mt-6"
-                role="tablist">
-                {% call tab('about') %}
-                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><!--!Font Awesome Free v7.0.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M320 576C461.4 576 576 461.4 576 320C576 178.6 461.4 64 320 64C178.6 64 64 178.6 64 320C64 461.4 178.6 576 320 576zM288 224C288 206.3 302.3 192 320 192C337.7 192 352 206.3 352 224C352 241.7 337.7 256 320 256C302.3 256 288 241.7 288 224zM280 288L328 288C341.3 288 352 298.7 352 312L352 400L360 400C373.3 400 384 410.7 384 424C384 437.3 373.3 448 360 448L280 448C266.7 448 256 437.3 256 424C256 410.7 266.7 400 280 400L304 400L304 336L280 336C266.7 336 256 325.3 256 312C256 298.7 266.7 288 280 288z"/></svg>
-                    &nbsp;About
+        {% call tab_container(default='about', inherit=True) %}
+            <ul class="top-tabs" role="tablist" data-responsive-tabs data-has-about>
+                {% call tab('about', 'About') %}
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-info-circle"></use></svg>
+                    <span class="tab-label">About</span>
                 {% endcall %}
-                {% call tab('voltagecontrols') %}
-                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><!--!Font Awesome Free v7.0.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M434.8 54.1C446.7 62.7 451.1 78.3 445.7 91.9L367.3 288L512 288C525.5 288 537.5 296.4 542.1 309.1C546.7 321.8 542.8 336 532.5 344.6L244.5 584.6C233.2 594 217.1 594.5 205.2 585.9C193.3 577.3 188.9 561.7 194.3 548.1L272.7 352L128 352C114.5 352 102.5 343.6 97.9 330.9C93.3 318.2 97.2 304 107.5 295.4L395.5 55.4C406.8 46 422.9 45.5 434.8 54.1z"/></svg>
-                    &nbsp;Voltages
+                {% call tab('fragmentationpathways', 'Substance') %}
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-share-nodes"></use></svg>
+                    <span class="tab-label">Substance</span>
                 {% endcall %}
-                {% call tab('fragmentationpathways') %}
-                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><!--!Font Awesome Free v7.0.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M482.4 221.9C517.7 213.6 544 181.9 544 144C544 99.8 508.2 64 464 64C420.6 64 385.3 98.5 384 141.5L200.2 215.1C185.7 200.8 165.9 192 144 192C99.8 192 64 227.8 64 272C64 316.2 99.8 352 144 352C156.2 352 167.8 349.3 178.1 344.4L323.7 471.8C321.3 479.4 320 487.6 320 496C320 540.2 355.8 576 400 576C444.2 576 480 540.2 480 496C480 468.3 466 443.9 444.6 429.6L482.4 221.9zM220.3 296.2C222.5 289.3 223.8 282 224 274.5L407.8 201C411.4 204.5 415.2 207.7 419.4 210.5L381.6 418.1C376.1 419.4 370.8 421.2 365.8 423.6L220.3 296.2z"/></svg>
-                    &nbsp;Fragmentation pathways
+                {% call tab('gas', 'Substrate') %}
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-circle"></use></svg>
+                    <span class="tab-label">Substrate</span>
                 {% endcall %}
-                {% call tab('gas') %}
-                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><!--!Font Awesome Free v7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M64 320C64 178.6 178.6 64 320 64C461.4 64 576 178.6 576 320C576 461.4 461.4 576 320 576C178.6 576 64 461.4 64 320z"/></svg>
-                    &nbsp;Gas
+                {% call tab('instrument', 'Instrument') %}
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-vials"></use></svg>
+                    <span class="tab-label">Instrument</span>
                 {% endcall %}
-                {% call tab('instrument') %}
-                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><!--!Font Awesome Free v7.0.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M96 64C78.3 64 64 78.3 64 96C64 113.7 78.3 128 96 128L96 480C96 533 139 576 192 576C245 576 288 533 288 480L288 128L352 128L352 480C352 533 395 576 448 576C501 576 544 533 544 480L544 128C561.7 128 576 113.7 576 96C576 78.3 561.7 64 544 64L96 64zM224 128L224 256L160 256L160 128L224 128zM480 128L480 256L416 256L416 128L480 128z"/></svg>
-                    &nbsp;Instrument
+                {% call tab('voltagecontrols', 'Voltages') %}
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-bolt"></use></svg>
+                    <span class="tab-label">Voltages</span>
                 {% endcall %}
-                {% call tab('simulation') %}
-                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><!--!Font Awesome Free v7.0.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M544.1 256L552 256C565.3 256 576 245.3 576 232L576 88C576 78.3 570.2 69.5 561.2 65.8C552.2 62.1 541.9 64.2 535 71L483.3 122.8C439 86.1 382 64 320 64C191 64 84.3 159.4 66.6 283.5C64.1 301 76.2 317.2 93.7 319.7C111.2 322.2 127.4 310 129.9 292.6C143.2 199.5 223.3 128 320 128C364.4 128 405.2 143 437.7 168.3L391 215C384.1 221.9 382.1 232.2 385.8 241.2C389.5 250.2 398.3 256 408 256L544.1 256zM573.5 356.5C576 339 563.8 322.8 546.4 320.3C529 317.8 512.7 330 510.2 347.4C496.9 440.4 416.8 511.9 320.1 511.9C275.7 511.9 234.9 496.9 202.4 471.6L249 425C255.9 418.1 257.9 407.8 254.2 398.8C250.5 389.8 241.7 384 232 384L88 384C74.7 384 64 394.7 64 408L64 552C64 561.7 69.8 570.5 78.8 574.2C87.8 577.9 98.1 575.8 105 569L156.8 517.2C201 553.9 258 576 320 576C449 576 555.7 480.6 573.4 356.5z"/></svg>
-                    &nbsp;Simulation
+                {% call tab('simulation', 'Simulation') %}
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-arrows-rotate"></use></svg>
+                    <span class="tab-label">Simulation</span>
                 {% endcall %}
-
-                <li role="button" class="mt-20">
-                    <button type="submit" class="
-                        cursor-pointer
-                        hover:scale-105
-                        bg-green-500 text-white
-                        inline-flex items-center px-4 py-3
-                        rounded-lg w-full">
-                        <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><!--!Font Awesome Free v7.0.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.--><path fill="currentColor" d="M187.2 100.9C174.8 94.1 159.8 94.4 147.6 101.6C135.4 108.8 128 121.9 128 136L128 504C128 518.1 135.5 531.2 147.6 538.4C159.7 545.6 174.8 545.9 187.2 539.1L523.2 355.1C536 348.1 544 334.6 544 320C544 305.4 536 291.9 523.2 284.9L187.2 100.9z"/></svg>
-                        &nbsp;Run
-                    </button>
-                </li>
             </ul>
-            <div id="default-tab-content" class="p-6 w-full max-w-5xl">
-                {% if form.errors %}
-                    <div class="px-4 mb-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">
-                        <span class="font-medium">The form has the following errors:</span>
-                        <ul class="px-4 list-disc">
-                            {% for field_name, field_errors in form.errors|dictsort if field_errors %}
-                                {% for error in field_errors %}
-                                    <li>{{ form[field_name].label }}: {{ error }}</li>
-                                {% endfor %}
-                            {% endfor %}
-                        </ul>
+            <div id="default-tab-content" class="mx-auto p-2 sm:p-6"
+                 x-data="{ clusterSelected: {{ 'true' if form.cluster.data not in (none, 'None', '') else 'false' }} }"
+                 :class="current_tab == 'about' ? 'max-w-5xl' : (current_tab == 'fragmentationpathways' && clusterSelected ? 'w-full' : 'w-fit')">
+                {% if form_errors %}
+                    <div x-data="{ dismissed: false }" x-show="!dismissed"
+                         class="mb-4 flex w-full max-w-[min(42rem,calc(100vw-3rem))] items-start gap-4 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800" role="alert">
+                        <div class="min-w-0 flex-1">
+                            <h2 class="font-semibold">Unable to run simulation</h2>
+                            <ul class="mt-2 list-disc space-y-1 pl-5">
+                                {% for error in form_errors %}<li>{{ error }}</li>{% endfor %}
+                            </ul>
+                        </div>
+                        <button type="button" @click="dismissed = true" aria-label="Dismiss errors"
+                                class="shrink-0 cursor-pointer rounded px-2 py-1 hover:bg-red-100 focus-visible:outline-2">&times;</button>
                     </div>
                 {% endif %}
                 {% call tab_content('about') %}
-                    <h1 class="text-4xl font-bold text-center p-8">APi-ToF MS Simulation</h1>
-                    <p class="mb-4">
-                        This site allows you to configure and run simulations of an Atmospheric Pressure Ionization Time-of-Flight Mass Spectrometer (APi-ToF MS).
-                    </p>
-                    <p class="mb-4">
-                        You can adjust voltage settings, define the compound chain, select the instrument model, and modify constants and simulation parameters.
-                    </p>
-                {% endcall %}
-                {% call tab_content('voltagecontrols') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Voltage Controls</h2>
-                    <div class="flex flex-row gap-8 py-4">
-                        <div class="basis-1/2">
-                            {{ lightbox('img/voltages.png', 'max-h-[320px] m-auto py-4') }}
-                        </div>
-                        <div class="grid grid-cols-5 gap-2 grow">
-                            {% for field in form.voltage %}
-                                <div class="flex flex-col items-center gap-2">
-                                    {{ field.label(class_="block mb-2") }}
-                                    {{ field(range__class="vertical") }}
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
+                    <h1 class="flex items-center justify-center gap-2 p-8 text-center text-4xl font-bold">
+                        APi-ToF MS Simulation
+                    </h1>
+                    {# clip the 25px left / 23px right white padding baked into the webp (1600x800) #}
+                    <img class="pb-4 [clip-path:inset(0_1.4375%_0_1.5625%)]" src="{{ url_for('static', path='/img/tofwerk.webp') }}">
+                    {% markdown %}
+This site allows you to configure and run simulations of
+an Atmospheric Pressure Ionization Time-of-Flight Mass Spectrometer (APi-ToF MS).
+
+You can adjust voltage settings,
+define the compound chain,
+select the instrument model,
+and modify constants and simulation parameters.
+
+The underlying tools are available on GitHub:
+
+* [The apitofsim package](https://github.com/VilmaLab/apitofsim) which you can use to run simulations.
+* [The apitofsim-resultviewer package](https://github.com/VilmaLab/apitofsim-resultviewer) which allows the same plots as are shown on this website after running apitofsim.
+
+A history of the simulator, which includes a bibliography with the original publications
+can be found on
+[the background section of the apitofsim documentation](https://vilmalab.github.io/apitofsim/background/).
+                    {% endmarkdown %}
                 {% endcall %}
                 {% call tab_content('fragmentationpathways') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Fragmentation pathways</h2>
-                    <div class="flex flex-row items-center gap-4 py-4 px-20">
-                        {{ form.cluster.label(class_="block mb-2") }}
-                        {{ form.cluster(class_="mt-1 rounded-md border border-black p-1", hx_get="/fragments/pathways", hx_target="#pathways-target") }}
+                    {{ uneditable_errors('fragmentationpathways') }}
+                    {% set substance_help = 'This is the substance which will enter the APi-ToF MS and is the object being measured when using the instrument. Once the substance is selected, the fragmentation pathways can be inspected and included/excluded from the simulation.' %}
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold" x-show="!clusterSelected">
+                        Substance
+                        {{ tooltip(substance_help, 'substance-tooltip', 'Substance') }}
+                    </h2>
+                    <img class="p-4 bg-white mx-auto border border-gray-300" x-show="!clusterSelected" src="{{ url_for('static', path='/img/fragmentation.png') }}">
+                    <div class="m-4 flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-4">
+                        <div class="flex shrink-0 items-center gap-1">
+                            {{ form.cluster.label }}
+                            <span x-show="clusterSelected">{{ tooltip(substance_help, 'selected-substance-tooltip', 'Substance', small=True) }}</span>
+                            {% if form.cluster.description %}
+                                {{ tooltip(form.cluster.description, form.cluster.id ~ '-tooltip', form.cluster.label.text, small=True) }}
+                            {% endif %}
+                        </div>
+                        {{ form.cluster(class_="w-full min-w-0 max-w-md rounded-md border border-black p-2", hx_get="/fragments/pathways", hx_target="#pathways-target", **{'@change': 'clusterSelected = $event.target.selectedIndex > 0'}) }}
                     </div>
-                    <div id="pathways-target">
+                    <div id="pathways-target" class="border-t border-gray-300 pt-4">
                         {% include "settings/_render_pathways.html" %}
                     </div>
                 {% endcall %}
                 {% call tab_content('gas') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Gas</h2>
-                    <div class="py-4 px-20">
-                        {% with form=form.gas %}
-                            {% include "ui/_table_form.html" %}
-                        {% endwith %}
+                    {{ uneditable_errors('gas') }}
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Substrate
+                        {{ tooltip('Set the gas properties, temperature, and chamber pressures used in the simulation.', 'substrate-tooltip', 'Substrate') }}
+                    </h2>
+                    <div class="flex flex-col md:flex-row gap-6 md:gap-4">
+                        <fieldset class="min-w-0 rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                            <legend>Gas</legend>
+                            <div class="flex flex-col items-center gap-4">
+                                {{ lightbox('img/substrate.png', 'w-full mx-auto p-4 max-w-md h-auto border border-gray-300 bg-white', 'block max-w-full') }}
+                                {% with form=form.gas, include_fields=['gas_molecule_radius', 'gas_molecule_mass', 'adiabatic_index'] %}
+                                    {% include "ui/_table_form.html" %}
+                                {% endwith %}
+                            </div>
+                        </fieldset>
+                        <fieldset class="shrink-0 rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                            <legend>Environment</legend>
+                            <div class="flex flex-col items-center gap-4">
+                                <svg-focus class="shrink-0" diagram="#diagram" region="#region-pressure_temperature" labels="#labels-pressure_temperature" title="Gas pressure and temperature"></svg-focus>
+                                {% with form=form.gas, include_fields=['temperature_', 'pressure_first_chamber', 'pressure_second_chamber'] %}
+                                    {% include "ui/_table_form.html" %}
+                                {% endwith %}
+                            </div>
+                        </fieldset>
                     </div>
                 {% endcall %}
                 {% call tab_content('instrument') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Instrument</h2>
-                    <div class="flex flex-row items-center gap-4 py-4 px-20">
-                        <label class="block mb-2" for="instrument-select">Instrument</label>
-                        <select id="instrument-select" name="instrument" hx-get="/fragments/instrument" hx-target="#instrument-target" class="mt-1 block mt-1 rounded-md border border-black p-1">
-                            <option selected value="default3000">Default 3000</option>
-                            <option value="custom">Custom</option>
-                        </select>
+                    {{ uneditable_errors('instrument') }}
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Instrument
+                        {{ tooltip('On this screen you can modify properties of the instrument such as its geometry as well as quadrupole settings.', 'instrument-tooltip', 'Instrument') }}
+                    </h2>
+                    <div class="flex flex-wrap items-center justify-center gap-4 px-2 py-4 sm:px-10">
+                        <span class="flex items-center gap-1">
+                            <label class="block" for="instrument-select">Instrument</label>
+                            {% if form.instrument_model.description %}
+                                {{ tooltip(form.instrument_model.description, 'instrument-model-tooltip', form.instrument_model.label.text, small=True) }}
+                            {% endif %}
+                        </span>
+                        {{ form.instrument_model(id="instrument-select", hx_get="/fragments/instrument", hx_target="#instrument-target", class_="mt-1 block rounded-md border border-black p-1") }}
                     </div>
-                    <div id="instrument-target">
+                    <div id="instrument-target" class="w-fit max-w-full mx-auto">
                         {% with form=form.instrument %}
                             {% include "settings/_render_instrument.html" %}
                         {% endwith %}
                     </div>
                 {% endcall %}
+                {% call tab_content('voltagecontrols') %}
+                    {{ uneditable_errors('voltagecontrols') }}
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Voltage Controls
+                        {{ tooltip(
+                            'The clusters are accelerated through the atmospheric pressured interface by fields created by voltages applied at the indicated points on the instrument; Adjust their value in Volts on this screen.',
+                            'voltages-tooltip',
+                            'Voltage Controls'
+                        ) }}
+                    </h2>
+                    <div class="w-fit max-w-full mx-auto py-4">
+                        {{ lightbox('img/voltages.png', 'w-full h-auto mb-4 border border-gray-300 bg-white', 'block w-full [contain:inline-size]') }}
+                        <div class="grid grid-cols-5 gap-2 px-8 sm:gap-4 sm:px-20 [&_input[type=number]]:w-20 [&_input[type=number]]:max-w-full">
+                            {% for field in form.voltage %}
+                                <div class="flex flex-col items-center gap-2">
+                                    <div class="mb-2 flex items-center gap-1">
+                                        {{ field.label }}
+                                        {% if field.description %}
+                                            {{ tooltip(field.description, field.id ~ '-tooltip', 'Voltage V' ~ loop.index0, small=True) }}
+                                        {% endif %}
+                                    </div>
+                                    {{ field(range__class="vertical", number__class="text-center") }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endcall %}
                 {% call tab_content('simulation') %}
-                    <h2 class="text-2xl font-bold text-center p-4">Simulation</h2>
-                    <div class="py-4 px-20">
-                        {% with form=form.simulation %}
-                            {% include "ui/_table_form.html" %}
-                        {% endwith %}
+                    {{ uneditable_errors('simulation') }}
+                    <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
+                        Simulation
+                        {{ tooltip('Choose the number of realizations and numerical settings for the simulation.', 'simulation-tooltip', 'Simulation') }}
+                    </h2>
+                    <div class="flex flex-col items-center gap-4">
+                        <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                            <legend>General simulation</legend>
+                            {% with form=form.simulation, exclude_fields=['skimmer'] %}
+                                {% include "ui/_table_form.html" %}
+                            {% endwith %}
+                        </fieldset>
+                        <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                            <legend>Skimmer simulation</legend>
+                            {% with form=form.simulation.skimmer %}
+                                {% include "ui/_table_form.html" %}
+                            {% endwith %}
+                        </fieldset>
                     </div>
                 {% endcall %}
             </div>
         {% endcall %}
+        <div class="page-action">
+            <button type="submit" class="cursor-pointer hover:scale-105 bg-green-500 text-white inline-flex items-center px-4 py-3 rounded-lg">
+                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-play"></use></svg>
+                &nbsp;Run
+            </button>
+        </div>
     </form>
 {% endblock %}

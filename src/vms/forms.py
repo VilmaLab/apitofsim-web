@@ -2,6 +2,7 @@ import functools
 
 from apitofsim.api import ureg
 from markupsafe import Markup
+from pint import Context
 from starlette_wtf import StarletteForm
 from wtforms import (
     BooleanField,
@@ -13,7 +14,7 @@ from wtforms import (
     IntegerField,
     SelectField,
 )
-from wtforms.validators import InputRequired, Optional
+from wtforms.validators import DataRequired, InputRequired, Optional
 from wtforms.widgets import HiddenInput
 from wtforms.widgets import core as wtforms_widgets_core_module
 
@@ -21,6 +22,14 @@ from vms.pintweb.wtforms import QuantityField
 from vms.utils import PairedRangeInputWidget
 
 Q_ = ureg.Quantity
+
+particle_mass_context = Context()
+particle_mass_context.add_transformation(
+    "[mass]", "[mass] / [substance]", lambda ureg, value: value * ureg.avogadro_constant
+)
+particle_mass_context.add_transformation(
+    "[mass] / [substance]", "[mass]", lambda ureg, value: value / ureg.avogadro_constant
+)
 
 
 # Cheeky monkeypatch to allow usage of htmx/alpine
@@ -67,71 +76,106 @@ class HiddenFloatField(FloatField):
     widget = HiddenInput()
 
 
+class HiddenQuantityField(QuantityField):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # QuantityField.__init__ installs a QuantityInput on the instance, so the
+        # class-level widget would otherwise be shadowed.
+        self.widget = HiddenInput()
+
+
 def mk_instrument_form(hidden):
-    def maybe_field(*args, **kwargs):
+    def maybe_quantity_field(*args, **kwargs):
+        if hidden:
+            return HiddenQuantityField(*args, **kwargs)
+        else:
+            return QuantityField(*args, **kwargs)
+
+    def maybe_float_field(*args, **kwargs):
         if hidden:
             return HiddenFloatField(*args, **kwargs)
         else:
             return FloatField(*args, **kwargs)
 
     class InstrumentGeometryForm(Form):
-        length_of_first_chamber = maybe_field(
-            "Length of 1st chamber (meters)",
-            default=1.0e-3,
+        length_of_first_chamber = maybe_quantity_field(
+            Markup("L<sub>0</sub>"),
+            description="Length of the first chamber (up until the skimmer)",
+            default=Q_(1.0e-3, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
-        length_of_skimmer = maybe_field(
-            "Length of skimmer (meters)",
-            default=5.0e-4,
+        length_of_skimmer = maybe_quantity_field(
+            Markup("L<sub>sk</sub>"),
+            description="Axial length of the skimmer",
+            default=Q_(5.0e-4, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
-        length_between_skimmer_and_front_quadrupole = maybe_field(
-            "Length between skimmer and front quadrupole",
-            default=2.44e-3,
+        length_between_skimmer_and_front_quadrupole = maybe_quantity_field(
+            Markup("L<sub>1</sub>"),
+            description="Distance from the skimmer to the front of the quadrupole in the second chamber",
+            default=Q_(2.44e-3, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
-        length_between_front_quadrupole_and_back_quadrupole = maybe_field(
-            "Length between front quadrupole and back quadrupole (meters)",
-            default=0.101,
+        length_between_front_quadrupole_and_back_quadrupole = maybe_quantity_field(
+            Markup("L<sub>2</sub>"),
+            description="Length of the quadrupole in the second chamber",
+            default=Q_(0.101, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
-        length_between_back_quadrupole_and_2nd_skimmer = maybe_field(
-            "Length between back quadrupole and 2nd skimmer (meters)",
-            default=4.48e-3,
+        length_between_back_quadrupole_and_2nd_skimmer = maybe_quantity_field(
+            Markup("L<sub>3</sub>"),
+            description="Distance from the back of the quadrupole in the second chamber up to the end of the chamber (up to the second skimmer)",
+            default=Q_(4.48e-3, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
 
     class SkimmerGeometryForm(Form):
-        radius_at_smallest_cross_section_skimmer = maybe_field(
-            "Radius at smallest cross section skimmer (m)",
-            default=5.0e-4,
+        radius_at_smallest_cross_section_skimmer = maybe_quantity_field(
+            "Radius",
+            description="Radius of the skimmer opening at its narrowest point.",
+            default=Q_(5.0e-4, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
-        angle_of_skimmer = maybe_field(
-            "Angle of skimmer (multiple of PI)",
+        angle_of_skimmer = maybe_float_field(
+            "Angle",
+            description="Skimmer angle expressed as a multiple of pi; 0.25 means pi/4.",
             default=0.25,
             validators=[InputRequired()],
         )
 
     class QuadrupoleForm(Form):
-        dc_quadrupole = maybe_field(
-            "DC quadrupole",
-            default=0.0,
+        dc_quadrupole = maybe_quantity_field(
+            "DC",
+            description="Direct-current voltage applied to the quadrupole.",
+            default=Q_(0.0, "V"),
+            units=["V", "kV"],
             validators=[InputRequired()],
         )
-        ac_quadrupole = maybe_field(
-            "AC quadrupole",
-            default=200.0,
+        ac_quadrupole = maybe_quantity_field(
+            "AC",
+            description="Alternating-current voltage applied to the quadrupole.",
+            default=Q_(200.0, "V"),
+            units=["V", "kV"],
             validators=[InputRequired()],
         )
-        radiofrequency_quadrupole = maybe_field(
-            "Radiofrequency quadrupole",
-            default=1.3e6,
+        radiofrequency_quadrupole = maybe_quantity_field(
+            "RF",
+            description="Radio frequency of the quadrupole's alternating voltage.",
+            default=Q_(1.3e6, "Hz"),
+            units=["Hz", "kHz", "MHz"],
             validators=[InputRequired()],
         )
-        half_distance_between_quadrupole_rods = maybe_field(
-            "Half-distance between quadrupole rods",
-            default=6.0e-3,
+        half_distance_between_quadrupole_rods = maybe_quantity_field(
+            "Radius",
+            description="Half of the spacing between opposing quadrupole rods.",
+            default=Q_(6.0e-3, "m"),
+            units=["m", "mm"],
             validators=[InputRequired()],
         )
 
@@ -146,32 +190,59 @@ def mk_instrument_form(hidden):
 BuiltInInstrumentForm = mk_instrument_form(hidden=True)
 CustomInstrumentForm = mk_instrument_form(hidden=False)
 
+INSTRUMENT_CHOICES = [("default", "Default"), ("custom", "Custom")]
+INSTRUMENT_FORMS = {
+    "default": BuiltInInstrumentForm,
+    "custom": CustomInstrumentForm,
+}
+
+
+def instrument_form_class(model):
+    # Unknown or missing models fall back to the fixed default instrument
+    return INSTRUMENT_FORMS.get(model, BuiltInInstrumentForm)
+
 
 class GasForm(Form):
     gas_molecule_radius = QuantityField(
-        "Gas molecule radius",
+        "Radius",
+        description="Effective radius of a gas molecule used by the model.",
         validators=[InputRequired()],
         default=Q_(2.46e-10, "meters"),
+        units=["meters", "pm", "angstroms"],
     )
     gas_molecule_mass = QuantityField(
-        "Gas molecule mass", default=Q_(4.8506e-26, "kg"), validators=[InputRequired()]
+        "Mass",
+        description="Particle specified as mass of single molecule or molar mass.",
+        default=Q_(4.8506e-26, "kg"),
+        validators=[InputRequired()],
+        units=["kg", "g", "g/mol"],
+        contexts=(particle_mass_context,),
     )
-    adiabatic_index = FloatField(default=1.4, validators=[InputRequired()])
+    adiabatic_index = FloatField(
+        description="Ratio of the gas heat capacities at constant pressure and volume.",
+        default=1.4,
+        validators=[InputRequired()],
+    )
 
     temperature_ = QuantityField(
-        "Temperature",
+        "T",
+        description="Gas temperature; you can enter it in kelvin or degrees Celsius.",
         validators=[InputRequired()],
         default=Q_(300.0, "K"),
         units=["K", "°C"],
     )
     pressure_first_chamber = QuantityField(
-        "Pressure first chamber",
+        Markup("P<sub>1</sub>"),
+        description="Gas pressure in the first chamber.",
         default=Q_(300.0, "Pa"),
+        units=["Pa", "mbar"],
         validators=[InputRequired()],
     )
     pressure_second_chamber = QuantityField(
-        "Pressure second chamber",
+        Markup("P<sub>2</sub>"),
+        description="Gas pressure in the second chamber.",
         default=Q_(3.53, "Pa"),
+        units=["Pa", "mbar"],
         validators=[InputRequired()],
     )
 
@@ -235,16 +306,37 @@ def get_default_histogram_precision():
 
 
 class SkimmerPrecisionForm(Form):
-    iterations_eq1 = IntegerField(default=1000, validators=[InputRequired()])
-    iterations_eq2 = IntegerField(default=1000, validators=[InputRequired()])
-    solved_points = IntegerField(default=1000, validators=[InputRequired()])
-    tolerance = FloatField(default=1.0e-8, validators=[InputRequired()])
+    iterations_eq1 = IntegerField(
+        description="Iteration limit for the first skimmer equation.",
+        default=1000,
+        validators=[InputRequired()],
+    )
+    iterations_eq2 = IntegerField(
+        description="Iteration limit for the second skimmer equation.",
+        default=1000,
+        validators=[InputRequired()],
+    )
+    solved_points = IntegerField(
+        description="Number of points used to solve the skimmer equations.",
+        default=1000,
+        validators=[InputRequired()],
+    )
+    tolerance = FloatField(
+        description="Numerical tolerance for the skimmer calculation.",
+        default=1.0e-8,
+        validators=[InputRequired()],
+    )
 
 
 class SimulationForm(Form):
-    realizations = IntegerField(default=1000, validators=[InputRequired()])
+    realizations = IntegerField(
+        description="Number of simulated particle runs.",
+        default=1000,
+        validators=[InputRequired()],
+    )
     histogram_precision = SelectField(
         "Histogram precision",
+        description="Bin width for the input histograms; finer bins take longer to process.",
         choices=get_histogram_precision_choices,
         validators=[InputRequired()],
         default=get_default_histogram_precision,
@@ -263,7 +355,7 @@ def get_cluster_choices():
         .fetchall()
     )
 
-    return [(None, "")] + clusters
+    return [("", "")] + clusters
 
 
 class SingleFragmentationPathwayForm(Form):
@@ -275,13 +367,41 @@ class SingleFragmentationPathwayForm(Form):
     fragmentation_energy = FloatField(validators=[Optional()])
 
 
+def canonical_numpy_quantity(unit, *quantities):
+    from numpy import array
+
+    return Q_(array([quantity.to(unit).magnitude for quantity in quantities]), unit)
+
+
 class SettingsForm(StarletteForm):
-    voltage = FormField(VoltageForm)
-    instrument = FormField(BuiltInInstrumentForm)
-    cluster = SelectField("Cluster", choices=get_cluster_choices)
+    cluster = SelectField(
+        "Cluster",
+        choices=get_cluster_choices,
+        validators=[DataRequired()],
+        coerce=lambda value: "" if value in (None, "None", "") else str(value),
+    )
     pathways = FieldList(FormField(SingleFragmentationPathwayForm), min_entries=1)
     gas = FormField(GasForm)
+    instrument_model = SelectField(
+        "Instrument",
+        choices=INSTRUMENT_CHOICES,
+        default="default3000",
+    )
+    instrument = FormField(BuiltInInstrumentForm)
+    voltage = FormField(VoltageForm)
     simulation = FormField(SimulationForm)
+
+    def __init__(self, request, *args, **kwargs):
+        formdata = kwargs.get("formdata")
+        model = formdata.get("instrument_model") if formdata is not None else None
+        instrument_cls = instrument_form_class(model)
+        # Bind the same instrument schema the rendered fragment used, so the
+        # server parses and validates what the client actually submitted.
+        self._unbound_fields = [
+            (name, FormField(instrument_cls) if name == "instrument" else field)
+            for name, field in type(self)._unbound_fields
+        ]
+        super().__init__(request, *args, **kwargs)
 
     def get_data(self):
         from apitofsim import Gas, Quadrupole
@@ -302,41 +422,31 @@ class SettingsForm(StarletteForm):
                 for k in ("gas_molecule_radius", "gas_molecule_mass", "adiabatic_index")
             )
         )
-        pressures = Q_(
-            array(
-                [
-                    data["gas"]["pressure_first_chamber"].to("Pa").magnitude,
-                    data["gas"]["pressure_second_chamber"].to("Pa").magnitude,
-                ]
-            ),
+        pressures = canonical_numpy_quantity(
             "Pa",
+            gas["pressure_first_chamber"],
+            gas["pressure_second_chamber"],
         )
-        lengths = Q_(
-            array(
-                [
-                    data["instrument"]["instrument_geometry"][
-                        "length_of_first_chamber"
-                    ],
-                    data["instrument"]["instrument_geometry"]["length_of_skimmer"],
-                    data["instrument"]["instrument_geometry"][
-                        "length_between_skimmer_and_front_quadrupole"
-                    ],
-                    data["instrument"]["instrument_geometry"][
-                        "length_between_front_quadrupole_and_back_quadrupole"
-                    ],
-                    data["instrument"]["instrument_geometry"][
-                        "length_between_back_quadrupole_and_2nd_skimmer"
-                    ],
-                ]
-            ),
+        lengths = canonical_numpy_quantity(
             "m",
+            data["instrument"]["instrument_geometry"]["length_of_first_chamber"],
+            data["instrument"]["instrument_geometry"]["length_of_skimmer"],
+            data["instrument"]["instrument_geometry"][
+                "length_between_skimmer_and_front_quadrupole"
+            ],
+            data["instrument"]["instrument_geometry"][
+                "length_between_front_quadrupole_and_back_quadrupole"
+            ],
+            data["instrument"]["instrument_geometry"][
+                "length_between_back_quadrupole_and_2nd_skimmer"
+            ],
         )
         quadrupole_dict = data["instrument"]["quadrupole"]
         quadrupole = Quadrupole(
-            Q_(quadrupole_dict["dc_quadrupole"], "V"),
-            Q_(quadrupole_dict["ac_quadrupole"], "V"),
-            Q_(quadrupole_dict["radiofrequency_quadrupole"], "Hz"),
-            Q_(quadrupole_dict["half_distance_between_quadrupole_rods"], "m"),
+            quadrupole_dict["dc_quadrupole"],
+            quadrupole_dict["ac_quadrupole"],
+            quadrupole_dict["radiofrequency_quadrupole"],
+            quadrupole_dict["half_distance_between_quadrupole_rods"],
         )
         result["quadrupole"] = quadrupole
         histogram_precision = tuple(
@@ -369,3 +479,45 @@ class SettingsForm(StarletteForm):
             (current_db.get().get_histogram_params(x) for x in histogram_precision)
         )
         return result
+
+
+def settings_errors(form):
+    """Separate form-wide messages from leaf errors, retaining their owning tab."""
+    form_errors = []
+    field_errors = []
+    tabs = {
+        "cluster": "fragmentationpathways",
+        "pathways": "fragmentationpathways",
+        "gas": "gas",
+        "instrument_model": "instrument",
+        "instrument": "instrument",
+        "voltage": "voltagecontrols",
+        "simulation": "simulation",
+    }
+
+    def visit_form(current, tab=None):
+        form_errors.extend(current.form_errors)
+        for field in current:
+            if field is form.pathways and form.cluster.data in (None, "None", ""):
+                continue
+            visit_field(field, tab or tabs.get(field.short_name))
+
+    def visit_field(field, tab):
+        if isinstance(field, FormField):
+            visit_form(field.form, tab)
+        elif isinstance(field, FieldList):
+            for entry in field:
+                visit_field(entry, tab)
+        elif field.errors:
+            field_errors.append(
+                {
+                    "id": field.id,
+                    "name": field.name,
+                    "label": Markup(field.label.text).striptags(),
+                    "tab": tab,
+                    "message": "\n".join(field.errors),
+                }
+            )
+
+    visit_form(form)
+    return form_errors, field_errors

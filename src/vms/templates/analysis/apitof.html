@@ -1,4 +1,4 @@
-<h1 id="status" class="text-5xl font-bold">Running simulation...</h1>
+<h1 id="status" class="text-5xl font-bold" x-show="job_status != 'failed' && job_status != 'incomplete'">Running simulation...</h1>
 <p class="text-4xl">Iterations: <span id="iterations">{{ iterations }}/{{ realizations }}</span></p>
 <p class="text-4xl">Fragmented: {{ fragmented }}</p>
 <p class="text-4xl">Survived: {{ survived }}</p>

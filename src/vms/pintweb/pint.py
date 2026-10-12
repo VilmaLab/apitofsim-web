@@ -5,7 +5,7 @@ from pint._typing import UnitLike
 from sympy import symbols
 
 
-def unitsystem_from_pint(ureg, quantities):
+def unitsystem_from_pint(ureg, quantities, contexts=()):
     in_sym = symbols("x")
     bits = ["["]
     for out_idx, output_quantity in enumerate(quantities):
@@ -18,7 +18,9 @@ def unitsystem_from_pint(ureg, quantities):
             if input_quantity == output_quantity:
                 continue
             has_conversions = True
-            sym_out_quant = ureg.Quantity(in_sym, input_quantity).to(output_quantity)
+            sym_out_quant = ureg.Quantity(in_sym, input_quantity).to(
+                output_quantity, *contexts
+            )
             function_body = str(sym_out_quant.m)
             bits.append(f"'{input_quantity}': ((x) => {function_body}) ")
             bits.append(", ")
@@ -48,6 +50,8 @@ def _prepare_units(units, value=None, ureg=None):
     return ureg, full_units
 
 
-def _make_unitsystem(value: Optional[Quantity], units: List[UnitLike]) -> str:
+def _make_unitsystem(
+    value: Optional[Quantity], units: List[UnitLike], contexts=()
+) -> str:
     ureg, units = _prepare_units(units, value)
-    return unitsystem_from_pint(ureg, units)
+    return unitsystem_from_pint(ureg, units, contexts)

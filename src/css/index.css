@@ -1,2 +1,74 @@
 @import "tailwindcss" source(none);
 @source "../vms";
+
+.top-tabs {
+    --tab-label-gap: 4px;
+    justify-content: safe center;
+    display: flex;
+    gap: 1rem;
+    width: 100%;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.top-tabs > li {
+    flex: none;
+}
+
+.top-tabs .tab-pill {
+    display: inline-flex;
+    white-space: nowrap;
+}
+
+.top-tabs .icon {
+    flex: none;
+}
+
+.top-tabs .tab-label {
+    flex: none;
+    width: var(--label-width, auto);
+    margin-left: var(--tab-label-gap);
+    overflow: hidden;
+    white-space: nowrap;
+    transition: width 160ms ease, margin-left 160ms ease, opacity 160ms ease;
+}
+
+.top-tabs[data-mode="about-icon"] li:first-child .tab-label,
+.top-tabs[data-mode="active"] .tab-label,
+.top-tabs[data-mode="icons"] .tab-label {
+    width: 0;
+    margin-left: 0;
+    opacity: 0;
+}
+
+.top-tabs[data-mode="active"] li[aria-selected="true"] .tab-label,
+.top-tabs[data-mode="active"] li:hover .tab-label,
+.top-tabs[data-mode="active"]:not(:has(li:hover)) li:focus-within .tab-label {
+    width: var(--label-width);
+    margin-left: var(--tab-label-gap);
+    opacity: 1;
+}
+
+.top-tabs[data-mode="active"]:has(li:hover) li:not(:hover) .tab-label,
+.top-tabs[data-mode="active"]:not(:has(li:hover)):has(li:focus-within) li:not(:focus-within) .tab-label {
+    width: 0;
+    margin-left: 0;
+    opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .top-tabs .tab-label {
+        transition: none;
+    }
+}
+
+.page-action {
+    position: sticky;
+    bottom: 1rem;
+    z-index: 10;
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}

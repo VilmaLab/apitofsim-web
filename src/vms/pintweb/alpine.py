@@ -3,6 +3,7 @@ from typing import List
 from markupsafe import Markup
 from pint import Quantity
 from pint._typing import UnitLike
+from wtforms.widgets.core import html_params
 
 from vms.pintweb.pint import _make_unitsystem
 
@@ -13,17 +14,20 @@ def get_jinja_env():
     return templates.env
 
 
-def quantity_display(value: Quantity, units: List[UnitLike]):
+def quantity_display(value: Quantity, units: List[UnitLike], **attributes):
     jinja_env = get_jinja_env()
     unit_system = _make_unitsystem(value, units)
     magnitude = value.magnitude
     unit = value.units
-    jinja_env.get_template("pintweb/_quantity_display.html").render(
-        {
-            "unit_system": unit_system,
-            "magnitude": magnitude,
-            "unit": unit,
-        }
+    return Markup(
+        jinja_env.get_template("pintweb/_quantity_display.html").render(
+            {
+                "unit_system": unit_system,
+                "magnitude": magnitude,
+                "unit": unit,
+                "container_params": Markup(html_params(**attributes)),
+            }
+        )
     )
 
 
@@ -33,10 +37,12 @@ def quantity_input(
     *,
     name,
     container_params,
+    wrapper_params="",
     unit_switcher="select",
+    contexts=(),
 ):
     jinja_env = get_jinja_env()
-    unit_system = _make_unitsystem(value, units)
+    unit_system = _make_unitsystem(value, units, contexts)
     magnitude = value.magnitude
     unit = value.units
 
@@ -48,6 +54,7 @@ def quantity_input(
                 "magnitude": magnitude,
                 "unit": unit,
                 "container_params": container_params,
+                "wrapper_params": wrapper_params,
                 "unit_select": unit_switcher == "select",
             }
         )

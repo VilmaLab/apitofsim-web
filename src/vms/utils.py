@@ -35,7 +35,7 @@ class PairedRangeInputWidget:
                 range_kwargs[k] = v
                 number_kwargs[k] = v
         range_params = html_params(name=field.name, **range_kwargs)
-        number_params = html_params(name=field.name, **range_kwargs)
+        number_params = html_params(name=field.name, **number_kwargs)
         return Markup(
             f"""
             <input type="range" oninput="this.nextElementSibling.value = this.value" {range_params}>

@@ -1,0 +1,14 @@
+<div
+    x-data="quantityinput({
+        'system': {{ unit_system|escape }},
+        'magnitude': {{ magnitude }},
+        'unit': '{{ unit }}'
+    })"
+    @unit-change="unitChange($event.detail)"
+    {{ container_params }}
+>
+    <div class="inline-flex w-full items-center justify-end gap-[0.2em]">
+        <span x-text="viewValue">{{ magnitude }}</span>
+        {% include "pintweb/_unit_select.html" %}
+    </div>
+</div>

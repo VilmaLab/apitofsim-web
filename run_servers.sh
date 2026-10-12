@@ -3,7 +3,9 @@ set -euo pipefail
 
 SESSION=apitofsim-web
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV="$ROOT/.venv"
+VENV="${UV_PROJECT_ENVIRONMENT:-.venv}"
+[[ "$VENV" = /* ]] || VENV="$ROOT/$VENV"
+export UV_PROJECT_ENVIRONMENT="$VENV"
 RAY_TMP=/tmp/raytmp
 # Run tools from the project environment whatever the invoker's cwd is.
 UV_RUN=(uv run --project "$ROOT")
@@ -27,7 +29,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 if [ ! -x "$VENV/bin/ray" ]; then
-	echo "No uv environment at $VENV (see README: uv sync --all-groups --all-extras)" >&2
+	echo "No uv environment at $VENV (see README for environment setup)" >&2
 	exit 1
 fi
 
@@ -164,6 +166,8 @@ else
 	false
 fi"
 
+NPM_CMD="npm run watch"
+
 tmux new-session -d -s "$SESSION" -n servers -c "$ROOT" \
 	bash -c "$ENV_DUMP
 $LOOP_HEAD
@@ -174,6 +178,12 @@ tmux split-window -t "$SESSION:servers" -h -c "$ROOT" \
 	bash -c "$ENV_DUMP
 $LOOP_HEAD
 $WEB_CMD
+$LOOP_TAIL"
+
+tmux split-window -t "$SESSION:servers" -h -c "$ROOT" \
+	bash -c "$ENV_DUMP
+$LOOP_HEAD
+$NPM_CMD
 $LOOP_TAIL"
 
 tmux select-layout -t "$SESSION:servers" even-vertical

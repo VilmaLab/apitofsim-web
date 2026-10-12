@@ -1,12 +1,28 @@
+{% from "ui/_tooltip.html" import tooltip %}
 <table class="text-right">
     {% for field in form %}
-        <tr>
-            <td class="p-1">{{ field.label }}</td>
-            {% if field.type == "HiddenField" %}
-                <td class="p-2">{{ field.default }}{{ field }}</td>
-            {% else %}
-                <td class="p-1">{{ field(class_="border border-black p-1 text-right w-50") }}</td>
-            {% endif %}
-        </tr>
+        {% if exclude_fields and field.short_name in exclude_fields %}
+        {% elif not include_fields or (include_fields and field.short_name in include_fields) %}
+            <tr>
+                <td class="p-1">
+                    {{ field.label }}
+                    {% if field.description %}
+                        {{ tooltip(field.description, field.id ~ '-tooltip', field.label.text, small=True) }}
+                    {% endif %}
+                </td>
+                {% if field.widget.input_type == "hidden" %}
+                    <td class="p-1">
+                        {% if field.units is defined and field.data is not none %}
+                            {{ field.data|quantity_display(field.units, class_="border border-gray-300 w-50 p-1") }}
+                            {{ field }}
+                        {% else %}
+                            <div class="border border-gray-300 w-50 p-1">{{ field.data }}{{ field }}</div>
+                        {% endif %}
+                    </td>
+                {% else %}
+                    <td class="p-1">{{ field(class_="border border-black p-1 text-right w-50") }}</td>
+                {% endif %}
+            </tr>
+        {% endif %}
     {% endfor %}
 </table>
