@@ -179,7 +179,8 @@ def build_input_pathways(
 
 
 def setup_result_db(database_path, result_db_path):
-    import apitofsim.workflow.sql_files as sql_files
+    # Use DDL without foreign keys since they're not supported across multiple schemas in DuckDB
+    import apitofsim.workflow.sql_files_nofk as sql
     import duckdb
     from apitofsim.workflow.db import RealizationDatabase
 
@@ -190,17 +191,15 @@ def setup_result_db(database_path, result_db_path):
     duckdb_db.execute(f"ATTACH '{result_db_path}' AS results_db;")
     duckdb_db.execute("USE results_db;")
     duckdb_db.execute("SET search_path = 'results_db,clusters_db'")
-    sql = "\n".join(
+    ddl = "\n".join(
         [
-            sql_files.experiment,
-            sql_files.experiment_report,
-            sql_files.realizations,
-            sql_files.event_report,
+            sql.experiment,
+            sql.experiment_report,
+            sql.realizations,
+            sql.event_report,
         ]
     )
-    # We need to filter these out since they're not supported across multiple schemas in DuckDB
-    sql = "\n".join((line for line in sql.split("\n") if "foreign key" not in line))
-    duckdb_db.execute(sql)
+    duckdb_db.execute(ddl)
 
     return RealizationDatabase(((duckdb_db, None)))
 
