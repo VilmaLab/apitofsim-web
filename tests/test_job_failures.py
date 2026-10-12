@@ -161,13 +161,25 @@ def test_incomplete_output_keeps_partial_results(job):
 def test_validate_output_detects_missing_events(recorded):
     with duckdb.connect() as connection:
         connection.execute("CREATE TABLE realization (id INTEGER)")
-        for table in ("escape_event", "fragmentation_event", "collision_event"):
-            connection.execute(f"CREATE TABLE {table} (realization_id INTEGER)")
+        connection.execute(
+            "CREATE TYPE event_type AS ENUM ('init', 'collision', 'fragmentation', 'escape')"
+        )
+        connection.execute(
+            "CREATE TABLE event_info (id INTEGER, realization_id INTEGER, event_type event_type)"
+        )
+        for table in ("fragmentation_event", "collision_event"):
+            connection.execute(f"CREATE TABLE {table} (id INTEGER)")
         connection.execute("INSERT INTO realization VALUES (1), (2), (3)")
-        connection.execute("INSERT INTO escape_event VALUES (1), (2)")
+        connection.execute(
+            "INSERT INTO event_info VALUES "
+            "(1, 1, 'init'), (2, 2, 'init'), (3, 3, 'init'), "
+            "(4, 1, 'collision'), (5, 2, 'collision'), (6, 3, 'collision'), "
+            "(7, 1, 'escape'), (8, 2, 'escape')"
+        )
         if recorded == 3:
-            connection.execute("INSERT INTO fragmentation_event VALUES (3)")
-        connection.execute("INSERT INTO collision_event VALUES (1), (2), (3)")
+            connection.execute("INSERT INTO event_info VALUES (9, 3, 'fragmentation')")
+            connection.execute("INSERT INTO fragmentation_event VALUES (9)")
+        connection.execute("INSERT INTO collision_event VALUES (4), (5), (6)")
         counters = Counters(0, 3, 0, 3, 2, np.array([1]))
         context = {}
         if recorded == 2:
@@ -178,6 +190,9 @@ def test_validate_output_detects_missing_events(recorded):
         else:
             validate_output(SimpleNamespace(db=connection), counters, 3, context)
         assert context["counts"]["terminal_realizations"] == recorded
+        assert context["counts"]["recorded_escapes"] == 2
+        assert context["counts"]["recorded_fragmentations"] == recorded - 2
+        assert context["counts"]["recorded_collisions"] == 3
 
 
 @pytest.mark.parametrize("outcome", ["failed", "incomplete"])

@@ -70,17 +70,18 @@ def validate_output(db, counters, requested, context):
     }
     for table, name in (
         ("realization", "realizations"),
-        ("escape_event", "escapes"),
         ("fragmentation_event", "fragmentations"),
         ("collision_event", "collisions"),
     ):
         counts[f"recorded_{name}"] = db.db.execute(
             f"SELECT count(*) FROM {table}"
         ).fetchone()[0]
+    counts["recorded_escapes"] = db.db.execute(
+        "SELECT count(*) FROM event_info WHERE event_type = 'escape'"
+    ).fetchone()[0]
     counts["terminal_realizations"] = db.db.execute(
-        "SELECT count(DISTINCT realization_id) FROM "
-        "(SELECT realization_id FROM escape_event UNION ALL "
-        "SELECT realization_id FROM fragmentation_event)"
+        "SELECT count(DISTINCT realization_id) FROM event_info "
+        "WHERE event_type IN ('escape', 'fragmentation')"
     ).fetchone()[0]
     context["counts"] = counts
     checks = (
