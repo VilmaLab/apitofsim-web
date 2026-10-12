@@ -1,5 +1,5 @@
 {% from "ui/_lightbox.html" import lightbox with context %}
-{% from "ui/_tabs.html" import tab_container, tab, tab_content_sse %}
+{% from "ui/_tabs.html" import tab_container, tab_list, tab, tab_content_sse %}
 
 <div
     class="tab-page"
@@ -7,9 +7,9 @@
     x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
 >
     <div sse-swap="failure">{% include "analysis/failure.html" %}</div>
-    <ul sse-swap="tabs" class="top-tabs" role="tablist" data-responsive-tabs>
+    {% call tab_list(sse=True) %}
         {% include "analysis/tabs.html" %}
-    </ul>
+    {% endcall %}
     <div id="default-tab-content" class="p-6 w-full max-w-5xl mx-auto">
         {% call tab_content_sse('queue') %}
             {# {{ queue|safe }} #}

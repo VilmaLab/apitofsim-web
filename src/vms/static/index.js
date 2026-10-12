@@ -46613,6 +46613,24 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   module_default.data("quantityinput", quantityinput_default);
   module_default.data("settingsForm", settingsform_default);
   module_default.data("unitswitcher", unitswitcher_default);
+  module_default.data("tabHover", () => ({
+    hovered: null,
+    pointer: null,
+    move(event) {
+      if (event.pointerType === "touch") return;
+      const pointer = `${event.clientX},${event.clientY}`;
+      if (pointer === this.pointer) return;
+      this.pointer = pointer;
+      const item = event.target.closest('[role="tab"]');
+      if (item?.parentElement === event.currentTarget) {
+        this.hovered = item.getAttribute("aria-label");
+      }
+    },
+    clear() {
+      this.hovered = null;
+      this.pointer = null;
+    }
+  }));
   window.Alpine = module_default;
   module_default.start();
   function responsiveTabs(list) {
@@ -46622,8 +46640,11 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     let scheduled = false;
     const update = () => {
       scheduled = false;
-      const items = Array.from(list.querySelectorAll(":scope > li"));
+      const items = Array.from(list.querySelectorAll(':scope > li[role="tab"]'));
       if (!items.length) return;
+      items.forEach((item) => {
+        item.dataset.hovered = String(item.getAttribute("aria-label") === list.dataset.hoverLabel);
+      });
       const listStyle = getComputedStyle(list);
       const gap = parseFloat(listStyle.columnGap) || 0;
       const labelGap = parseFloat(listStyle.getPropertyValue("--tab-label-gap")) || 0;
@@ -46658,7 +46679,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["aria-selected"]
+      attributeFilter: ["aria-selected", "data-hover-label"]
     });
     document.fonts.ready.then(schedule);
     schedule();

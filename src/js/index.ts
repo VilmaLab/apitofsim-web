@@ -21,6 +21,25 @@ window.UnitSystem = UnitSystemCls;
 AlpineModule.data('quantityinput', quantityinput);
 AlpineModule.data('settingsForm', settingsform);
 AlpineModule.data('unitswitcher', unitswitcher);
+AlpineModule.data('tabHover', () => ({
+  hovered: null as string | null,
+  pointer: null as string | null,
+  move(event: PointerEvent) {
+    if (event.pointerType === 'touch') return;
+    const pointer = `${event.clientX},${event.clientY}`;
+    // Reflow can produce pointer events without the cursor actually moving.
+    if (pointer === this.pointer) return;
+    this.pointer = pointer;
+    const item = (event.target as Element).closest('[role="tab"]');
+    if (item?.parentElement === event.currentTarget) {
+      this.hovered = item.getAttribute('aria-label');
+    }
+  },
+  clear() {
+    this.hovered = null;
+    this.pointer = null;
+  },
+}));
 
 window.Alpine = AlpineModule;
 AlpineModule.start();
@@ -33,8 +52,13 @@ function responsiveTabs(list: HTMLElement) {
   let scheduled = false;
   const update = () => {
     scheduled = false;
-    const items = Array.from(list.querySelectorAll<HTMLElement>(':scope > li'));
+    const items = Array.from(list.querySelectorAll<HTMLElement>(':scope > li[role="tab"]'));
     if (!items.length) return;
+
+    // SSE can replace the items; apply the row's hover state to the new markup.
+    items.forEach(item => {
+      item.dataset.hovered = String(item.getAttribute('aria-label') === list.dataset.hoverLabel);
+    });
 
     const listStyle = getComputedStyle(list);
     const gap = parseFloat(listStyle.columnGap) || 0;
@@ -79,7 +103,7 @@ function responsiveTabs(list: HTMLElement) {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['aria-selected'],
+    attributeFilter: ['aria-selected', 'data-hover-label'],
   });
   document.fonts.ready.then(schedule);
   schedule();

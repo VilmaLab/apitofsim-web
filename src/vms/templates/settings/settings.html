@@ -15,7 +15,7 @@ document.addEventListener("click", () => {
 {% endblock %}
 
 {% from "ui/_lightbox.html" import lightbox with context %}
-{% from "ui/_tabs.html" import tab_container, tab, tab_content %}
+{% from "ui/_tabs.html" import tab_container, tab_list, tab, tab_content %}
 {% from "ui/_tooltip.html" import tooltip %}
 
 {% macro uneditable_errors(tab) %}
@@ -34,7 +34,7 @@ document.addEventListener("click", () => {
         </template>
         {{ form.csrf_token }}
         {% call tab_container(default='about', inherit=True) %}
-            <ul class="top-tabs" role="tablist" data-responsive-tabs data-has-about>
+            {% call tab_list(has_about=True) %}
                 {% call tab('about', 'About') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-info-circle"></use></svg>
                     <span class="tab-label">About</span>
@@ -59,7 +59,7 @@ document.addEventListener("click", () => {
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-arrows-rotate"></use></svg>
                     <span class="tab-label">Simulation</span>
                 {% endcall %}
-            </ul>
+            {% endcall %}
             <div id="default-tab-content" class="mx-auto p-2 sm:p-6"
                  x-data="{ clusterSelected: {{ 'true' if form.cluster.data not in (none, 'None', '') else 'false' }} }"
                  :class="current_tab == 'about' ? 'max-w-5xl' : (current_tab == 'fragmentationpathways' && clusterSelected ? 'w-full' : 'w-fit')">

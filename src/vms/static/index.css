@@ -1116,12 +1116,12 @@
   margin-left: 0;
   opacity: 0;
 }
-.top-tabs[data-mode="active"] li[aria-selected="true"] .tab-label, .top-tabs[data-mode="active"] li:hover .tab-label, .top-tabs[data-mode="active"]:not(:has(li:hover)) li:focus-within .tab-label {
+.top-tabs[data-mode="active"] li[aria-selected="true"] .tab-label, .top-tabs[data-mode="active"] li[data-hovered="true"] .tab-label, .top-tabs[data-mode="active"][data-hovering="false"] li:focus-within .tab-label {
   width: var(--label-width);
   margin-left: var(--tab-label-gap);
   opacity: 1;
 }
-.top-tabs[data-mode="active"]:has(li:hover) li:not(:hover) .tab-label, .top-tabs[data-mode="active"]:not(:has(li:hover)):has(li:focus-within) li:not(:focus-within) .tab-label {
+.top-tabs[data-mode="active"][data-hovering="true"] li:not([data-hovered="true"]) .tab-label, .top-tabs[data-mode="active"][data-hovering="false"]:has(li:focus-within) li:not(:focus-within) .tab-label {
   width: 0;
   margin-left: 0;
   opacity: 0;

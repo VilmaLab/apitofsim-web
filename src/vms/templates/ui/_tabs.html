@@ -10,6 +10,16 @@
     </div>
 {% endmacro %}
 
+{% macro tab_list(has_about=False, sse=False) %}
+    <ul class="top-tabs" role="tablist" data-responsive-tabs
+        {% if has_about %}data-has-about{% endif %}
+        {% if sse %}sse-swap="tabs"{% endif %}
+        x-data="tabHover" @pointermove="move($event)" @pointerleave="clear()" @focusin="clear()"
+        :data-hovering="String(hovered !== null)" :data-hover-label="hovered">
+        {{ caller() }}
+    </ul>
+{% endmacro %}
+
 {% macro tab(name, label) -%}
     <li role="tab" aria-label="{{ label }}" :aria-selected="current_tab == '{{ name }}'">
         <a
