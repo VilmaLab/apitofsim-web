@@ -1,13 +1,20 @@
 from pathlib import Path
 
+import duckdb
 import pytest
+from apitofsim.workflow.db import ClusterDatabase
 from playwright.sync_api import expect
 from starlette.datastructures import FormData
 from starlette.requests import Request
 from wtforms import FormField, SelectField
 
-from vms.app import app, templates
-from vms.forms import SettingsForm, SimulationForm, settings_errors
+from vms.app import app, current_db, pathways_context, templates
+from vms.forms import (
+    SettingsForm,
+    SimulationForm,
+    get_cluster_choices,
+    settings_errors,
+)
 
 STATIC_JS = Path(__file__).resolve().parents[1] / "src/vms/static/index.js"
 STATIC_CSS = STATIC_JS.with_suffix(".css")
@@ -46,6 +53,55 @@ def form():
     settings = ExampleSettingsForm(request)
     settings.cluster.data = "1"
     return settings
+
+
+@pytest.fixture
+def cluster_db():
+    db = ClusterDatabase((duckdb.connect(), None))
+    db.db.execute(
+        "CREATE TABLE cluster (id INTEGER, common_name VARCHAR, atomic_mass DOUBLE, "
+        "electronic_energy DOUBLE, ase_mol_id INTEGER)"
+    )
+    db.db.execute(
+        "INSERT INTO cluster VALUES (1, 'Parent', 30, -3, NULL), "
+        "(2, 'Other parent', 40, -4, NULL), (3, 'Product A', 10, -1, NULL), "
+        "(4, 'Product B', 20, -1, NULL), (5, 'Unrelated', 50, 0, NULL)"
+    )
+    db.db.execute(
+        "CREATE TABLE pathway (id INTEGER, cluster_id INTEGER, product1_id INTEGER, product2_id INTEGER)"
+    )
+    db.db.execute(
+        "INSERT INTO pathway VALUES (10, 1, 3, 4), (11, 1, 3, 3), (12, 2, 3, 4)"
+    )
+    db.ase_db = None
+    token = current_db.set(db)
+    try:
+        yield db
+    finally:
+        current_db.reset(token)
+        db.close()
+
+
+def test_cluster_choices_include_each_parent_once(cluster_db):
+    choices = get_cluster_choices()
+    assert choices[0] == ("", "")
+    assert sorted(choices[1:]) == [(1, "Parent"), (2, "Other parent")]
+
+
+def test_pathways_context_includes_only_selected_parent_and_products(form, cluster_db):
+    context = pathways_context(form, 1)
+    assert context["primary_cluster"] == (1, "Parent")
+    clusters = list(context["clusters"])
+    assert {cluster["id"] for cluster in clusters} == {1, 3, 4}
+    assert all(cluster["has_ase"] is False for cluster in clusters)
+    pathways = {
+        int(pathway["form"].pathway.data): pathway for pathway in context["pathways"]
+    }
+    assert set(pathways) == {10, 11}
+    assert pathways[10]["product1"] == (3, "Product A")
+    assert pathways[10]["product2"] == (4, "Product B")
+    assert pathways[11]["product2"] == (3, "Product A")
+    assert all(pathway["bonding_energy"] == 1 for pathway in pathways.values())
 
 
 def render(form):

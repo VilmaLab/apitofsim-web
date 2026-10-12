@@ -349,9 +349,8 @@ def get_cluster_choices():
 
     clusters = (
         current_db.get()
-        .db.execute(
-            "SELECT cluster.id, cluster.common_name FROM cluster JOIN pathway ON pathway.cluster_id = cluster.id"
-        )
+        .clusters_query(parents_only=True)
+        .select("id, common_name")
         .fetchall()
     )
 

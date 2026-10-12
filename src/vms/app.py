@@ -18,7 +18,6 @@ import anyio
 import holoviews as hv
 import matplotlib
 import numpy
-import pandas
 import ray
 from anyio import to_thread
 from apitofsim.api import ureg
@@ -601,23 +600,7 @@ async def pathways_fragment(request):
 
 def pathways_context(form, cluster_id, *, submitted=False):
     db = current_db.get()
-    relevant_cluster_ids = db.db.sql(
-        """
-        select distinct unnest([cluster_id, product1_id, product2_id]) as relevant_cluster_id
-        from pathway
-        where cluster_id = ?
-        """,
-        params=(cluster_id,),
-    ).fetchdf()
-    cluster_df = (
-        db.db.table("cluster")
-        .join(
-            db.db.from_df(relevant_cluster_ids).set_alias("relevant"),
-            condition="relevant.relevant_cluster_id = cluster.id",
-        )
-        .fetchdf()
-        .replace({pandas.NA: None})
-    )
+    cluster_df = db.clusters_df(parent=cluster_id)
     cluster_ids = cluster_df["id"].to_numpy()
     masses = cluster_df["atomic_mass"].to_numpy()
     clusters = {}
@@ -625,10 +608,7 @@ def pathways_context(form, cluster_id, *, submitted=False):
         cluster = cluster._asdict()
         enrich_cluster(db.ase_db, cluster)
         clusters[cluster["id"]] = cluster
-    pathways_relations = db.db.sql(
-        """select * from pathway where cluster_id = ?""",
-        params=(cluster_id,),
-    ).fetchdf()
+    pathways_relations = db.pathways_query(parent=cluster_id).fetchdf()
     pathways = []
 
     submitted_entries = (
