@@ -238,11 +238,9 @@ def run_simulation(**arguments):
 
 
 def _run_simulation(
-    voltage,
     pathways,
-    gas,
-    quadrupole,
     histograms,
+    histogram_precision,
     config,
     database_path,
     result_db_path,
@@ -266,10 +264,10 @@ def _run_simulation(
     from jinja2 import Environment
     from minify_html_onepass import minify
 
-    context["counts"] = {"requested": int(config["realizations"])}
+    context["counts"] = {"requested": int(config["N"])}
     db = setup_result_db(database_path, result_db_path)
     context["db"] = db
-    config_id = db.insert_config("webrun", {**config, "quadrupole": quadrupole})
+    config_id = db.insert_config("webrun", config)
     current_run_id = db.insert_run(config_id)
     context["run_id"] = current_run_id
     jinja_env = Environment(loader=jinja_loader)
@@ -309,7 +307,7 @@ def _run_simulation(
             log=log,
             survived=survived,
             fragmented=fragmented,
-            realizations=config["realizations"],
+            realizations=config["N"],
             iterations=iterations,
             ratio=survived / iterations if iterations > 0 else 0,
             completed=statuses["apitof"] == "done",
@@ -349,7 +347,7 @@ def _run_simulation(
                 config,
                 cluster_indexed,
                 pathway_lookup=pathway_lookup,
-                cached_densityandrate=config["histogram_precision"],
+                cached_densityandrate=histogram_precision,
                 show_progress=False,
             )
             yield update_pane("skimmer")
@@ -360,10 +358,10 @@ def _run_simulation(
             mass_spec = MassSpectrometer(
                 skimmer_np,
                 config["lengths"],
-                voltage,
+                config["voltages"],
                 config["T"],
                 config["pressures"],
-                quadrupole=quadrupole,
+                quadrupole=config["quadrupole"],
             )
         elif processing == "apitof":
             context["stage"] = processing
@@ -384,11 +382,11 @@ def _run_simulation(
 
             from apitofsim.api import MassSpecSubstanceSingleInput
 
-            realizations = config["realizations"]
+            realizations = config["N"]
             subs = MassSpecSubstanceSingleInput(
                 group["cluster"],
                 group["pathways"],
-                gas,
+                config["gas"],
                 group["density_hist"],
                 group["cluster_charge_sign"],
             )
