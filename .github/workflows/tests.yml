@@ -44,6 +44,10 @@ jobs:
       - name: Install Chromium
         run: .venv/bin/playwright install --with-deps chromium
 
+      - name: Build frontend assets
+        # Browser tests also load assets directly, before the server starts.
+        run: .venv/bin/python -c 'from vms.assets import ASSETS; ASSETS.ensure_built()'
+
       - name: Run tests
         # Use the installed environment directly so Ray workers reuse it.
         run: .venv/bin/pytest -v
