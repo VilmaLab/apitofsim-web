@@ -254,6 +254,7 @@ def _run_simulation(
         CollisionEvent,
         EscapeEvent,
         FragmentationEvent,
+        InitEvent,
         MassSpecFinalResult,
         MassSpecIntermediateCounter,
         MassSpecLogItem,
@@ -431,7 +432,8 @@ def _run_simulation(
                         event_recorder.relate_realizations(experiment_result_id)
                         yield update_pane("apitof")
                     elif isinstance(
-                        result, (CollisionEvent, FragmentationEvent, EscapeEvent)
+                        result,
+                        (InitEvent, CollisionEvent, FragmentationEvent, EscapeEvent),
                     ):
                         event_recorder(result)
                     elif isinstance(result, MassSpecLogItem):
