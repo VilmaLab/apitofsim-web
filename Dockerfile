@@ -1,7 +1,15 @@
+FROM docker.io/library/node:22 AS frontend
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY src ./src
+RUN npm run build
+
 FROM docker.io/mambaorg/micromamba:2.9.0 AS builder
 
 ## Step 1. Build application
 COPY --chown=$MAMBA_USER:$MAMBA_USER . /tmp/apitofsim-web
+COPY --from=frontend --chown=$MAMBA_USER:$MAMBA_USER /app/src/vms/static/index.css /app/src/vms/static/index.js /tmp/apitofsim-web/src/vms/static/
 USER root
 RUN mkdir /env && chown $MAMBA_USER:$MAMBA_USER /env
 USER $MAMBA_USER

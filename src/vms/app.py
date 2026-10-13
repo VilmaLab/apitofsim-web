@@ -34,6 +34,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 from starlette_wtf import CSRFProtectMiddleware, csrf_protect
 
+from .assets import ASSETS
 from .cluster_info import enrich_cluster
 from .forms import (
     INSTRUMENT_FORMS,
@@ -94,6 +95,7 @@ def worker_process_setup_hook():
 
 @asynccontextmanager
 async def lifespan(app):
+    await to_thread.run_sync(ASSETS.ensure_built)
     runtime_env = {
         "worker_process_setup_hook": worker_process_setup_hook,
     }

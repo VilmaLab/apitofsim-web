@@ -5,6 +5,9 @@
 /.venv/
 /uv.lock
 /node_modules/
+/.workingtitle-build/
+/src/vms/static/index.css
+/src/vms/static/index.js
 tests/server.log
 /test-results/
 /.pytest_cache/

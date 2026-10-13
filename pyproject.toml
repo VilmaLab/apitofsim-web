@@ -27,6 +27,7 @@ dependencies = [
     "uvicorn>=0.52.1",
     "apitofsim-resultviewer",
     "markdown>=3.10.2",
+    "workingtitle[devserver]",
 ]
 
 [project.optional-dependencies]
@@ -69,3 +70,4 @@ apitofsim = [
   # { url = "https://github.com/VilmaLab/apitofsim/archive/refs/tags/v0.20.0.tar.gz", marker = "(sys_platform != 'linux' or platform_machine != 'x86_64') and (sys_platform != 'darwin' or platform_machine != 'arm64') and (sys_platform != 'win32' or platform_machine != 'AMD64')" },
 ]
 apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git" }
+workingtitle = { git = "https://github.com/frankier/workingtitle.git" }

@@ -160,13 +160,11 @@ for i in \$(seq 1 120); do
 done
 if [ \"\$ray_up\" -eq 1 ]; then
 	echo 'Ray is up.'
-	RAY_ADDRESS="localhost:6379" uv run --project '$ROOT' uvicorn vms:app --reload --port 5000
+	RAY_ADDRESS="localhost:6379" uv run --project '$ROOT' python -m vms --reload --port 5000
 else
 	echo 'Timed out waiting for ray after 120s.' >&2
 	false
 fi"
-
-NPM_CMD="npm run watch"
 
 tmux new-session -d -s "$SESSION" -n servers -c "$ROOT" \
 	bash -c "$ENV_DUMP
@@ -178,12 +176,6 @@ tmux split-window -t "$SESSION:servers" -h -c "$ROOT" \
 	bash -c "$ENV_DUMP
 $LOOP_HEAD
 $WEB_CMD
-$LOOP_TAIL"
-
-tmux split-window -t "$SESSION:servers" -h -c "$ROOT" \
-	bash -c "$ENV_DUMP
-$LOOP_HEAD
-$NPM_CMD
 $LOOP_TAIL"
 
 tmux select-layout -t "$SESSION:servers" even-vertical

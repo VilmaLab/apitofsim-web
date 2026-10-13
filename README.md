@@ -29,7 +29,9 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
     uv sync --all-groups --all-extras
     ```
 
-3. **Start the servers** (this will start both the Ray server and the webserver in tmux):
+3. **Install Node.js and npm** for automatic frontend builds.
+
+4. **Start the servers** (this will start both the Ray server and the webserver in tmux, automatically building frontend assets):
     ```bash
     ./run_servers.sh
     ```
@@ -51,14 +53,30 @@ Alternatively you can manually start them in separate terminals:
 
 **Run the webserver:**
     ```bash
-    RAY_ADDRESS="localhost:6379" uv run uvicorn vms:app --reload --port 5000
+    RAY_ADDRESS="localhost:6379" uv run python -m vms --reload
     ```
 
-It's also possible to run the webserver in a single command, which will start Ray if it is not already running:
+It's also possible to run everything in a single command, which starts a local Ray cluster and automatically builds frontend assets before startup and each reload:
 
 ```bash
-uv run uvicorn vms:app --reload --port 5000
+uv run python -m vms --reload
 ```
+
+The generated `src/vms/static/index.js` and `index.css` are ignored by Git.
+`workingtitle.devserver` installs npm dependencies as needed and skips builds
+when inputs are unchanged. CSS, JavaScript, template, and Python edits trigger
+rebuilds and server reloads. Direct `uvicorn vms:app` runs also build assets on
+startup, but use the command above to watch frontend changes.
+
+Before building a Python wheel, generate the assets so they are included:
+
+```bash
+uv run python -m workingtitle.devserver vms.assets:ASSETS
+uv build
+```
+
+Installed wheels validate their bundled assets without needing Node.js. Docker
+builds the frontend in a separate Node.js stage before installing the app.
 
 **Access the application:**
 
