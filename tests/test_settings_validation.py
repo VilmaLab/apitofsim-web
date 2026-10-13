@@ -297,3 +297,99 @@ def test_missing_cluster_native_and_server_errors(page, form):
     ).to_have_count(0)
     cluster.select_option("1")
     assert cluster.evaluate("el => el.validity.customError") is False
+
+
+@pytest.fixture
+def config_form(form):
+    from types import SimpleNamespace
+
+    from vms.forms import Q_
+
+    params = {
+        10: (Q_(20, "K"), Q_(200_000, "K")),
+        20: (Q_(20, "K"), Q_(100_000, "K")),
+    }
+    token = current_db.set(SimpleNamespace(get_histogram_params=params.get))
+    form.simulation.histogram_precision.data = "10,20"
+    form.simulation.realizations.data = 5
+    form.voltage.voltage1.data = -23
+    # Exercise unit conversion as well as the geometry's positional contract.
+    form.instrument.instrument_geometry.length_of_skimmer.data = Q_(0.7, "mm")
+    try:
+        yield form, params
+    finally:
+        current_db.reset(token)
+
+
+def test_config_round_trip_uses_apitofsim_schema(config_form, output_db):
+    import json
+
+    import numpy as np
+    from apitofsim.config import dump_to_raw
+    from apitofsim.workflow.runners import DerivedDataPreparer
+
+    from vms.forms import Q_
+
+    form, _ = config_form
+    arguments = form.get_data()
+    config = arguments["config"]
+    assert set(arguments) == {"config", "pathways", "histograms", "histogram_precision"}
+    assert arguments["histogram_precision"] == (10, 20)
+    assert set(config) == {
+        "voltages",
+        "quadrupole",
+        "N",
+        "bin_width",
+        "energy_max",
+        "energy_max_rate",
+        "dc",
+        "alpha_factor",
+        "N_iter",
+        "M_iter",
+        "resolution",
+        "tolerance",
+        "T",
+        "gas",
+        "pressures",
+        "lengths",
+    }
+    output_db.insert_config("webrun", config)
+    stored = next(output_db.iter_configs()).config
+    assert stored["N"] == 5
+    np.testing.assert_array_equal(
+        stored["voltages"].to("V").magnitude, [-23, -9, -7, -6, 11]
+    )
+    np.testing.assert_allclose(
+        stored["lengths"].to("m").magnitude,
+        [0.001, 0.00244, 0.101, 0.00448, 0.0007],
+    )
+    assert stored["bin_width"] == Q_(20, "K")
+    assert stored["energy_max"] == Q_(200_000, "K")
+    assert stored["energy_max_rate"] == Q_(100_000, "K")
+    assert stored["quadrupole"].ac_field == Q_(200, "V")
+    assert stored["gas"].radius == config["gas"].radius
+    assert json.loads(dump_to_raw(stored)) == json.loads(dump_to_raw(config))
+
+    # The upstream skimmer reads the final length as rmax.
+    import apitofsim
+
+    captured = {}
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(apitofsim, "skimmer", lambda **kwargs: captured.update(kwargs))
+        DerivedDataPreparer(output_db)._run_skimmer(stored)
+    assert captured["rmax"] == Q_(0.7, "mm")
+
+
+@pytest.mark.parametrize("invalid", ["missing", "width"])
+def test_config_rejects_incompatible_histograms(config_form, invalid):
+    from vms.forms import Q_
+
+    form, params = config_form
+    if invalid == "missing":
+        del params[20]
+        message = "Selected histogram configuration is missing"
+    else:
+        params[20] = (Q_(10, "K"), Q_(100_000, "K"))
+        message = "Density and rate histograms must use the same bin width"
+    with pytest.raises(ValueError, match=message):
+        form.get_data()

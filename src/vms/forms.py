@@ -391,12 +391,11 @@ class SettingsForm(StarletteForm):
 
         data = self.data
         result = {}
-        result["voltage"] = Q_(array(list(data["voltage"].values())), "V")
         result["pathways"] = [
             pathway["pathway"] for pathway in data["pathways"] if pathway["enabled"]
         ]
         gas = data["gas"]
-        result["gas"] = Gas(
+        gas_model = Gas(
             *(
                 gas[k]
                 for k in ("gas_molecule_radius", "gas_molecule_mass", "adiabatic_index")
@@ -410,7 +409,6 @@ class SettingsForm(StarletteForm):
         lengths = canonical_numpy_quantity(
             "m",
             data["instrument"]["instrument_geometry"]["length_of_first_chamber"],
-            data["instrument"]["instrument_geometry"]["length_of_skimmer"],
             data["instrument"]["instrument_geometry"][
                 "length_between_skimmer_and_front_quadrupole"
             ],
@@ -420,6 +418,7 @@ class SettingsForm(StarletteForm):
             data["instrument"]["instrument_geometry"][
                 "length_between_back_quadrupole_and_2nd_skimmer"
             ],
+            data["instrument"]["instrument_geometry"]["length_of_skimmer"],
         )
         quadrupole_dict = data["instrument"]["quadrupole"]
         quadrupole = Quadrupole(
@@ -428,13 +427,27 @@ class SettingsForm(StarletteForm):
             quadrupole_dict["radiofrequency_quadrupole"],
             quadrupole_dict["half_distance_between_quadrupole_rods"],
         )
-        result["quadrupole"] = quadrupole
         histogram_precision = tuple(
             int(x) for x in data["simulation"]["histogram_precision"].split(",")
         )
+        result["histogram_precision"] = histogram_precision
+        result["histograms"] = tuple(
+            current_db.get().get_histogram_params(x) for x in histogram_precision
+        )
+        density_params, rate_params = result["histograms"]
+        if density_params is None or rate_params is None:
+            raise ValueError("Selected histogram configuration is missing")
+        bin_width, energy_max = density_params
+        rate_bin_width, energy_max_rate = rate_params
+        if bin_width != rate_bin_width:
+            raise ValueError("Density and rate histograms must use the same bin width")
         result["config"] = {
-            **data["instrument"],
-            **data["simulation"],
+            "voltages": Q_(array(list(data["voltage"].values())), "V"),
+            "quadrupole": quadrupole,
+            "N": data["simulation"]["realizations"],
+            "bin_width": bin_width,
+            "energy_max": energy_max,
+            "energy_max_rate": energy_max_rate,
             "dc": Q_(
                 data["instrument"]["skimmer_geometry"][
                     "radius_at_smallest_cross_section_skimmer"
@@ -450,14 +463,10 @@ class SettingsForm(StarletteForm):
             "resolution": data["simulation"]["skimmer"]["solved_points"],
             "tolerance": data["simulation"]["skimmer"]["tolerance"],
             "T": gas["temperature_"],
-            "gas": result["gas"],
+            "gas": gas_model,
             "pressures": pressures,
             "lengths": lengths,
-            "histogram_precision": histogram_precision,
         }
-        result["histograms"] = tuple(
-            (current_db.get().get_histogram_params(x) for x in histogram_precision)
-        )
         return result
 
 
