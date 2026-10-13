@@ -3,7 +3,7 @@
 import duckdb
 from apitofresview.webapp import explorer_bokeh, spectrogram_bokeh
 from apitofsim.workflow.db import RealizationDatabase
-from bokeh.models import InlineStyleSheet
+from bokeh.models import InlineStyleSheet, Toolbar
 from bokeh.server.asgi import BokehASGI
 
 
@@ -55,5 +55,7 @@ def make_bokeh_app(jobs, cluster_path):
 
     def spectrogram(doc):
         spectrogram_bokeh(database_for(doc), doc)
+        for toolbar in doc.select({"type": Toolbar}):
+            toolbar.logo = None
 
     return BokehASGI({"/explorer": explorer, "/spectrogram": spectrogram})
