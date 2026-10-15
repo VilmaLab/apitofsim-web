@@ -1,0 +1,55 @@
+<div class="mt-6 flex flex-col items-center justify-center gap-4 sm:flex-row sm:items-start">
+    <svg class="h-12 w-12 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-calculator"></use></svg>
+    <div class="max-w-full overflow-x-auto">
+        <table class="mx-auto border-collapse border-y-2 border-black text-sm">
+            <thead>
+                <tr class="border-b border-black">
+                    <th scope="col" class="px-3 py-2 text-left">Cluster</th>
+                    <th scope="col" class="px-3 py-2 text-right">Mass</th>
+                    <th scope="col" class="px-3 py-2 text-right">Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="border-b border-black">
+                    <th scope="row" colspan="2" class="px-3 py-2 text-left font-normal italic"><label for="input_clusters">Total input clusters</label></th>
+                    <td class="px-3 py-2 text-right">
+                        <input
+                            class="w-28 text-right tabular-nums"
+                            type="number"
+                            id="input_clusters"
+                            name="input_clusters"
+                            value="{{ '{:.15g}'.format(counts.input_clusters) if counts.input_clusters is not none else '' }}"
+                            min="0" step="any"
+                            hx-get="{{ url_for('transmissioncalc', jobid=jobid, model=model) }}"
+                            hx-target="#transmissioncalc"
+                            hx-swap="innerHTML"
+                            hx-include="[name=model]:checked">
+                    </td>
+                </tr>
+                {% for cluster in clusters %}
+                    <tr>
+                        <th scope="row" class="px-3 py-2 text-left font-normal">{{ cluster.cluster }}</th>
+                        <td class="px-3 py-2 text-right tabular-nums">{{ '{:,.1f}'.format(cluster.mass) }}</td>
+                        <td class="px-3 py-2 text-right tabular-nums">{{ '{:,.6g}'.format(cluster.count) if cluster.count is not none else '—' }}</td>
+                    </tr>
+                {% endfor %}
+                <tr class="border-t border-black">
+                    <th scope="row" colspan="2" class="px-3 py-2 text-left font-normal italic"><label for="output_clusters_total">Total output clusters</label></th>
+                    <td class="px-3 py-2 text-right">
+                        <input
+                            class="w-28 text-right tabular-nums"
+                            type="number"
+                            id="output_clusters_total"
+                            name="output_clusters_total"
+                            value="{{ '{:.15g}'.format(counts.output_clusters_total) if counts.output_clusters_total is not none else '' }}"
+                            min="0" step="any"
+                            hx-get="{{ url_for('transmissioncalc', jobid=jobid, model=model) }}"
+                            hx-target="#transmissioncalc"
+                            hx-swap="innerHTML"
+                            hx-include="[name=model]:checked">
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>

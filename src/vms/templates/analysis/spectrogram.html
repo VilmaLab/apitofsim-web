@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Spectrogram{% endblock %}
+
+{% block content %}
+    <div class="overflow-x-auto mx-auto w-max">{{ plot_script|safe }}</div>
+    <hr class="my-4">
+    <h3 class="text-lg font-semibold">Transmission model</h3>
+    <p class="mt-2">
+        The mass spectrogram above is based on the assumption encoding in the
+        model that all particles entering the aparatus either escape, reaching
+        the sensor or fragment and then the fragments reach the sensor.
+    </p>
+    <p class="mt-2">
+        In reality most particles do not reach the sensor. Although our model
+        doesn't take into account this, it is possible to fit a simple "transmission"
+        model. The idea is to take historical data (TODO: EXPLAIN THIS FURTHER)
+        and fit a model to predict the yield based on particle mass.
+    </p>
+    <div class="my-6 overflow-x-auto">
+    <table class="mx-auto border-collapse border-y-2 border-black text-sm">
+        <thead>
+            <tr class="border-b border-black">
+                <th scope="col" class="px-3 py-2 text-center">Select</th>
+                <th scope="col" class="px-3 py-2 text-left">Model</th>
+                <th scope="col" class="px-3 py-2 text-center">Cluster charge</th>
+                {% for index in range(5) %}
+                    <th scope="col" class="px-3 py-2 text-right">V<sub>{{ index }}</sub></th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="px-3 py-2"></td>
+                <th class="px-3 py-2 text-left font-normal italic" scope="row">Your simulation</th>
+                <td class="px-3 py-2 text-center tabular-nums">{{ cluster_charge|sign }}</td>
+                {% for voltage in voltages %}
+                    <td class="px-3 py-2 text-right tabular-nums">{{ '{:,.4g}'.format(voltage.magnitude) }}</td>
+                {% endfor %}
+            </tr>
+            {% for name, model in transmission_models.items() %}
+                <tr>
+                    <td class="px-3 py-2 text-center"><input type="radio" name="model" value="{{ name }}" hx-get="{{ url_for('transmission', jobid=jobid, model=name) }}" hx-target="#transmissionadjusted" hx-swap="innerHTML" hx-trigger="click"></td>
+                    <th class="px-3 py-2 text-left font-normal italic" scope="row">{{ model.name }}</th>
+                    <td class="px-3 py-2 text-center tabular-nums">{{ model.cluster_charge|sign }}</td>
+                    {% for voltage in model.voltages %}
+                        <td class="px-3 py-2 text-right tabular-nums">{{ '{:,.4g}'.format(voltage.magnitude) }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <div id="transmissionadjusted"></div>
+{% endblock %}
