@@ -1,0 +1,6 @@
+<div class="mx-auto w-max">{{ plot_script|safe }}</div>
+<div
+    id="transmissioncalc"
+    hx-get="{{ url_for('transmissioncalc', jobid=jobid, model=model) }}"
+    hx-trigger="load"
+></div>

@@ -33,7 +33,6 @@ def test_default_run_completes(page, server):
     expect(page).to_have_url(re.compile(r"/analysis\?jobid="))
     expect(page.locator('a[href="#explorer"]')).to_have_count(0)
     expect(page.locator('a[href="#spectrogram"]')).to_have_count(0)
-    expect(page.locator('a[href="#but-wait"]')).to_have_count(0)
 
     expect(page.locator('li[data-tab="apitof"]')).to_have_attribute(
         "data-status", re.compile(r"^(done|incomplete)$"), timeout=RUN_TIMEOUT
@@ -47,7 +46,7 @@ def test_default_run_completes(page, server):
         )
         expect(page.get_by_role("alert")).to_contain_text("Partial results")
 
-    for tab in ("explorer", "spectrogram", "but-wait"):
+    for tab in ("explorer", "spectrogram"):
         expect(page.locator(f'a[href="#{tab}"]')).to_be_visible()
 
     page.click('a[href="#explorer"]')
@@ -57,9 +56,6 @@ def test_default_run_completes(page, server):
     page.click('a[href="#spectrogram"]')
     spectrogram = page.frame_locator('iframe[title="Spectrogram plot"]')
     expect(spectrogram.locator(".bk-Canvas")).not_to_have_count(0, timeout=60_000)
-
-    page.click('a[href="#but-wait"]')
-    expect(page.locator('div[name="but-wait"]')).to_have_text("Coming soon.")
 
     page.reload()
     expect(page.locator('a[href="#explorer"]')).to_be_visible()

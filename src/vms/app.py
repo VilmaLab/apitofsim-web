@@ -21,6 +21,7 @@ import numpy
 import ray
 from anyio import to_thread
 from apitofsim.api import ureg
+from apitofsim.transmission import TRANSMISSION_MODELS
 from apitofsim.workflow.db import SuperClusterDatabase, guess_ase_db_filename
 from lxml import etree
 from pint import set_application_registry
@@ -56,11 +57,18 @@ hv.extension("matplotlib")  # type: ignore
 set_application_registry(ureg)
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-templates.env.add_extension(MarkdownExtension)
 jinja_loader = templates.env.loader
 current_db = ContextVar("current_db")
 status = {}
 bokeh_application = make_bokeh_app(status, database_path)
+
+
+def add_jinja_extensions(env):
+    env.add_extension(MarkdownExtension)
+    env.filters["sign"] = lambda x: "+" if x > 0 else "-" if x < 0 else "0"
+
+
+add_jinja_extensions(templates.env)
 
 
 def connect_db():
@@ -271,8 +279,6 @@ def _run_simulation(
     current_run_id = db.insert_run(config_id)
     context["run_id"] = current_run_id
     jinja_env = Environment(loader=jinja_loader)
-    # Same templates as templates.env, so it needs the same extensions
-    jinja_env.add_extension(MarkdownExtension)
 
     processing = "queue"
     statuses = {
@@ -765,11 +771,9 @@ async def analysis(request):
     )
 
 
-async def result_plot(request):
-    jobid = request.path_params["jobid"]
-    plot = request.path_params["plot"]
-    if plot not in ("explorer", "spectrogram"):
-        raise HTTPException(404)
+def prepare_plot(request, plot, jobid=None, **kwargs):
+    if jobid is None:
+        jobid = request.path_params["jobid"]
     info = status.get(jobid)
     if info is None or "result" not in info:
         raise HTTPException(404)
@@ -777,12 +781,135 @@ async def result_plot(request):
 
     result = info["result"]
     plot_url = str(request.url_for("bokeh", path=f"/{plot}"))
-    plot_script = server_document(plot_url, arguments={"jobid": jobid, **result})
+    return server_document(plot_url, arguments={"jobid": jobid, **result, **kwargs})
+
+
+async def explorer_plot(request):
+    plot_script = prepare_plot(request, "explorer")
     return render_template(
         request,
         "analysis/plot.html",
-        plot=plot,
+        plot="explorer",
         plot_script=plot_script,
+    )
+
+
+async def transmission(request):
+    jobid = request.path_params["jobid"]
+    model = request.path_params["model"]
+    plot_script = prepare_plot(
+        request, "spectrogram", jobid=jobid, transmission_model=model
+    )
+    return render_template(
+        request,
+        "analysis/transmission.html",
+        model=model,
+        jobid=jobid,
+        plot_script=plot_script,
+    )
+
+
+async def transmissioncalc(request):
+    from apitofsim.plotting.spectrogram import get_intensities
+    from apitofsim.transmission import transform_intensity
+
+    from vms.result_plots import open_result_db
+
+    jobid = request.path_params.get("jobid")
+    model = request.path_params.get("model")
+
+    if jobid is None or model is None:
+        raise HTTPException(404)
+    job = status.get(jobid)
+    if job is None:
+        raise HTTPException(404)
+    result = job.get("result")
+    experiment = result["experiment"]
+    cluster = result["cluster"]
+    db = open_result_db(database_path, job["result_db_path"])
+    df = get_intensities(
+        db,
+        experiment_id=experiment,
+        cluster_id=cluster,
+        is_single_pathway=False,
+    )
+    transform_intensity(df, model)
+    counts = {
+        "input_clusters": None,
+        "output_clusters_total": None,
+        "output_clusters": [None] * len(df),
+    }
+    intensities = df["intensity"].to_numpy()
+    total_intensity = intensities.sum()
+    if request.query_params.get("input_clusters"):
+        counts["input_clusters"] = float(request.query_params["input_clusters"])
+    if request.query_params.get("output_clusters_total"):
+        counts["output_clusters_total"] = float(
+            request.query_params["output_clusters_total"]
+        )
+
+    if counts["input_clusters"] is not None:
+        counts["output_clusters_total"] = counts["input_clusters"] * total_intensity
+    elif counts["output_clusters_total"] is not None and total_intensity:
+        counts["input_clusters"] = counts["output_clusters_total"] / total_intensity
+
+    clusters = []
+    for _, row in df.iterrows():
+        if row["intensity"] == 0:
+            continue
+        clusters.append(
+            {
+                "cluster": row["product_name"],
+                "mass": row["atomic_mass"],
+                "count": (
+                    counts["input_clusters"] * row["intensity"]
+                    if counts["input_clusters"] is not None
+                    else None
+                ),
+            }
+        )
+
+    return render_template(
+        request,
+        "analysis/transmissioncalc.html",
+        counts=counts,
+        clusters=clusters,
+        jobid=jobid,
+        model=model,
+    )
+
+
+async def spectrogram_plot(request):
+    # Get result db
+    from vms.result_plots import open_result_db
+
+    jobid = request.path_params["jobid"]
+    job = status.get(jobid)
+    if job is None:
+        raise HTTPException(404)
+    db = open_result_db(database_path, job["result_db_path"])
+    result = job["result"]
+    experiment = list(db.iter_configs())
+    if len(experiment) != 1:
+        raise HTTPException(
+            500, detail="Result database has unexpected number of configs"
+        )
+    experiment = experiment[0]
+    voltages = experiment.config["voltages"]
+    cluster_charge = (
+        db.experiment_clusters_query(result["experiment"], result["cluster"])
+        .select("cluster_charge")
+        .fetchone()[0]
+    )
+    plot_script = prepare_plot(request, "spectrogram")
+    return render_template(
+        request,
+        "analysis/spectrogram.html",
+        jobid=jobid,
+        plot_script=plot_script,
+        transmission_models=TRANSMISSION_MODELS,
+        cluster_charge=cluster_charge,
+        voltages=voltages,
     )
 
 
@@ -888,7 +1015,22 @@ app = Starlette(
         Route("/fragments/instrument", instrument_fragment),
         Route("/analysis", analysis),
         Route("/analysis/updates", update_analysis),
-        Route("/analysis/plots/{jobid}/{plot}", result_plot),
+        Route("/analysis/results/{jobid}/explorer", explorer_plot, name="explorer"),
+        Route(
+            "/analysis/results/{jobid}/spectrogram",
+            spectrogram_plot,
+            name="spectrogram",
+        ),
+        Route(
+            "/analysis/results/{jobid}/transmission/{model}",
+            transmission,
+            name="transmission",
+        ),
+        Route(
+            "/analysis/results/{jobid}/transmission/{model}/calc",
+            transmissioncalc,
+            name="transmissioncalc",
+        ),
         Mount("/analysis/bokeh", bokeh_application, name="bokeh"),
         Mount(
             "/static",

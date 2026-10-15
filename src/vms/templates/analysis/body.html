@@ -22,16 +22,13 @@
         {% endcall %}
         <div x-show="results_ready && current_tab == 'explorer'" name="explorer" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
             <template x-if="results_ready && current_tab == 'explorer'">
-                <iframe title="Explorer plot" src="/analysis/plots/{{ jobid }}/explorer" class="w-full min-h-screen border-0"></iframe>
+                <iframe title="Explorer plot" src="/analysis/results/{{ jobid }}/explorer" class="w-full min-h-screen border-0"></iframe>
             </template>
         </div>
         <div x-show="results_ready && current_tab == 'spectrogram'" name="spectrogram" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
             <template x-if="results_ready && current_tab == 'spectrogram'">
-                <iframe title="Spectrogram plot" src="/analysis/plots/{{ jobid }}/spectrogram" class="w-full min-h-screen border-0"></iframe>
+                <iframe title="Spectrogram plot" src="/analysis/results/{{ jobid }}/spectrogram" class="w-full min-h-screen border-0"></iframe>
             </template>
-        </div>
-        <div x-show="results_ready && current_tab == 'but-wait'" name="but-wait" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
-            <p>Coming soon.</p>
         </div>
     </div>
 </div>
