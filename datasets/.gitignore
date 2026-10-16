@@ -1,10 +1,10 @@
 alfaouri2022/
-alfaouri2022.7z
+alfaouri2022.zstd
 atomprod/
-atomprod.7z
+atomprod.zstd
 besel2020/
-besel2020.7z
+besel2020.zstd
 tunning/
-tunning.7z
+tunning.zstd
 *.duckdb
 *.sqlite.db
