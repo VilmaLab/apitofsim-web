@@ -6,10 +6,10 @@ IFS=$'\n\t'
 export RCLONE_S3_ENDPOINT=https://a3s.fi
 rclone copy :s3,env_auth:apitofsim-data .
 
-7z x -y alfaouri2022.7z -oalfaouri2022
-7z x -y atomprod.7z -oatomprod
-7z x -y besel2020.7z -obesel2020
-7z x -y tunning.7z -otunning
+for ds in alfaouri2022 atomprod besel2020 tunning; do
+    mkdir -p "$ds"
+    zstd -dc "$ds.zstd" | tar -x -C "$ds"
+done
 
 (cd alfaouri2022 && apitofsim generate pathways --guess-prefix gaussian pathways.csv clusters.csv **/*.log)
 (cd atomprod && apitofsim generate pathways --guess-prefix orca pathways.csv clusters.csv **/*.out)
