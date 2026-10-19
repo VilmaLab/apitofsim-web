@@ -4,7 +4,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 export RCLONE_S3_ENDPOINT=https://a3s.fi
-rclone copy :s3,env_auth:apitofsim-data .
+rclone copy --ignore-checksum :s3,env_auth:apitofsim-data --include '*.zstd' .
 
 for ds in alfaouri2022 atomprod besel2020 tunning; do
     mkdir -p "$ds"
