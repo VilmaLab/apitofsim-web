@@ -32,7 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 deploy = [
-    "hypercorn>=0.17.0",
+    "uvicorn>=0.52.1",
 ]
 
 [tool.pytest.ini_options]

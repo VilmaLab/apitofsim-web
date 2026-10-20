@@ -38,6 +38,7 @@ COPY --from=builder /tmp/apitofsim-web/fetch-and-start.sh /env/bin/
 # Place executables in the environment at the front of the path
 ENV PATH="/env/bin:/tools/bin:$PATH"
 ENV DATABASE_DIR="/database/"
+ENV RESULTS="/database/results"
 ENV RAY_USE_PIP="1"
 
 # Run the ASGI application
