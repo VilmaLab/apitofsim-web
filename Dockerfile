@@ -40,6 +40,15 @@ ENV PATH="/env/bin:/tools/bin:$PATH"
 ENV DATABASE_DIR="/database/"
 ENV RESULTS="/database/results"
 ENV RAY_USE_PIP="1"
+# uvicorn only honours X-Forwarded-Proto from these peers. The TLS-terminating
+# proxy in front of the app is never loopback, so trust it, otherwise url_for
+# builds http:// URLs for an https:// page (blocked as mixed content).
+ENV FORWARDED_ALLOW_IPS="*"
+# numba and matplotlib need writable cache directories. The image is owned by the
+# build user, but OpenShift runs the container as an arbitrary UID, so the
+# in-tree caches fail (numba even raises: "cannot cache function ...").
+ENV NUMBA_CACHE_DIR="/tmp/numba-cache"
+ENV MPLCONFIGDIR="/tmp/matplotlib"
 
 # Run the ASGI application
 EXPOSE 8080
