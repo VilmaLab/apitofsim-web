@@ -69,5 +69,5 @@ apitofsim = [
   # be written with De Morgan (or the sdist used as the only source).
   # { url = "https://github.com/VilmaLab/apitofsim/archive/refs/tags/v0.21.0.tar.gz", marker = "(sys_platform != 'linux' or platform_machine != 'x86_64') and (sys_platform != 'darwin' or platform_machine != 'arm64') and (sys_platform != 'win32' or platform_machine != 'AMD64')" },
 ]
-apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git" }
+apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git", rev = "28510d9" }
 workingtitle = { git = "https://github.com/frankier/workingtitle.git" }
