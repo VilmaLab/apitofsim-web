@@ -1,10 +1,7 @@
-<h1 id="status" class="text-5xl font-bold" x-show="job_status != 'failed' && job_status != 'incomplete'">Running simulation...</h1>
-<p class="text-4xl">Iterations: <span id="iterations">{{ iterations }}/{{ realizations }}</span></p>
-<p class="text-4xl">Fragmented: {{ fragmented }}</p>
-<p class="text-4xl">Survived: {{ survived }}</p>
-<p class="text-4xl">Survival Ratio: {{ ratio }}</p>
-<div class="mv-2">
-    <a class="px-4 py-3 bg-gray-50 hover:text-gray-900 hover:bg-gray-100" @click="log_open = !log_open" href="#">Toggle log</a>
-    <pre class="mh-2" x-show="log_open">{% for line in log %}{{ line }}
-{% endfor %}</pre>
+<div class="m-4">
+    <h1 id="status" class="text-4xl my-4" x-show="job_status != 'failed' && job_status != 'incomplete'">Running simulation...</h1>
+    <p class="text-2xl my-2">Iterations: <span id="iterations">{{ iterations }}/{{ realizations }}</span></p>
+    <p class="text-2xl my-2">Fragmented: {{ fragmented }}</p>
+    <p class="text-2xl my-2">Survived: {{ survived }}</p>
+    <p class="text-2xl my-2">Survival Ratio: {{ ratio|round(3) }}</p>
 </div>

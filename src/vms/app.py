@@ -253,8 +253,9 @@ def _run_simulation(
     database_path,
     result_db_path,
     context,
+    start_time,
 ):
-    from time import sleep
+    from time import sleep, time
 
     from apitofsim.api import (
         CollisionEvent,
@@ -288,7 +289,7 @@ def _run_simulation(
         "apitof": "pending",
     }
 
-    queue = "Queuing"
+    queue = ""
     skimmer = ""
     densityandr = ""
     apitof = ""
@@ -331,23 +332,30 @@ def _run_simulation(
     def update_pane(message):
         return message.encode("utf-8"), render_template(f"analysis/{message}.html")
 
+    def fmt_duration(took):
+        return f"{took:.1f}s" if took >= 1 else f"{took * 1000:.0f}ms"
+
     skimmer_np = k_rates = cluster_dos = None
     mass_spec = None
+    skimmer_start = None
     while 1:
         if processing == "queue":
+            context["stage"] = processing
             yield b"stage", processing
             yield update_pane("queue")
             sleep(1)
             statuses["queue"] = "done"
-            queue = "Queued after XXXs"
+            took_str = fmt_duration(time() - start_time)
+            queue = f"Queued after {took_str}"
             yield update_pane("queue")
             statuses["skimmer"] = "processing"
             processing = "skimmer"
             yield update_pane("tabs")
         elif processing == "skimmer":
+            skimmer_start = time()
+            skimmer = "loading"
             context["stage"] = processing
             yield b"stage", processing
-            skimmer += "Skimming...<br>"
             yield update_pane("skimmer")
             skimmer_np, k_rates, cluster_dos = preparer.run_preliminaries(
                 config,
@@ -356,10 +364,12 @@ def _run_simulation(
                 cached_densityandrate=histogram_precision,
                 show_progress=False,
             )
+            skimmer = "Finished after " + took_str
             yield update_pane("skimmer")
             statuses["skimmer"] = "done"
             statuses["apitof"] = "processing"
             processing = "apitof"
+            took_str = fmt_duration(time() - skimmer_start)
             yield update_pane("tabs")
             mass_spec = MassSpectrometer(
                 skimmer_np,
@@ -406,7 +416,7 @@ def _run_simulation(
                 realizations,
                 sample_mode=2,
                 strict=True,
-                logconf=(0, True),
+                logconf=(1, True),
             ) as it:
                 for result in it:
                     if isinstance(
@@ -442,7 +452,7 @@ def _run_simulation(
                         event_recorder(result)
                     elif isinstance(result, MassSpecLogItem):
                         log.append(f"{result.type}: {result.name}")
-                        yield update_pane("apitof")
+                        yield b"apitoflog", "\n".join(log)
             if experiment_result_id is None:
                 raise RuntimeError("Simulation ended without a final result")
             context["result"] = {
@@ -469,6 +479,7 @@ def start_job(job_id):
         **info["arguments"],
         database_path=database_path,
         result_db_path=info["result_db_path"],
+        start_time=info["start_time"],
     )
     new_info = {
         **info,  # type: ignore
@@ -510,6 +521,8 @@ def render_template(request, path, **context):
 
 @csrf_protect
 async def settings(request):
+    from time import time
+
     form = await SettingsForm.from_formdata(request)
     if await form.validate_on_submit():
         arguments = form.get_data()
@@ -521,9 +534,10 @@ async def settings(request):
             "arguments": arguments,
             "result_db_path": str(result_db_path),
             "last_update": {},
+            "start_time": time(),
         }
         pump_jobs()
-        return RedirectResponse("/analysis?jobid=" + job_id.hex, status_code=303)
+        return RedirectResponse(f"/analysis?jobid={job_id.hex}#queue", status_code=303)
     context = {"primary_cluster": None}
     if (
         request.method == "POST"
@@ -692,6 +706,8 @@ async def instrument_fragment(request):
 
 
 def process_jobid(request):
+    from time import time
+
     jobid = request.query_params.get("jobid")
     if jobid is None:
         raise HTTPException(400, detail="Missing jobid parameter")
@@ -704,7 +720,11 @@ def process_jobid(request):
             failure = json.loads(failure_path(result_db_path).read_text())
         except FileNotFoundError, ValueError:
             raise HTTPException(404, detail="Job ID not found") from None
-        info = {"result_db_path": str(result_db_path), "last_update": {}}
+        info = {
+            "result_db_path": str(result_db_path),
+            "last_update": {},
+            "start_time": time(),
+        }
         apply_failure(info, failure)
         status[jobid] = info
     return jobid

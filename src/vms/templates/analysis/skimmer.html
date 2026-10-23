@@ -1,12 +1,17 @@
 <div class="m-4 text-center">
     <h1 class="text-2xl my-8">
-        Skimmer simulation using quasi-one-dimensional isentropic nozzle flow
+        Skimmer simulation
     </h1>
+    <p class="my-4">
+        This simulation uses quasi-one-dimensional isentropic nozzle flow.
+    </p>
     <svg-focus class="w-56 shrink-0" diagram="#diagram" region="#region-skimmer" padding="60" title="Skimmer geometry"></svg-focus>
     {% if skimmer == 'loading' %}
         <div class="loader-queue my-4 mx-auto h-8"></div>
         <p class="italic text-lg">Loading...</p>
     {% else %}
-        <p>{{ skimmer }}</p>
+        <p class="italic my-6 text-lg">
+            {{ skimmer }}
+        </p>
     {% endif %}
 </div>

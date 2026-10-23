@@ -1,1 +1,12 @@
-{{ queue }}
+<div class="p-8 text-center">
+    {% if queue %}
+        <p class="italic text-lg">
+            {{ queue }}
+        </p>
+    {% else %}
+        <div class="loader-queue my-6 mx-auto h-8"></div>
+        <p class="italic my-6 text-lg">
+            Your simulation is in the queue.
+        </p>
+    {% endif %}
+</div>
