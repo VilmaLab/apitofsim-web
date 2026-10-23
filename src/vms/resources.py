@@ -57,19 +57,30 @@ async def ensure_assets_context(app):
     yield
 
 
-@asynccontextmanager
-async def ray_context(app):
-    runtime_env = {
-        "worker_process_setup_hook": worker_process_setup_hook,
-    }
+project_dir = Path(__file__).resolve().parents[2]
+
+
+def make_runtime_env():
+    runtime_env = {"worker_process_setup_hook": worker_process_setup_hook}
+    # A driver started with `uv run` also runs its workers under `uv run`, which
+    # then syncs the worker environment from the project. Package the project
+    # explicitly so workers see uv.lock and install the same versions as the
+    # driver instead of resolving fresh ones.
+    if (project_dir / "pyproject.toml").is_file():
+        runtime_env["working_dir"] = str(project_dir)
     if os.environ.get("RAY_USE_PIP") == "1":
         runtime_env["pip"] = ["jinja2", "minify-html-onepass"]
+    return runtime_env
+
+
+@asynccontextmanager
+async def ray_context(app):
     my_ray = await to_thread.run_sync(
         partial(
             ray.init,
             address=environ.get("RAY_ADDRESS", "local"),
             log_to_driver=False,
-            runtime_env=runtime_env,
+            runtime_env=make_runtime_env(),
         )
     )
     with my_ray:

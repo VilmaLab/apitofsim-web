@@ -3,7 +3,6 @@
 !.pixi/config.toml
 /cenv/
 /.venv/
-/uv.lock
 /node_modules/
 /.workingtitle-build/
 /src/vms/static/index.css
