@@ -3,7 +3,7 @@ import pytest
 from apitofsim.workflow import sql_files_nofk as sql
 from apitofsim.workflow.db import SuperClusterDatabase
 
-from vms.app import current_db
+from vms.db import current_db
 from vms.forms import get_default_histogram_precision, get_histogram_precision_choices
 
 

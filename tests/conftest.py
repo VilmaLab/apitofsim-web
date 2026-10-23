@@ -124,7 +124,7 @@ def output_db(tmp_path):
     import duckdb
     from apitofsim.workflow import sql_files_nofk as sql
 
-    from vms.app import setup_result_db
+    from vms.jobs.run import setup_result_db
 
     clusters = tmp_path / "clusters.duckdb"
     with duckdb.connect(str(clusters)) as connection:

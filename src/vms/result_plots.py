@@ -21,7 +21,10 @@ def open_result_db(cluster_path, result_path):
     return db
 
 
-def make_bokeh_app(jobs, cluster_path):
+def make_bokeh_app(cluster_path):
+    from vms.jobs import get_status_dict
+
+    jobs = get_status_dict()
     databases = {}
 
     def database_for(doc):

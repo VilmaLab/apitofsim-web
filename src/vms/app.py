@@ -4,515 +4,45 @@ import tempfile
 os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 os.environ["RAY_DISABLE_FAILURE_SIGNAL_HANDLER"] = "1"
 
-import json
 import os
-from contextlib import asynccontextmanager
-from contextvars import ContextVar
-from functools import partial
 from io import BytesIO
 from os import environ
 from pathlib import Path
 from uuid import uuid4
 
-import anyio
 import holoviews as hv
 import matplotlib
 import numpy
-import ray
-from anyio import to_thread
 from apitofsim.api import ureg
 from apitofsim.transmission import TRANSMISSION_MODELS
-from apitofsim.workflow.db import SuperClusterDatabase, guess_ase_db_filename
 from lxml import etree
 from pint import set_application_registry
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from starlette.responses import HTMLResponse, RedirectResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
-from starlette.templating import Jinja2Templates
 from starlette_wtf import CSRFProtectMiddleware, csrf_protect
 
-from .assets import ASSETS
 from .cluster_info import enrich_cluster
+from .db import DatabaseMiddleware, get_connection
 from .forms import (
     INSTRUMENT_FORMS,
     SettingsForm,
     instrument_form_class,
     settings_errors,
 )
-from .job_failures import describe_failure, failure_path, save_failure, validate_output
-from .markdown_ext import MarkdownExtension
-from .pintweb.alpine import quantity_display
-from .result_plots import make_bokeh_app
-
-database_path = environ["DATABASE"]
-results_path = environ["RESULTS"]
+from .jobs import get_status_dict, pump_jobs, update_analysis
+from .resources import bokeh_application, lifespan, templates
+from .settings import database_path, results_path
 
 matplotlib.use("SVG")
 hv.extension("matplotlib")  # type: ignore
 
 set_application_registry(ureg)
-
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-jinja_loader = templates.env.loader
-current_db = ContextVar("current_db")
-status = {}
-bokeh_application = make_bokeh_app(status, database_path)
-
-
-def add_jinja_extensions(env):
-    env.add_extension(MarkdownExtension)
-    env.filters["sign"] = lambda x: "+" if x > 0 else "-" if x < 0 else "0"
-
-
-add_jinja_extensions(templates.env)
-
-
-def connect_db():
-    return SuperClusterDatabase(
-        database_path, ase_filename=guess_ase_db_filename(database_path), readonly=True
-    )
-
-
-class DatabaseMiddleware:
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope.get("path", "").startswith(
-            "/analysis/bokeh/"
-        ):
-            await self.app(scope, receive, send)
-            return
-        token = current_db.set(connect_db())
-        try:
-            await self.app(scope, receive, send)
-        finally:
-            current_db.reset(token)
-
-
-def worker_process_setup_hook():
-    from apitofsim.api import ureg
-    from pint import set_application_registry
-
-    set_application_registry(ureg)
-
-
-@asynccontextmanager
-async def lifespan(app):
-    await to_thread.run_sync(ASSETS.ensure_built)
-    runtime_env = {
-        "worker_process_setup_hook": worker_process_setup_hook,
-    }
-    if os.environ.get("RAY_USE_PIP") == "1":
-        runtime_env["pip"] = ["jinja2", "minify-html-onepass"]
-    my_ray = await to_thread.run_sync(
-        partial(
-            ray.init,
-            address=environ.get("RAY_ADDRESS", "local"),
-            log_to_driver=False,
-            runtime_env=runtime_env,
-        )
-    )
-    print("Dashboard url", my_ray.dashboard_url)
-    # XXX: This complains about blocking in debug mode on shutdown since the shutdown blocks
-    # Maybe try to get ray to add an __aexit__ method?
-    with my_ray:
-        await bokeh_application.core.start()
-        try:
-            yield
-        finally:
-            await bokeh_application.core.stop()
-
-
-def build_input_pathways(
-    config,
-    histograms,
-    cluster_indexed,
-    name_lookup,
-    pathway_lookup,
-    k_rates,
-    cluster_dos,
-):
-    from apitofsim.api import (
-        Histogram,
-        MassSpecInputFragmentationPathway,
-        scaled_density,
-        scaled_rate_const,
-    )
-
-    density_hist_params, rate_hist_params = histograms
-    retval = None
-    for pathway_id, (
-        cluster_id,
-        product1_id,
-        product2_id,
-    ) in pathway_lookup.items():
-        cluster = cluster_indexed[cluster_id]
-        if retval is None:
-            density_cluster = cluster_dos[cluster_id]
-            density_hist = scaled_density(
-                Histogram.from_mesh(
-                    *density_hist_params,
-                    density_cluster,
-                )
-            )
-            retval = {
-                "pathways": [],
-                "cluster": cluster,
-                "cluster_id": cluster_id,
-                "cluster_label": name_lookup[cluster_id],
-                "density_hist": density_hist,
-                "product_labels": [],
-                "pathway_ids": [],
-                # TODO: Should this not be included in ClusterData by now?
-                "cluster_charge_sign": -1,
-            }
-        product1 = cluster_indexed[product1_id]
-        product2 = cluster_indexed[product2_id]
-        rate_const = k_rates[pathway_id]
-        rate_hist = scaled_rate_const(
-            Histogram.from_mesh(
-                *rate_hist_params,
-                rate_const,
-            )
-        )
-        retval["pathways"].append(
-            MassSpecInputFragmentationPathway(cluster, product1, product2, rate_hist)
-        )
-        retval["pathway_ids"].append(pathway_id)
-    return retval
-
-
-def setup_result_db(database_path, result_db_path):
-    # Use DDL without foreign keys since they're not supported across multiple schemas in DuckDB
-    import apitofsim.workflow.sql_files_nofk as sql
-    import duckdb
-    from apitofsim.workflow.db import RealizationDatabase
-
-    database_path = str(database_path).replace("'", "''")
-    result_db_path = str(result_db_path).replace("'", "''")
-    duckdb_db = duckdb.connect()
-    duckdb_db.execute(f"ATTACH '{database_path}' AS clusters_db (READ_ONLY);")
-    duckdb_db.execute(f"ATTACH '{result_db_path}' AS results_db;")
-    duckdb_db.execute("USE results_db;")
-    duckdb_db.execute("SET search_path = 'results_db,clusters_db'")
-    ddl = "\n".join(
-        [
-            sql.experiment,
-            sql.experiment_report,
-            sql.realizations,
-            sql.event_report,
-        ]
-    )
-    duckdb_db.execute(ddl)
-
-    return RealizationDatabase(((duckdb_db, None)))
-
-
-def simulation_events(**arguments):
-    context = {"stage": "queue"}
-    result_db_path = arguments["result_db_path"]
-    failure = None
-    try:
-        yield from _run_simulation(context=context, **arguments)
-    except Exception as exc:
-        failure = describe_failure(exc, context, result_db_path)
-        db = context.get("db")
-        if db is not None and "run_id" in context:
-            try:
-                db.record_failure(
-                    context["run_id"],
-                    failure["exception_type"],
-                    json.dumps(failure),
-                    cluster_id=context.get("cluster_id"),
-                )
-            except Exception as persistence_exc:
-                failure["database_error"] = str(persistence_exc)
-        save_failure(result_db_path, failure)
-    finally:
-        if "db" in context:
-            context["db"].close()
-    if failure is not None:
-        yield b"failure", json.dumps(failure)
-
-
-@ray.remote
-def run_simulation(**arguments):
-    yield from simulation_events(**arguments)
-
-
-def _run_simulation(
-    pathways,
-    histograms,
-    histogram_precision,
-    config,
-    database_path,
-    result_db_path,
-    context,
-    start_time,
-):
-    from time import sleep, time
-
-    from apitofsim.api import (
-        CollisionEvent,
-        EscapeEvent,
-        FragmentationEvent,
-        InitEvent,
-        MassSpecFinalResult,
-        MassSpecIntermediateCounter,
-        MassSpecLogItem,
-        MassSpectrometer,
-        mass_spec_iter,
-    )
-    from apitofsim.workflow.db import EventRecorder
-    from apitofsim.workflow.runners import DerivedDataPreparer
-    from jinja2 import Environment
-    from minify_html_onepass import minify
-
-    context["counts"] = {"requested": int(config["N"])}
-    db = setup_result_db(database_path, result_db_path)
-    context["db"] = db
-    config_id = db.insert_config("webrun", config)
-    current_run_id = db.insert_run(config_id)
-    context["run_id"] = current_run_id
-    jinja_env = Environment(loader=jinja_loader)
-
-    processing = "queue"
-    statuses = {
-        "queue": "processing",
-        "skimmer": "pending",
-        "densityandr": "pending",
-        "apitof": "pending",
-    }
-
-    queue = ""
-    skimmer = ""
-    densityandr = ""
-    apitof = ""
-
-    log = []
-    survived = 0
-    fragmented = 0
-    iterations = 0
-
-    preparer = DerivedDataPreparer(db)
-
-    cluster_indexed, name_lookup, pathway_lookup = db.get_all_lookups(pathways=pathways)
-
-    def render_template(path):
-        html = jinja_env.get_template(path).render(
-            processing=processing,
-            statuses=statuses,
-            queue=queue,
-            skimmer=skimmer,
-            densityandr=densityandr,
-            apitof=apitof,
-            log=log,
-            survived=survived,
-            fragmented=fragmented,
-            realizations=config["N"],
-            iterations=iterations,
-            ratio=survived / iterations if iterations > 0 else 0,
-            completed=statuses["apitof"] == "done",
-        )
-        try:
-            return minify(html)
-        except SyntaxError as e:
-            # XXX: minify raises the builtin SyntaxError for malformed markup.
-            # Ray's RayTaskError wrapper doesn't copy SyntaxError's msg/lineno
-            # slots, and traceback.py reads those slots instead of __str__ for
-            # anything deriving from SyntaxError, so the message is lost as
-            # "<no detail available>". Re-raise as something unremarkable.
-            raise RuntimeError(f"Could not minify {path}: {e.msg}") from None
-
-    def update_pane(message):
-        return message.encode("utf-8"), render_template(f"analysis/{message}.html")
-
-    def fmt_duration(took):
-        return f"{took:.1f}s" if took >= 1 else f"{took * 1000:.0f}ms"
-
-    skimmer_np = k_rates = cluster_dos = None
-    mass_spec = None
-    skimmer_start = None
-    while 1:
-        if processing == "queue":
-            context["stage"] = processing
-            yield b"stage", processing
-            yield update_pane("queue")
-            sleep(1)
-            statuses["queue"] = "done"
-            took_str = fmt_duration(time() - start_time)
-            queue = f"Queued after {took_str}"
-            yield update_pane("queue")
-            statuses["skimmer"] = "processing"
-            processing = "skimmer"
-            yield update_pane("tabs")
-        elif processing == "skimmer":
-            skimmer_start = time()
-            skimmer = "loading"
-            context["stage"] = processing
-            yield b"stage", processing
-            yield update_pane("skimmer")
-            skimmer_np, k_rates, cluster_dos = preparer.run_preliminaries(
-                config,
-                cluster_indexed,
-                pathway_lookup=pathway_lookup,
-                cached_densityandrate=histogram_precision,
-                show_progress=False,
-            )
-            skimmer = "Finished after " + took_str
-            yield update_pane("skimmer")
-            statuses["skimmer"] = "done"
-            statuses["apitof"] = "processing"
-            processing = "apitof"
-            took_str = fmt_duration(time() - skimmer_start)
-            yield update_pane("tabs")
-            mass_spec = MassSpectrometer(
-                skimmer_np,
-                config["lengths"],
-                config["voltages"],
-                config["T"],
-                config["pressures"],
-                quadrupole=config["quadrupole"],
-            )
-        elif processing == "apitof":
-            context["stage"] = processing
-            yield b"stage", processing
-            yield update_pane("apitof")
-            yield update_pane("tabs")
-            group = build_input_pathways(
-                config,
-                histograms,
-                cluster_indexed,
-                name_lookup,
-                pathway_lookup,
-                k_rates,
-                cluster_dos,
-            )
-            assert group is not None
-            context["cluster_id"] = group["cluster_id"]
-
-            from apitofsim.api import MassSpecSubstanceSingleInput
-
-            realizations = config["N"]
-            subs = MassSpecSubstanceSingleInput(
-                group["cluster"],
-                group["pathways"],
-                config["gas"],
-                group["density_hist"],
-                group["cluster_charge_sign"],
-            )
-
-            assert mass_spec is not None
-            event_recorder = EventRecorder(db, group["pathway_ids"])
-            experiment_result_id = None
-            with mass_spec_iter(
-                mass_spec,
-                subs,
-                realizations,
-                sample_mode=2,
-                strict=True,
-                logconf=(1, True),
-            ) as it:
-                for result in it:
-                    if isinstance(
-                        result, (MassSpecIntermediateCounter, MassSpecFinalResult)
-                    ):
-                        context["counts"]["completed"] = int(
-                            result.counters.n_realizations
-                        )
-                    if isinstance(result, MassSpecIntermediateCounter):
-                        counters = result.counters
-                        survived = counters.n_fragmented_total.sum()
-                        fragmented = counters.n_escaped_total
-                        iterations = survived + fragmented
-                        yield update_pane("apitof")
-                    elif isinstance(result, MassSpecFinalResult):
-                        counters = result.counters
-                        survived = counters.n_fragmented_total.sum()
-                        fragmented = counters.n_escaped_total
-                        iterations = survived + fragmented
-                        experiment_result_id = db.record_result(
-                            current_run_id,
-                            counters,
-                            timings=result.timings,
-                            cluster_id=group["cluster_id"],
-                            pathway_ids=group["pathway_ids"],
-                        )
-                        event_recorder.relate_realizations(experiment_result_id)
-                        yield update_pane("apitof")
-                    elif isinstance(
-                        result,
-                        (InitEvent, CollisionEvent, FragmentationEvent, EscapeEvent),
-                    ):
-                        event_recorder(result)
-                    elif isinstance(result, MassSpecLogItem):
-                        log.append(f"{result.type}: {result.name}")
-                        yield b"apitoflog", "\n".join(log)
-            if experiment_result_id is None:
-                raise RuntimeError("Simulation ended without a final result")
-            context["result"] = {
-                "experiment": current_run_id,
-                "cluster": group["cluster_id"],
-            }
-            validate_output(db, counters, realizations, context)
-            break
-    db.db.execute("CHECKPOINT results_db")
-    db.close()
-    context.pop("db")
-    yield (
-        b"result",
-        json.dumps({"experiment": current_run_id, "cluster": group["cluster_id"]}),
-    )
-    statuses["apitof"] = "done"
-    yield update_pane("tabs")
-
-
-def start_job(job_id):
-    info = status[job_id]  # type: ignore
-
-    simulation_call = run_simulation.remote(
-        **info["arguments"],
-        database_path=database_path,
-        result_db_path=info["result_db_path"],
-        start_time=info["start_time"],
-    )
-    new_info = {
-        **info,  # type: ignore
-        "status": "running",
-        "task": simulation_call,
-        "aiter": aiter(simulation_call),
-    }
-    status[job_id] = new_info  # type: ignore
-    return new_info
-
-
-def pump_jobs():
-
-    # XXX: 0.01s per job. Run in thread?
-    for job_id, info in status.items():  # type: ignore
-        if info["status"] == "pending":
-            start_job(job_id)
-
-
-def join_abbrv_filter(s, sep="<br>"):
-    from itertools import chain
-
-    def joined(s):
-        return sep.join((str(e) for e in s))
-
-    if len(s) <= 5:
-        return joined(s)
-    else:
-        return joined(chain(s[:2], ["..."], s[-2:]))
-
-
-templates.env.filters["join_abbrv"] = join_abbrv_filter
-templates.env.filters["quantity_display"] = quantity_display
+status = get_status_dict()
 
 
 def render_template(request, path, **context):
@@ -559,7 +89,7 @@ async def settings(request):
 def hypothetical_spectrogram(cluster_ids, masses, max_mass=None):
     if max_mass is None:
         max_mass = (
-            current_db.get()
+            get_connection()
             .db.sql("select max(atomic_mass) from cluster")
             .fetchone()[0]
         )
@@ -621,7 +151,7 @@ async def pathways_fragment(request):
 
 
 def pathways_context(form, cluster_id, *, submitted=False):
-    db = current_db.get()
+    db = get_connection()
     cluster_df = db.clusters_df(parent=cluster_id)
     cluster_ids = cluster_df["id"].to_numpy()
     masses = cluster_df["atomic_mass"].to_numpy()
@@ -684,7 +214,7 @@ async def hypothetical_spectrogram_fragment(request):
         ]
     )
     cluster_infos = (
-        current_db.get()
+        get_connection()
         .clusters_query(pathways=pathway_ids)
         .select("id, atomic_mass")
         .fetchnumpy()
@@ -705,60 +235,11 @@ async def instrument_fragment(request):
     )
 
 
-def process_jobid(request):
-    from time import time
-
-    jobid = request.query_params.get("jobid")
-    if jobid is None:
-        raise HTTPException(400, detail="Missing jobid parameter")
-    if jobid not in status:  # type: ignore
-        # Only accept the UUID hex used for result filenames.
-        if len(jobid) != 32 or any(c not in "0123456789abcdef" for c in jobid):
-            raise HTTPException(404, detail="Job ID not found")
-        result_db_path = Path(results_path).with_name(f"{jobid}.duckdb")
-        try:
-            failure = json.loads(failure_path(result_db_path).read_text())
-        except FileNotFoundError, ValueError:
-            raise HTTPException(404, detail="Job ID not found") from None
-        info = {
-            "result_db_path": str(result_db_path),
-            "last_update": {},
-            "start_time": time(),
-        }
-        apply_failure(info, failure)
-        status[jobid] = info
-    return jobid
-
-
-def failure_statuses(failure):
-    stages = ["queue", "skimmer", "apitof"]
-    stage = failure["stage"]
-    index = stages.index(stage) if stage in stages else 2
-    return {
-        name: ("done" if i < index else failure["status"] if i == index else "pending")
-        for i, name in enumerate(stages)
-    }
-
-
-def apply_failure(info, failure):
-    info["status"] = failure["status"]
-    info["failure"] = failure
-    if "result" in failure:
-        info["result"] = failure["result"]
-    else:
-        info.pop("result", None)
-    info["last_update"][b"failure"] = templates.env.get_template(
-        "analysis/failure.html"
-    ).render(failure=failure)
-    info["last_update"][b"tabs"] = templates.env.get_template(
-        "analysis/tabs.html"
-    ).render(
-        statuses=failure_statuses(failure),
-        completed="result" in info,
-    )
-
-
 async def analysis(request):
+    from vms.jobs.failures import failure_statuses
+
+    from .jobs import process_jobid
+
     jobid = process_jobid(request)
     info = status[jobid]
     completed = "result" in info
@@ -930,100 +411,6 @@ async def spectrogram_plot(request):
         transmission_models=TRANSMISSION_MODELS,
         cluster_charge=cluster_charge,
         voltages=voltages,
-    )
-
-
-def sse_safe(data, event=None):
-    for line in data.split("\n"):
-        yield b"data: "
-        yield line.encode("utf-8")
-        yield b"\n"
-    if event is not None:
-        yield b"event: "
-        yield event
-    yield b"\r\n\r\n"
-
-
-def sse_yolo(data, event=None):
-    for line in data.split("\n"):
-        yield b"data: "
-        yield line.encode("utf-8")
-        yield b"\n"
-    if event is not None:
-        yield b"event: "
-        yield event
-    yield b"\r\n\r\n"
-
-
-async def update_analysis(request):
-    if "text/event-stream" not in request.headers.get("accept", ""):
-        raise HTTPException(400)
-
-    jobid = process_jobid(request)
-
-    async def send_events():
-        sent_something = False
-        while True:
-            info = status[jobid]  # type: ignore
-            if info["status"] == "pending":
-                await anyio.sleep(1)
-            elif info["status"] == "running":
-                if not sent_something:
-                    if "last_update" in info:
-                        for event, data in info["last_update"].items():
-                            for bit in sse_safe(data, event):
-                                yield bit
-                sent_something = True
-                try:
-                    # Really awaiting here(!)
-                    event, data = await (await anext(info["aiter"]))
-                except StopAsyncIteration:
-                    if "result" not in info:
-                        exc = RuntimeError(
-                            "Simulation stream ended without a final result"
-                        )
-                        failure = describe_failure(exc, info, info["result_db_path"])
-                        save_failure(info["result_db_path"], failure)
-                        apply_failure(info, failure)
-                        continue
-                    info["status"] = "done"
-                    for bit in sse_safe("", event=b"done"):
-                        yield bit
-                    return
-                except Exception as exc:
-                    # Worker crashes and Ray transport errors never reach the
-                    # worker's own exception handler.
-                    failure = describe_failure(exc, info, info["result_db_path"])
-                    save_failure(info["result_db_path"], failure)
-                    apply_failure(info, failure)
-                    continue
-                if event == b"stage":
-                    info["stage"] = data
-                    continue
-                if event == b"failure":
-                    apply_failure(info, json.loads(data))
-                    continue
-                if event == b"result":
-                    info["result"] = json.loads(data)
-                    continue
-                info["last_update"][event] = data
-                for bit in sse_safe(data, event):
-                    yield bit
-            elif info["status"] in ("done", "failed", "incomplete"):
-                for event, data in info["last_update"].items():
-                    for bit in sse_safe(data, event):
-                        yield bit
-                for bit in sse_safe("", event=b"done"):
-                    yield bit
-                return
-
-    return StreamingResponse(
-        send_events(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
     )
 
 

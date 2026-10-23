@@ -1,7 +1,7 @@
 import asyncio
-import importlib
 import json
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from urllib.parse import urlparse
 
 import duckdb
@@ -11,20 +11,29 @@ from apitofsim.api import Counters
 from playwright.sync_api import expect
 from starlette.requests import Request
 
-from vms.job_failures import IncompleteOutputError, failure_path, validate_output
+from vms import settings
+from vms.app import analysis, app
+from vms.jobs import run as job_runner
+from vms.jobs.failures import IncompleteOutputError, failure_path, validate_output
+from vms.jobs.queue import get_status_dict
+from vms.jobs.run import setup_result_db, simulation_events, update_analysis
+from vms.resources import templates
 
-app_module = importlib.import_module("vms.app")
 JOB_ID = "a" * 32
+VMS_DIR = Path(__file__).resolve().parents[1] / "src/vms"
 
 
 @pytest.fixture
 def job(monkeypatch, tmp_path):
     result_path = tmp_path / f"{JOB_ID}.duckdb"
-    monkeypatch.setattr(app_module, "results_path", str(tmp_path / "results.duckdb"))
-    monkeypatch.setattr(app_module, "status", {})
+    monkeypatch.setattr(settings, "results_path", str(tmp_path / "results.duckdb"))
+    # The app and the job queue share one status table.
+    status = get_status_dict()
+    status.clear()
     info = {"status": "running", "result_db_path": str(result_path), "last_update": {}}
-    app_module.status[JOB_ID] = info
-    return result_path, info
+    status[JOB_ID] = info
+    yield result_path, info
+    status.clear()
 
 
 def request(path="/analysis/updates"):
@@ -38,8 +47,8 @@ def request(path="/analysis/updates"):
             "query_string": f"jobid={JOB_ID}".encode(),
             "headers": [(b"accept", b"text/event-stream")],
             "server": ("testserver", 80),
-            "app": app_module.app,
-            "router": app_module.app.router,
+            "app": app,
+            "router": app.router,
             "session": {},
         }
     )
@@ -47,7 +56,7 @@ def request(path="/analysis/updates"):
 
 def read_stream():
     async def read():
-        response = await app_module.update_analysis(request())
+        response = await update_analysis(request())
         return b"".join([chunk async for chunk in response.body_iterator]).decode()
 
     return asyncio.run(read())
@@ -80,15 +89,15 @@ def test_worker_failure_saved_in_database_and_sidecar(monkeypatch, job, test_db)
     result_path, _ = job
 
     def broken_run(context, **arguments):
-        db = app_module.setup_result_db(str(test_db), str(result_path))
+        db = setup_result_db(str(test_db), str(result_path))
         context["db"] = db
         context["run_id"] = db.insert_run(db.insert_config("test", {}))
         context["stage"] = "skimmer"
         yield b"stage", "skimmer"
         raise ValueError("Injected preliminary failure")
 
-    monkeypatch.setattr(app_module, "_run_simulation", broken_run)
-    events = list(app_module.simulation_events(result_db_path=str(result_path)))
+    monkeypatch.setattr(job_runner, "_run_simulation", broken_run)
+    events = list(simulation_events(result_db_path=str(result_path)))
     assert events[-1][0] == b"failure"
     failure = json.loads(events[-1][1])
     assert failure["stage"] == "skimmer"
@@ -125,9 +134,9 @@ def test_sse_failure_replays_and_survives_restart(job, error):
     assert read_stream() == stream
 
     # Simulate a server restart: restore the job from its durable diagnostics.
-    app_module.status.clear()
+    get_status_dict().clear()
     assert read_stream() == stream
-    response = asyncio.run(app_module.analysis(request("/analysis")))
+    response = asyncio.run(analysis(request("/analysis")))
     assert b"Simulation failed" in response.body
     assert b'data-status="failed"' in response.body
 
@@ -152,7 +161,7 @@ def test_incomplete_output_keeps_partial_results(job):
     assert 'data-status="incomplete"' in stream
     assert 'href="#explorer"' in stream
     assert info["result"] == failure["result"]
-    app_module.status.clear()
+    get_status_dict().clear()
     assert read_stream() == stream
 
 
@@ -264,9 +273,7 @@ def test_failure_visible_in_browser(page, job, outcome, tmp_path):
     page.on("pageerror", lambda error: page_errors.append(error))
     # Playwright's sync API already owns an event loop in this thread.
     with ThreadPoolExecutor() as executor:
-        response = executor.submit(
-            asyncio.run, app_module.analysis(request("/analysis"))
-        ).result()
+        response = executor.submit(asyncio.run, analysis(request("/analysis"))).result()
     failure = {
         "status": outcome,
         "stage": "apitof",
@@ -280,7 +287,7 @@ def test_failure_visible_in_browser(page, job, outcome, tmp_path):
     }
     if outcome == "incomplete":
         failure["result"] = {"experiment": 1, "cluster": 18}
-    pane = app_module.templates.env.get_template("analysis/apitof.html").render(
+    pane = templates.env.get_template("analysis/apitof.html").render(
         iterations=296,
         realizations=1000,
         fragmented=79,
@@ -295,7 +302,7 @@ def test_failure_visible_in_browser(page, job, outcome, tmp_path):
     def serve(route):
         path = urlparse(route.request.url).path
         if path.startswith("/static/"):
-            asset = app_module.Path(app_module.__file__).parent / path.lstrip("/")
+            asset = VMS_DIR / path.lstrip("/")
             route.fulfill(path=str(asset))
         elif path == "/analysis/updates":
             route.fulfill(body=stream, content_type="text/event-stream")

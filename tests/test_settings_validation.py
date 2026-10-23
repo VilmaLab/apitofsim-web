@@ -8,7 +8,8 @@ from starlette.datastructures import FormData
 from starlette.requests import Request
 from wtforms import FormField, SelectField
 
-from vms.app import app, current_db, pathways_context, templates
+from vms.app import app, pathways_context, templates
+from vms.db import current_db
 from vms.forms import (
     SettingsForm,
     SimulationForm,

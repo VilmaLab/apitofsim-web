@@ -18,6 +18,7 @@ from wtforms.validators import DataRequired, InputRequired, Optional
 from wtforms.widgets import HiddenInput
 from wtforms.widgets import core as wtforms_widgets_core_module
 
+from vms.db import get_connection
 from vms.pintweb.wtforms import QuantityField
 from vms.utils import PairedRangeInputWidget
 
@@ -249,9 +250,7 @@ class GasForm(Form):
 
 @functools.cache
 def get_histogram_precision_choices():
-    from vms.app import current_db
-
-    db = current_db.get()
+    db = get_connection()
     dos_histograms = db.available_dos_histograms_query().fetchall()
     rate_histograms = db.available_rate_histograms_query().fetchall()
     # Configurations are independent; pair all matching widths, never row positions.
@@ -326,10 +325,8 @@ class SimulationForm(Form):
 
 
 def get_cluster_choices():
-    from vms.app import current_db
-
     clusters = (
-        current_db.get()
+        get_connection()
         .clusters_query(parents_only=True)
         .select("id, common_name")
         .fetchall()
@@ -387,8 +384,6 @@ class SettingsForm(StarletteForm):
         from apitofsim import Gas, Quadrupole
         from numpy import array
 
-        from vms.app import current_db
-
         data = self.data
         result = {}
         result["pathways"] = [
@@ -432,7 +427,7 @@ class SettingsForm(StarletteForm):
         )
         result["histogram_precision"] = histogram_precision
         result["histograms"] = tuple(
-            current_db.get().get_histogram_params(x) for x in histogram_precision
+            get_connection().get_histogram_params(x) for x in histogram_precision
         )
         density_params, rate_params = result["histograms"]
         if density_params is None or rate_params is None:

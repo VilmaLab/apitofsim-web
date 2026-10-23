@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
+from starlette.exceptions import HTTPException
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,3 +98,62 @@ def validate_output(db, counters, requested, context):
     ]
     if mismatches:
         raise IncompleteOutputError("Output is incomplete; " + "; ".join(mismatches))
+
+
+def process_jobid(request):
+    from time import time
+
+    from vms.jobs.queue import get_status_dict
+    from vms.settings import results_path
+
+    status = get_status_dict()
+    jobid = request.query_params.get("jobid")
+    if jobid is None:
+        raise HTTPException(400, detail="Missing jobid parameter")
+    if jobid not in status:  # type: ignore
+        # Only accept the UUID hex used for result filenames.
+        if len(jobid) != 32 or any(c not in "0123456789abcdef" for c in jobid):
+            raise HTTPException(404, detail="Job ID not found")
+        result_db_path = Path(results_path).with_name(f"{jobid}.duckdb")
+        try:
+            failure = json.loads(failure_path(result_db_path).read_text())
+        except FileNotFoundError, ValueError:
+            raise HTTPException(404, detail="Job ID not found") from None
+        info = {
+            "result_db_path": str(result_db_path),
+            "last_update": {},
+            "start_time": time(),
+        }
+        apply_failure(info, failure)
+        status[jobid] = info
+    return jobid
+
+
+def failure_statuses(failure):
+    stages = ["queue", "skimmer", "apitof"]
+    stage = failure["stage"]
+    index = stages.index(stage) if stage in stages else 2
+    return {
+        name: ("done" if i < index else failure["status"] if i == index else "pending")
+        for i, name in enumerate(stages)
+    }
+
+
+def apply_failure(info, failure):
+    from vms.resources import templates
+
+    info["status"] = failure["status"]
+    info["failure"] = failure
+    if "result" in failure:
+        info["result"] = failure["result"]
+    else:
+        info.pop("result", None)
+    info["last_update"][b"failure"] = templates.env.get_template(
+        "analysis/failure.html"
+    ).render(failure=failure)
+    info["last_update"][b"tabs"] = templates.env.get_template(
+        "analysis/tabs.html"
+    ).render(
+        statuses=failure_statuses(failure),
+        completed="result" in info,
+    )
