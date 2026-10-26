@@ -34,7 +34,7 @@ from .forms import (
     instrument_form_class,
     settings_errors,
 )
-from .jobs import get_status_dict, pump_jobs, update_analysis
+from .jobs import get_status_dict, update_analysis
 from .resources import bokeh_application, lifespan, templates
 from .settings import database_path, results_path
 
@@ -66,7 +66,7 @@ async def settings(request):
             "last_update": {},
             "start_time": time(),
         }
-        pump_jobs()
+        await request.app.state.job_sender.send((job_id.hex, status[job_id.hex]))
         return RedirectResponse(f"/analysis?jobid={job_id.hex}#queue", status_code=303)
     context = {"primary_cluster": None}
     if (
@@ -264,6 +264,8 @@ async def analysis(request):
             "densityandr": "",
             "apitof": "",
         },
+        queue=None,
+        jobs_ahead=info.get("jobs_ahead"),
         survived=0,
         fragmented=0,
         realizations=0,

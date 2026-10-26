@@ -15,7 +15,7 @@ from vms import settings
 from vms.app import analysis, app
 from vms.jobs import run as job_runner
 from vms.jobs.failures import IncompleteOutputError, failure_path, validate_output
-from vms.jobs.queue import get_status_dict
+from vms.jobs.queue import consume_event, fail_job, finish_job, get_status_dict
 from vms.jobs.run import setup_result_db, simulation_events, update_analysis
 from vms.resources import templates
 
@@ -56,6 +56,17 @@ def request(path="/analysis/updates"):
 
 def read_stream():
     async def read():
+        info = get_status_dict().get(JOB_ID)
+        if info is not None and "aiter" in info:
+            # The scheduler now owns output handling; SSE only replays its state.
+            references = info.pop("aiter")
+            try:
+                async for reference in references:
+                    event, data = await reference
+                    consume_event(info, event, data)
+            except Exception as exc:
+                fail_job(info, exc)
+            finish_job(info)
         response = await update_analysis(request())
         return b"".join([chunk async for chunk in response.body_iterator]).decode()
 

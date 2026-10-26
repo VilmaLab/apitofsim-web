@@ -16,6 +16,7 @@ from apitofsim.api import ureg
 from starlette.templating import Jinja2Templates
 
 from .assets import ASSETS
+from .jobs.queue import scheduler_context
 from .markdown_ext import MarkdownExtension
 from .pintweb.alpine import quantity_display
 from .result_plots import make_bokeh_app
@@ -96,7 +97,9 @@ async def bokeh_context(app):
         await bokeh_application.core.stop()
 
 
-lifespan = compose_async_ctx(ensure_assets_context, ray_context, bokeh_context)
+lifespan = compose_async_ctx(
+    ensure_assets_context, ray_context, scheduler_context, bokeh_context
+)
 
 
 def join_abbrv_filter(s, sep="<br>"):

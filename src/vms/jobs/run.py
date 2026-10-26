@@ -1,6 +1,5 @@
 import json
 
-import anyio
 import ray
 from starlette.exceptions import HTTPException
 from starlette.responses import StreamingResponse
@@ -137,7 +136,7 @@ def _run_simulation(
     context,
     start_time,
 ):
-    from time import sleep, time
+    from time import time
 
     from apitofsim.api import (
         CollisionEvent,
@@ -227,11 +226,9 @@ def _run_simulation(
         if processing == "queue":
             context["stage"] = processing
             yield b"stage", processing
-            yield update_pane("queue")
-            sleep(1)
             statuses["queue"] = "done"
             took_str = fmt_duration(time() - start_time)
-            queue = f"Queued after {took_str}"
+            queue = f"Started after {took_str} in the queue"
             yield update_pane("queue")
             statuses["skimmer"] = "processing"
             processing = "skimmer"
@@ -249,12 +246,12 @@ def _run_simulation(
                 cached_densityandrate=histogram_precision,
                 show_progress=False,
             )
+            took_str = fmt_duration(time() - skimmer_start)
             skimmer = "Finished after " + took_str
             yield update_pane("skimmer")
             statuses["skimmer"] = "done"
             statuses["apitof"] = "processing"
             processing = "apitof"
-            took_str = fmt_duration(time() - skimmer_start)
             yield update_pane("tabs")
             mass_spec = MassSpectrometer(
                 skimmer_np,
@@ -381,7 +378,8 @@ def sse_yolo(data, event=None):
 
 async def update_analysis(request):
     from vms.jobs import process_jobid
-    from vms.jobs.failures import apply_failure, describe_failure, save_failure
+
+    from .queue import notify_job
 
     if "text/event-stream" not in request.headers.get("accept", ""):
         raise HTTPException(400)
@@ -391,59 +389,25 @@ async def update_analysis(request):
     info = status[jobid]  # type: ignore
 
     async def send_events():
-        sent_something = False
+        if "changed" not in info:
+            notify_job(info)
+        sent = {}
         while True:
-            if info["status"] == "pending":
-                await anyio.sleep(1)
-            elif info["status"] == "running":
-                if not sent_something:
-                    if "last_update" in info:
-                        for event, data in info["last_update"].items():
-                            for bit in sse_safe(data, event):
-                                yield bit
-                sent_something = True
-                try:
-                    # Really awaiting here(!)
-                    event, data = await (await anext(info["aiter"]))
-                except StopAsyncIteration:
-                    if "result" not in info:
-                        exc = RuntimeError(
-                            "Simulation stream ended without a final result"
-                        )
-                        failure = describe_failure(exc, info, info["result_db_path"])
-                        save_failure(info["result_db_path"], failure)
-                        apply_failure(info, failure)
-                        continue
-                    info["status"] = "done"
-                    for bit in sse_safe("", event=b"done"):
-                        yield bit
-                    return
-                except Exception as exc:
-                    # Worker crashes and Ray transport errors never reach the
-                    # worker's own exception handler.
-                    failure = describe_failure(exc, info, info["result_db_path"])
-                    save_failure(info["result_db_path"], failure)
-                    apply_failure(info, failure)
-                    continue
-                if event == b"stage":
-                    info["stage"] = data
-                    continue
-                if event == b"failure":
-                    apply_failure(info, json.loads(data))
-                    continue
-                if event == b"result":
-                    info["result"] = json.loads(data)
-                    continue
-                info["last_update"][event] = data
-                for bit in sse_safe(data, event):
-                    yield bit
-            elif info["status"] in ("done", "failed", "incomplete"):
-                for event, data in info["last_update"].items():
+            # Capture before taking a snapshot: a concurrent update wakes us even
+            # when it arrives while the response is yielding its previous snapshot.
+            changed = info["changed"]
+            terminal = info["status"] in ("done", "failed", "incomplete")
+            snapshot = dict(info["last_update"])
+            for event, data in snapshot.items():
+                if sent.get(event) != data:
                     for bit in sse_safe(data, event):
                         yield bit
+            sent = snapshot
+            if terminal:
                 for bit in sse_safe("", event=b"done"):
                     yield bit
                 return
+            await changed.wait()
 
     return StreamingResponse(
         send_events(),

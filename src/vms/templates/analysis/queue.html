@@ -6,7 +6,15 @@
     {% else %}
         <div class="loader-queue my-6 mx-auto h-8"></div>
         <p class="italic my-6 text-lg">
-            Your simulation is in the queue.
+            {% if jobs_ahead is defined and jobs_ahead is not none %}
+                {% if jobs_ahead == 0 %}
+                    You’re at the front of the queue.
+                {% else %}
+                    {{ jobs_ahead }} {{ 'job' if jobs_ahead == 1 else 'jobs' }} ahead of you in the queue.
+                {% endif %}
+            {% else %}
+                Your simulation is in the queue.
+            {% endif %}
         </p>
     {% endif %}
 </div>
