@@ -48,11 +48,14 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.1.1",
     "pytest-playwright>=0.9.0",
 ]
 
 [tool.uv]
+# Resultviewer declares older wheel URLs; use the web app's simulation version.
+override-dependencies = ["apitofsim[plot]==0.23.0"]
 environments = [
   "sys_platform == 'linux' and platform_machine == 'x86_64'",
   "sys_platform == 'darwin' and platform_machine == 'arm64'",

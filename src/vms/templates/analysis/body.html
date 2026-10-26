@@ -3,9 +3,10 @@
 
 <div
     class="tab-page"
-    x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}' }"
+    x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}', cancelling: {{ 'true' if info.get('cancel_requested') else 'false' }} }"
     x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
 >
+    <div sse-swap="state">{% include "analysis/state.html" %}</div>
     <div sse-swap="failure">{% include "analysis/failure.html" %}</div>
     {% call tab_list(sse=True) %}
         {% include "analysis/tabs.html" %}
@@ -35,7 +36,15 @@
             </template>
         </div>
     </div>
-</div>
-<div class="page-action">
-    <button type="button" class="cursor-pointer hover:scale-105 bg-red-500 text-white inline-flex items-center px-4 py-3 rounded-lg">Cancel</button>
+    <div class="page-action gap-3 flex-wrap">
+        {% from "ui/_actions.html" import job_results, new_experiment %}
+        {{ new_experiment() }}
+        {{ job_results() }}
+        {% if can_cancel %}
+        <form action="/analysis/cancel?jobid={{ jobid }}" method="post" x-show="job_status == 'pending' || job_status == 'running'" @submit="cancelling = true">
+            <input type="hidden" name="csrf_token" value="{{ cancel_token }}">
+            <button type="submit" :disabled="cancelling" class="cursor-pointer hover:scale-105 bg-red-500 text-white inline-flex items-center px-4 py-3 rounded-lg disabled:opacity-60 disabled:cursor-wait" x-text="cancelling ? 'Cancelling…' : 'Cancel'">Cancel</button>
+        </form>
+        {% endif %}
+    </div>
 </div>

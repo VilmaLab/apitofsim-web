@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Job/results{% endblock %}
+{% block content %}
+<main class="max-w-5xl mx-auto">
+    <h1 class="text-3xl font-bold my-6">Job/results</h1>
+    {% include "jobs/list.html" %}
+    <div class="page-action">
+        {% from "ui/_actions.html" import new_experiment %}
+        {{ new_experiment() }}
+    </div>
+</main>
+{% endblock %}

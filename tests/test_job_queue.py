@@ -283,3 +283,90 @@ async def test_shutdown_stops_idle_or_active_worker(scheduler, active):
     assert scheduler.app.state.job_sender._closed
     if active:
         assert info["generator"].cancelled
+
+
+@run_async
+async def test_cancel_queued_removes_files_and_updates_positions(
+    scheduler, monkeypatch
+):
+    gate = threading.Event()
+    async with queue.scheduler_context(scheduler.app):
+        first = await scheduler.submit(scheduler.app, "first", gate=gate)
+        await until(lambda: first["status"] == "running")
+        second = await scheduler.submit(scheduler.app, "second")
+        third = await scheduler.submit(scheduler.app, "third")
+        await until(lambda: third.get("jobs_ahead") == 1)
+        from pathlib import Path
+
+        output = Path(second["result_db_path"])
+        files = [
+            output,
+            Path(str(output) + ".wal"),
+            output.with_suffix(".failure.json"),
+        ]
+        for path in files:
+            path.touch()
+        queue.request_cancellation(second)
+        assert second["status"] == "cancelled"
+        assert all(not path.exists() for path in files)
+        assert third["jobs_ahead"] == 0
+        assert "cancel_control" not in second
+        gate.set()
+        await until(lambda: third["status"] == "done")
+        assert scheduler.started == ["first", "third"]
+        assert 'data-status="cancelled"' in second["last_update"][b"tabs"]
+
+
+@run_async
+@pytest.mark.parametrize("stage", ["skimmer", "apitof"])
+async def test_cancel_running_waits_for_exit_and_drains(scheduler, monkeypatch, stage):
+    class Method:
+        def __init__(self, value):
+            self.value = value
+
+        def remote(self):
+            return self.value
+
+    control = SimpleNamespace(request_cancel=Method(stage))
+    killed = []
+    monkeypatch.setattr(queue.ray, "kill", killed.append)
+    gate = threading.Event()
+    completion = threading.Event()
+    async with queue.scheduler_context(scheduler.app):
+        events = [(b"progress", json.dumps({"requested": 10, "completed": 3}))]
+        if stage == "apitof":
+            events.append((b"result", json.dumps({"experiment": 1, "cluster": 18})))
+        else:
+            events.append(queue.ray.exceptions.TaskCancelledError())
+        first = await scheduler.submit(
+            scheduler.app,
+            "first",
+            events=events,
+            gate=gate,
+            completion_gate=completion,
+            cancel_control=control,
+        )
+        await until(lambda: first["status"] == "running")
+        second = await scheduler.submit(scheduler.app, "second")
+        queue.request_cancellation(first)
+        queue.request_cancellation(first)
+        await until(lambda: first.get("cancel_signalled"))
+        assert first["generator"].cancelled == (stage == "skimmer")
+        gate.set()
+        await until(
+            lambda: first["generator"].exhausted or first["generator"].cancelled
+        )
+        assert scheduler.started == ["first"]
+        assert first["status"] == "running"
+        completion.set()
+        await until(lambda: second["status"] == "done")
+        assert first["status"] == ("done" if stage == "apitof" else "cancelled")
+        assert "failure" not in first
+        assert killed == [control]
+        assert (
+            f'data-tab="{stage}" data-status="cancelled"'
+            in first["last_update"][b"tabs"]
+        )
+        assert ('href="#explorer"' in first["last_update"][b"tabs"]) == (
+            stage == "apitof"
+        )

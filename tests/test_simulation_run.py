@@ -9,11 +9,7 @@ REALIZATIONS = 5
 RUN_TIMEOUT = 15 * 60 * 1000
 
 
-def test_default_run_completes(page, server):
-    page_errors = []
-    page.on("pageerror", lambda error: page_errors.append(error))
-    page.set_default_timeout(60_000)
-
+def submit_experiment(page, server, realizations):
     page.goto(server)
 
     # Pick the one cluster which has fragmentation pathways in the test database
@@ -27,9 +23,17 @@ def test_default_run_completes(page, server):
 
     # Everything else stays at its default
     page.click('a[href="#simulation"]')
-    page.fill("#simulation-realizations", str(REALIZATIONS))
+    page.fill("#simulation-realizations", str(realizations))
 
     page.click('button[type="submit"]')
+
+
+def test_default_run_completes(page, server):
+    page_errors = []
+    page.on("pageerror", lambda error: page_errors.append(error))
+    page.set_default_timeout(60_000)
+
+    submit_experiment(page, server, REALIZATIONS)
     expect(page).to_have_url(re.compile(r"/analysis\?jobid="))
     expect(page.locator('a[href="#explorer"]')).to_have_count(0)
     expect(page.locator('a[href="#spectrogram"]')).to_have_count(0)
@@ -81,3 +85,74 @@ def test_default_run_completes(page, server):
     assert "Traceback" not in body
     assert "Internal Server Error" not in body
     assert page_errors == []
+
+
+def test_cancel_preserves_partial_results_and_history(page, server, tmp_path):
+    page.set_default_timeout(60_000)
+    submit_experiment(page, server, 10_000_000)
+    expect(page).to_have_url(re.compile(r"/analysis\?jobid="))
+    result_url = page.url
+    expect(page.locator("#iterations")).to_contain_text(
+        re.compile(r"^[1-9]"), timeout=RUN_TIMEOUT
+    )
+
+    # A second job from the same browser stays queued behind this long run.
+    queued = page.context.new_page()
+    submit_experiment(queued, server, REALIZATIONS)
+    expect(queued).to_have_url(re.compile(r"/analysis\?jobid="))
+    queued_url = queued.url
+    expect(queued.locator('li[data-tab="queue"]')).to_have_attribute(
+        "data-status", "processing"
+    )
+    queued.get_by_role("button", name="Cancel", exact=True).click()
+    expect(queued.get_by_role("heading", name="Simulation cancelled")).to_be_visible()
+    expect(queued.locator('li[data-tab="queue"]')).to_have_attribute(
+        "data-status", "cancelled"
+    )
+    queued.reload()
+    expect(queued.get_by_role("heading", name="Simulation cancelled")).to_be_visible()
+    queued.get_by_role("link", name="Job/results", exact=True).click()
+    expect(queued.locator("#job-list")).not_to_contain_text("No jobs yet")
+    assert (
+        queued_url.split("#")[0].split("?", 1)[1]
+        not in queued.locator("#job-list").inner_html()
+    )
+
+    page.get_by_role("button", name="Cancel", exact=True).click()
+    expect(
+        page.get_by_role("heading", name="Finished — cancelled early")
+    ).to_be_visible(timeout=RUN_TIMEOUT)
+    expect(page.locator('li[data-tab="apitof"]')).to_have_attribute(
+        "data-status", "cancelled"
+    )
+    expect(page.get_by_role("button", name="Cancel", exact=True)).to_be_hidden()
+    for tab, title in (
+        ("explorer", "Explorer plot"),
+        ("spectrogram", "Spectrogram plot"),
+    ):
+        page.locator(f'a[href="#{tab}"]').click()
+        expect(
+            page.frame_locator(f'iframe[title="{title}"]').locator(".bk-Canvas")
+        ).not_to_have_count(0)
+    page.screenshot(path=str(tmp_path / "cancelled-results.png"), full_page=True)
+    page.reload()
+    expect(page.locator('li[data-tab="apitof"]')).to_have_attribute(
+        "data-status", "cancelled"
+    )
+    expect(page.locator('a[href="#explorer"]')).to_be_visible()
+    expect(
+        page.get_by_role("heading", name="Finished — cancelled early")
+    ).to_be_visible()
+    page.get_by_role("link", name="Job/results", exact=True).click()
+    expect(page.locator("#job-list")).to_contain_text("Finished — cancelled early")
+    expect(page.locator("#job-list a").first).to_have_attribute(
+        "href", result_url.split("#")[0].replace(server, "")
+    )
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect(page.get_by_role("link", name="New experiment", exact=True)).to_be_visible()
+    page.screenshot(path=str(tmp_path / "jobs-mobile.png"), full_page=True)
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    page.get_by_role("link", name="New experiment", exact=True).click()
+    expect(page).to_have_url(server + "/")
+    expect(page.get_by_role("link", name="Job/results", exact=True)).to_be_visible()
+    queued.close()

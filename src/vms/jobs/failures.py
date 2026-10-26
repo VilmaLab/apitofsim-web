@@ -62,7 +62,7 @@ def save_failure(result_db_path, failure):
             temporary.unlink(missing_ok=True)
 
 
-def validate_output(db, counters, requested, context):
+def validate_output(db, counters, requested, context, *, cancelled=False):
     counts = {
         "requested": int(requested),
         "completed": int(counters.n_realizations),
@@ -91,6 +91,14 @@ def validate_output(db, counters, requested, context):
         ("recorded_fragmentations", "fragmentations"),
         ("recorded_collisions", "collisions"),
     )
+    if cancelled:
+        # Interrupted realizations retain their events but do not contribute to
+        # final counters. Only terminal records must match completed counters.
+        checks = (
+            ("terminal_realizations", "completed"),
+            ("recorded_escapes", "escapes"),
+            ("recorded_fragmentations", "fragmentations"),
+        )
     mismatches = [
         f"{recorded.replace('_', ' ')}: {counts[recorded]}/{counts[expected]}"
         for recorded, expected in checks
@@ -157,3 +165,7 @@ def apply_failure(info, failure):
         statuses=failure_statuses(failure),
         completed="result" in info,
     )
+
+    from .cancellation import publish_state
+
+    publish_state(info)

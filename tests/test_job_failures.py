@@ -333,3 +333,53 @@ def test_failure_visible_in_browser(page, job, outcome, tmp_path):
     expect(alert).to_contain_text("RuntimeError: test failure")
     page.screenshot(path=str(tmp_path / f"{outcome}.png"))
     assert page_errors == []
+
+
+def test_cancelled_validation_preserves_interrupted_realizations(output_db):
+    populate_output(output_db, recorded=2)
+    # The third realization has init/collision events but no terminal event.
+    counters = Counters(0, 2, 0, 2, 2, np.array([0]))
+    context = {}
+    validate_output(output_db, counters, 100, context, cancelled=True)
+    assert context["counts"]["recorded_realizations"] == 3
+    assert context["counts"]["completed"] == 2
+    with pytest.raises(IncompleteOutputError):
+        validate_output(output_db, counters, 100, context)
+    output_db.db.execute("DELETE FROM event_info WHERE id = 8")
+    with pytest.raises(IncompleteOutputError, match="terminal realizations"):
+        validate_output(output_db, counters, 100, context, cancelled=True)
+
+
+def test_cancelled_before_simulation_closes_database(monkeypatch, job):
+    from types import SimpleNamespace
+
+    from vms.jobs.cancellation import JobCancelled
+
+    result_path, info = job
+    closed = []
+
+    def cancelled(context, **arguments):
+        context.update(
+            stage="apitof",
+            db=SimpleNamespace(close=lambda: closed.append(True)),
+            counts={"requested": 100, "completed": 0},
+        )
+        result_path.touch()
+        raise JobCancelled
+        yield
+
+    monkeypatch.setattr(job_runner, "_run_simulation", cancelled)
+    events = list(simulation_events(result_db_path=result_path))
+    assert closed == [True]
+    assert events[0][0] == b"cancelled"
+
+    async def finish():
+        for event, data in events:
+            consume_event(info, event, data)
+        finish_job(info)
+
+    with ThreadPoolExecutor() as pool:
+        pool.submit(asyncio.run, finish()).result()
+    assert info["status"] == "cancelled"
+    assert not result_path.exists()
+    assert "failure" not in info
