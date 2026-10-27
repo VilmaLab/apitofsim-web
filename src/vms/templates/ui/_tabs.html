@@ -1,3 +1,5 @@
+{% from "ui/_spinner.html" import spinner %}
+
 {% macro tab_container(default, inherit=False) %}
     <div
         class="tab-page"
@@ -53,7 +55,7 @@
             <a href="#{{ name }}" @click="current_tab = '{{ name }}'" class="tab-pill inline-flex items-center px-4 py-3 rounded-lg" :class="current_tab == '{{ name }}' ? 'bg-blue-700 text-white' : 'bg-gray-50 hover:text-gray-900 hover:bg-gray-100'" aria-label="{{ label }}" title="{{ label }}">
         {% endif %}
             {% if status == "processing" %}
-                <svg aria-hidden="true" class="icon animate-spin" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="42" stroke="currentColor" stroke-width="10" stroke-opacity=".3"/><path d="M50 8a42 42 0 0 1 42 42" stroke="currentColor" stroke-width="10" stroke-linecap="round"/></svg>
+                {{ spinner() }}
             {% elif status == "done" %}
                 <svg aria-hidden="true" class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-check"></use></svg>
             {% elif status in ("failed", "incomplete", "cancelled") %}

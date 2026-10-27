@@ -1,3 +1,5 @@
+{% from "ui/_spinner.html" import spinner %}
+
 <div class="m-4 text-center">
     <h1 class="text-2xl my-8">
         Skimmer simulation
@@ -8,7 +10,7 @@
     <svg-focus class="w-56 shrink-0" diagram="#diagram" region="#region-skimmer" padding="60" title="Skimmer geometry"></svg-focus>
     {% if skimmer == 'loading' %}
         <div class="my-4">
-            <svg aria-hidden="true" class="icon animate-spin mx-auto" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="42" stroke="currentColor" stroke-width="10" stroke-opacity=".3"/><path d="M50 8a42 42 0 0 1 42 42" stroke="currentColor" stroke-width="10" stroke-linecap="round"/></svg>
+            {{ spinner('mx-auto') }}
         </div>
         <p class="italic text-lg">Loading...</p>
     {% else %}

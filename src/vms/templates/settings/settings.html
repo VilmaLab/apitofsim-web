@@ -16,6 +16,7 @@ document.addEventListener("click", () => {
 {% from "ui/_lightbox.html" import lightbox with context %}
 {% from "ui/_tabs.html" import tab_container, tab_list, tab, tab_content %}
 {% from "ui/_tooltip.html" import tooltip %}
+{% from "ui/_spinner.html" import spinner %}
 
 {% macro uneditable_errors(tab) %}
     <template x-for="error in uneditableErrors.filter(error => error.tab === '{{ tab }}')" :key="error.name">
@@ -116,7 +117,11 @@ can be found on
                                 {{ tooltip(form.cluster.description, form.cluster.id ~ '-tooltip', form.cluster.label.text, small=True) }}
                             {% endif %}
                         </div>
-                        {{ form.cluster(class_="w-full min-w-0 max-w-md rounded-md border border-black p-2", hx_get="/fragments/pathways", hx_target="#pathways-target", **{'@change': 'clusterSelected = $event.target.selectedIndex > 0'}) }}
+                        {{ form.cluster(class_="w-full min-w-0 max-w-md rounded-md border border-black p-2", hx_get="/fragments/pathways", hx_target="#pathways-target", hx_indicator="#cluster-loading", **{'@change': 'clusterSelected = $event.target.selectedIndex > 0'}) }}
+                        <span id="cluster-loading" class="htmx-indicator hidden [&.htmx-request]:block" role="status">
+                            {{ spinner() }}
+                            <span class="sr-only">Loading cluster...</span>
+                        </span>
                     </div>
                     <div id="pathways-target" class="border-t border-gray-300 pt-4">
                         {% include "settings/_render_pathways.html" %}
