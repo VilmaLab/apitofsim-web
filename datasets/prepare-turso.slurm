@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH -t 12:00:00
 #SBATCH --job-name=prepare-database
-#SBATCH --partition=short
 #SBATCH --exclusive
 #SBATCH --mem=0
 #SBATCH --nodes=1
