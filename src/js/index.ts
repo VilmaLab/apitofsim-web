@@ -16,6 +16,7 @@ declare global {
 }
 
 window.htmx = HtmxModule;
+window.$3Dmol = $3DmolModule;
 window.UnitSystem = UnitSystemCls;
 
 AlpineModule.data('quantityinput', quantityinput);

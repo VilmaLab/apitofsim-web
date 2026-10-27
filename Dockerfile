@@ -1,6 +1,6 @@
 FROM docker.io/library/node:22 AS frontend
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json tsconfig.json ./
 RUN npm ci --ignore-scripts
 COPY src ./src
 RUN npm run build
