@@ -5,6 +5,7 @@ os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 os.environ["RAY_DISABLE_FAILURE_SIGNAL_HANDLER"] = "1"
 
 import os
+from datetime import datetime, timezone
 from io import BytesIO
 from os import environ
 from pathlib import Path
@@ -24,7 +25,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import HTMLResponse, RedirectResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
-from starlette_wtf import CSRFProtectMiddleware, csrf_protect
+from starlette_wtf import CSRFProtectMiddleware, csrf_protect, csrf_token
 
 from .cluster_info import enrich_cluster
 from .db import DatabaseMiddleware, get_connection
@@ -61,6 +62,13 @@ async def settings(request):
         result_db_path.parent.mkdir(parents=True, exist_ok=True)
         status[job_id.hex] = {  # type: ignore
             "status": "pending",
+            "owner": request.session.setdefault("job_owner", uuid4().hex),
+            "cluster_label": get_connection()
+            .clusters_df(parent=int(form.cluster.data))
+            .set_index("id")
+            .loc[int(form.cluster.data), "common_name"],
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+            "counts": {"requested": int(arguments["config"]["N"]), "completed": 0},
             "arguments": arguments,
             "result_db_path": str(result_db_path),
             "last_update": {},
@@ -235,7 +243,39 @@ async def instrument_fragment(request):
     )
 
 
+@csrf_protect
+async def cancel_analysis(request):
+    from .jobs import process_jobid
+    from .jobs.queue import request_cancellation
+
+    jobid = process_jobid(request)
+    info = status[jobid]
+    if info.get("owner") is None or info["owner"] != request.session.get("job_owner"):
+        raise HTTPException(403)
+    request_cancellation(info)
+    return RedirectResponse(f"/analysis?jobid={jobid}", status_code=303)
+
+
+async def jobs(request):
+    owner = request.session.get("job_owner")
+    entries = [
+        {**info, "jobid": jobid}
+        for jobid, info in status.items()
+        if owner is not None
+        and info.get("owner") == owner
+        and info["status"] != "cancelled"
+    ]
+    entries.sort(key=lambda info: info["start_time"], reverse=True)
+    return render_template(
+        request,
+        "jobs/list.html" if request.url.path.endswith("/list") else "jobs/jobs.html",
+        jobs=entries,
+        active=any(info["status"] in ("pending", "running") for info in entries),
+    )
+
+
 async def analysis(request):
+    from vms.jobs.cancellation import cancelled_statuses
     from vms.jobs.failures import failure_statuses
 
     from .jobs import process_jobid
@@ -243,17 +283,25 @@ async def analysis(request):
     jobid = process_jobid(request)
     info = status[jobid]
     completed = "result" in info
+    can_cancel = info.get("owner") is not None and info.get(
+        "owner"
+    ) == request.session.get("job_owner")
     failure = info.get("failure")
     return render_template(
         request,
         "analysis/analysis.html",
         jobid=jobid,
+        info=info,
+        can_cancel=can_cancel,
+        cancel_token=csrf_token(request) if can_cancel else None,
         completed=completed,
         failure=failure,
         job_status=info["status"],
         statuses=(
             failure_statuses(failure)
             if failure
+            else cancelled_statuses(info)
+            if "cancelled_stage" in info
             else {"queue": "done", "skimmer": "done", "apitof": "done"}
             if completed
             else {"queue": "processing", "skimmer": "pending", "apitof": "pending"}
@@ -422,7 +470,10 @@ app = Starlette(
         Route("/fragments/pathways", pathways_fragment),
         Route("/fragments/hypothetical-spectrogram", hypothetical_spectrogram_fragment),
         Route("/fragments/instrument", instrument_fragment),
+        Route("/jobs", jobs),
+        Route("/jobs/list", jobs),
         Route("/analysis", analysis),
+        Route("/analysis/cancel", cancel_analysis, methods=["POST"]),
         Route("/analysis/updates", update_analysis),
         Route("/analysis/results/{jobid}/explorer", explorer_plot, name="explorer"),
         Route(

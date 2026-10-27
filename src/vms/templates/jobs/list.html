@@ -1,0 +1,26 @@
+<div id="job-list" {% if active %}hx-get="/jobs/list" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+    {% if jobs %}
+    <ul class="space-y-4">
+        {% for job in jobs %}
+        <li class="rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+                <h2 class="text-lg font-semibold">{{ job.cluster_label }}</h2>
+                <p class="text-sm text-gray-600">Submitted <time datetime="{{ job.submitted_at }}" x-data x-text="new Date($el.dateTime).toLocaleString()">{{ job.submitted_at }}</time></p>
+                <p>
+                    {% if job.get('cancel_requested') and job.status == 'running' %}Cancelling…
+                    {% elif job.status == 'pending' %}Queued{% if job.jobs_ahead is defined %} · {{ job.jobs_ahead }} ahead{% endif %}
+                    {% elif job.status == 'running' %}Processing · {{ {'queue': 'Starting', 'skimmer': 'Skimmer', 'apitof': 'APi-ToF MS'}.get(job.get('stage', 'queue')) }}
+                    {% elif job.status == 'done' %}Finished{% if job.get('cancelled_stage') %} — cancelled early{% endif %}
+                    {% elif job.status == 'incomplete' %}Incomplete output
+                    {% else %}Failed{% endif %}
+                </p>
+                <p>Realizations: {{ job.counts.completed|default(0) }}/{{ job.counts.requested }}</p>
+            </div>
+            <a href="/analysis?jobid={{ job.jobid }}" class="inline-flex rounded-lg bg-blue-700 text-white px-4 py-3">View results</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="rounded-lg bg-gray-50 p-6">No jobs yet. Start a new experiment to see it here.</p>
+    {% endif %}
+</div>

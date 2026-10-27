@@ -376,7 +376,11 @@ def test_config_round_trip_uses_apitofsim_schema(config_form, output_db):
 
     captured = {}
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(apitofsim, "skimmer", lambda **kwargs: captured.update(kwargs))
+        patch.setattr(
+            apitofsim.api,
+            "_skimmer_with_parameters",
+            lambda T0, P0, rmax, *args, **kwargs: captured.update(rmax=rmax),
+        )
         DerivedDataPreparer(output_db)._run_skimmer(stored)
     assert captured["rmax"] == Q_(0.7, "mm")
 

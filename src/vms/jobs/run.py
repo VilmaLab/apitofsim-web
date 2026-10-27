@@ -95,11 +95,17 @@ def setup_result_db(database_path, result_db_path):
 def simulation_events(**arguments):
     from vms.jobs.failures import describe_failure, save_failure
 
+    from .cancellation import JobCancelled
+
     context = {"stage": "queue"}
     result_db_path = arguments["result_db_path"]
+
     failure = None
+    cancelled = False
     try:
         yield from _run_simulation(context=context, **arguments)
+    except JobCancelled:
+        cancelled = True
     except Exception as exc:
         failure = describe_failure(exc, context, result_db_path)
         db = context.get("db")
@@ -117,6 +123,13 @@ def simulation_events(**arguments):
     finally:
         if "db" in context:
             context["db"].close()
+    if cancelled:
+        yield (
+            b"cancelled",
+            json.dumps(
+                {"stage": context["stage"], "counts": context.get("counts", {})}
+            ),
+        )
     if failure is not None:
         yield b"failure", json.dumps(failure)
 
@@ -135,6 +148,7 @@ def _run_simulation(
     result_db_path,
     context,
     start_time,
+    cancel_control=None,
 ):
     from time import time
 
@@ -154,6 +168,7 @@ def _run_simulation(
     from jinja2 import Environment
     from minify_html_onepass import minify
 
+    from vms.jobs.cancellation import cancel_iterator, enter_stage
     from vms.jobs.failures import validate_output
     from vms.resources import jinja_loader
 
@@ -201,7 +216,7 @@ def _run_simulation(
             realizations=config["N"],
             iterations=iterations,
             ratio=survived / iterations if iterations > 0 else 0,
-            completed=statuses["apitof"] == "done",
+            completed=statuses["apitof"] in ("done", "cancelled") and iterations > 0,
         )
         try:
             return minify(html)
@@ -234,6 +249,7 @@ def _run_simulation(
             processing = "skimmer"
             yield update_pane("tabs")
         elif processing == "skimmer":
+            enter_stage(cancel_control, processing)
             skimmer_start = time()
             skimmer = "loading"
             context["stage"] = processing
@@ -262,6 +278,7 @@ def _run_simulation(
                 quadrupole=config["quadrupole"],
             )
         elif processing == "apitof":
+            enter_stage(cancel_control, processing)
             context["stage"] = processing
             yield b"stage", processing
             yield update_pane("apitof")
@@ -292,14 +309,17 @@ def _run_simulation(
             assert mass_spec is not None
             event_recorder = EventRecorder(db, group["pathway_ids"])
             experiment_result_id = None
-            with mass_spec_iter(
-                mass_spec,
-                subs,
-                realizations,
-                sample_mode=2,
-                strict=True,
-                logconf=(1, True),
-            ) as it:
+            with (
+                mass_spec_iter(
+                    mass_spec,
+                    subs,
+                    realizations,
+                    sample_mode=2,
+                    strict=True,
+                    logconf=(1, True),
+                ) as it,
+                cancel_iterator(cancel_control, it),
+            ):
                 for result in it:
                     if isinstance(
                         result, (MassSpecIntermediateCounter, MassSpecFinalResult)
@@ -307,6 +327,7 @@ def _run_simulation(
                         context["counts"]["completed"] = int(
                             result.counters.n_realizations
                         )
+                        yield b"progress", json.dumps(context["counts"])
                     if isinstance(result, MassSpecIntermediateCounter):
                         counters = result.counters
                         survived = counters.n_fragmented_total.sum()
@@ -314,6 +335,7 @@ def _run_simulation(
                         iterations = survived + fragmented
                         yield update_pane("apitof")
                     elif isinstance(result, MassSpecFinalResult):
+                        final_cancelled = result.cancelled
                         counters = result.counters
                         survived = counters.n_fragmented_total.sum()
                         fragmented = counters.n_escaped_total
@@ -341,16 +363,21 @@ def _run_simulation(
                 "experiment": current_run_id,
                 "cluster": group["cluster_id"],
             }
-            validate_output(db, counters, realizations, context)
+            validate_output(
+                db, counters, realizations, context, cancelled=final_cancelled
+            )
             break
     db.db.execute("CHECKPOINT results_db")
     db.close()
     context.pop("db")
-    yield (
-        b"result",
-        json.dumps({"experiment": current_run_id, "cluster": group["cluster_id"]}),
-    )
-    statuses["apitof"] = "done"
+    if final_cancelled:
+        yield b"cancelled", json.dumps({"stage": "apitof", "counts": context["counts"]})
+    if not final_cancelled or counters.n_realizations > 0:
+        yield (
+            b"result",
+            json.dumps({"experiment": current_run_id, "cluster": group["cluster_id"]}),
+        )
+    statuses["apitof"] = "cancelled" if final_cancelled else "done"
     yield update_pane("tabs")
 
 
@@ -396,7 +423,7 @@ async def update_analysis(request):
             # Capture before taking a snapshot: a concurrent update wakes us even
             # when it arrives while the response is yielding its previous snapshot.
             changed = info["changed"]
-            terminal = info["status"] in ("done", "failed", "incomplete")
+            terminal = info["status"] in ("done", "failed", "incomplete", "cancelled")
             snapshot = dict(info["last_update"])
             for event, data in snapshot.items():
                 if sent.get(event) != data:
