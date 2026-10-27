@@ -1,6 +1,7 @@
 import functools
 
 from apitofsim.api import ureg
+from apitofsim.transmission import VOLTAGES_NEGATIVE, VOLTAGES_POSITIVE
 from markupsafe import Markup
 from pint import Context
 from starlette_wtf import StarletteForm
@@ -66,11 +67,15 @@ def mk_voltage_field(num, **kwargs):
 
 
 class VoltageForm(Form):
-    voltage1 = mk_voltage_field(0, default=-19)
-    voltage2 = mk_voltage_field(1, default=-9)
-    voltage3 = mk_voltage_field(2, default=-7)
-    voltage4 = mk_voltage_field(3, default=-6)
-    voltage5 = mk_voltage_field(4, default=11)
+    defaults = {
+        "negative": VOLTAGES_NEGATIVE.to("V").magnitude.tolist(),
+        "positive": VOLTAGES_POSITIVE.to("V").magnitude.tolist(),
+    }
+    voltage1 = mk_voltage_field(0, default=defaults["negative"][0])
+    voltage2 = mk_voltage_field(1, default=defaults["negative"][1])
+    voltage3 = mk_voltage_field(2, default=defaults["negative"][2])
+    voltage4 = mk_voltage_field(3, default=defaults["negative"][3])
+    voltage5 = mk_voltage_field(4, default=defaults["negative"][4])
 
 
 class HiddenFloatField(FloatField):
@@ -328,11 +333,13 @@ def get_cluster_choices():
     clusters = (
         get_connection()
         .clusters_query(parents_only=True)
-        .select("id, common_name")
+        .select("id, common_name, charge")
         .fetchall()
     )
 
-    return [("", "")] + clusters
+    return [("", "")] + [
+        (id, name, {"data-charge": charge}) for id, name, charge in clusters
+    ]
 
 
 class SingleFragmentationPathwayForm(Form):
@@ -367,6 +374,7 @@ class SettingsForm(StarletteForm):
     instrument = FormField(BuiltInInstrumentForm)
     voltage = FormField(VoltageForm)
     simulation = FormField(SimulationForm)
+    voltages_edited = HiddenField(default="false")
 
     def __init__(self, request, *args, **kwargs):
         formdata = kwargs.get("formdata")

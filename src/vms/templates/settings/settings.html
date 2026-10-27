@@ -27,12 +27,13 @@ document.addEventListener("click", () => {
 {% block content %}
     {# TODO: Decide whether autocomplete should be on and fix up conflicts with htmx #}
     <form method="POST" autocomplete="off" novalidate
-          x-data='settingsForm({{ field_errors|tojson }})'
+          x-data='settingsForm({{ field_errors|tojson }}, {{ form.voltage.form.defaults|tojson }}, {{ (form.voltages_edited.data == "true")|tojson }})'
           @submit="submit($event)" @input="clearError($event)" @change="clearError($event)" @unit-change="clearError($event)">
         <template x-for="error in uneditableErrors.filter(error => !error.tab)" :key="error.name">
             <p class="mb-2 text-sm text-red-800" x-text="error.label + ': ' + error.message"></p>
         </template>
         {{ form.csrf_token }}
+        {{ form.voltages_edited(**{':value': 'String(voltagesEdited)'}) }}
         {% call tab_container(default='about', inherit=True) %}
             {% call tab_list(has_about=True) %}
                 {% call tab('about', 'About') %}
@@ -117,12 +118,29 @@ can be found on
                                 {{ tooltip(form.cluster.description, form.cluster.id ~ '-tooltip', form.cluster.label.text, small=True) }}
                             {% endif %}
                         </div>
-                        {{ form.cluster(class_="w-full min-w-0 max-w-md rounded-md border border-black p-2", hx_get="/fragments/pathways", hx_target="#pathways-target", hx_indicator="#cluster-loading", **{'@change': 'clusterSelected = $event.target.selectedIndex > 0'}) }}
+                        {{ form.cluster(class_="w-full min-w-0 max-w-md rounded-md border border-black p-2", hx_get="/fragments/pathways", hx_target="#pathways-target", hx_indicator="#cluster-loading", **{'@change': 'clusterSelected = $event.target.selectedIndex > 0; clusterChanged()'}) }}
                         <span id="cluster-loading" class="htmx-indicator hidden [&.htmx-request]:block" role="status">
                             {{ spinner() }}
                             <span class="sr-only">Loading cluster...</span>
                         </span>
                     </div>
+                    <template x-if="voltageNotice">
+                        <div class="mx-auto mb-4 flex max-w-xl items-start gap-4 rounded-lg border border-blue-300 bg-blue-50 p-4 text-sm text-blue-800" role="status">
+                            <p class="min-w-0 flex-1">
+                                <template x-if="!voltageNotice.edited">
+                                    <span x-text="`Voltages have changed to the default for ${voltageNotice.polarity} clusters.`"></span>
+                                </template>
+                                <template x-if="voltageNotice.edited">
+                                    <span>
+                                        <span x-text="`The cluster charge has changed to ${voltageNotice.polarity}, but the voltages have not changed. You can reset them to the appropriate default on the`"></span>
+                                        <a href="#voltagecontrols" @click="current_tab = 'voltagecontrols'" class="underline">Voltages page</a>.
+                                    </span>
+                                </template>
+                            </p>
+                            <button type="button" @click="voltageNotice = null" aria-label="Dismiss voltage notice"
+                                    class="shrink-0 cursor-pointer rounded px-2 py-1 hover:bg-blue-100 focus-visible:outline-2">&times;</button>
+                        </div>
+                    </template>
                     <div id="pathways-target" class="border-t border-gray-300 pt-4">
                         {% include "settings/_render_pathways.html" %}
                     </div>
@@ -199,6 +217,9 @@ can be found on
                                     {{ field(range__class="vertical", number__class="text-center") }}
                                 </div>
                             {% endfor %}
+                        </div>
+                        <div class="mx-4 mb-4 mt-8 text-center">
+                            <button type="button" @click="resetVoltages()" class="cursor-pointer rounded-md bg-blue-700 px-4 py-2 text-white hover:bg-blue-800 focus-visible:outline-2">Set to default</button>
                         </div>
                     </div>
                 {% endcall %}

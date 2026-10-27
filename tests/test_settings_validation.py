@@ -2,6 +2,7 @@ from pathlib import Path
 
 import duckdb
 import pytest
+from apitofsim.transmission import VOLTAGES_NEGATIVE, VOLTAGES_POSITIVE
 from apitofsim.workflow.db import ClusterDatabase
 from playwright.sync_api import expect
 from starlette.datastructures import FormData
@@ -31,7 +32,16 @@ class ExampleSettingsForm(SettingsForm):
     cluster = SelectField(
         *SettingsForm.cluster.args,
         **(
-            SettingsForm.cluster.kwargs | {"choices": [("", ""), ("1", "Test cluster")]}
+            SettingsForm.cluster.kwargs
+            | {
+                "choices": [
+                    ("", ""),
+                    ("1", "Test cluster", {"data-charge": -1}),
+                    ("2", "Positive cluster", {"data-charge": 1}),
+                    ("3", "Another positive cluster", {"data-charge": 2}),
+                    ("4", "Neutral cluster", {"data-charge": 0}),
+                ]
+            }
         ),
     )
     simulation = FormField(ExampleSimulationForm)
@@ -61,10 +71,11 @@ def cluster_db():
     db = ClusterDatabase((duckdb.connect(), None))
     db.db.execute(
         "CREATE TABLE cluster (id INTEGER, common_name VARCHAR, atomic_mass DOUBLE, "
-        "electronic_energy DOUBLE, ase_mol_id INTEGER)"
+        "electronic_energy DOUBLE, ase_mol_id INTEGER, charge INTEGER DEFAULT -1)"
     )
     db.db.execute(
-        "INSERT INTO cluster VALUES (1, 'Parent', 30, -3, NULL), "
+        "INSERT INTO cluster (id, common_name, atomic_mass, electronic_energy, ase_mol_id) "
+        "VALUES (1, 'Parent', 30, -3, NULL), "
         "(2, 'Other parent', 40, -4, NULL), (3, 'Product A', 10, -1, NULL), "
         "(4, 'Product B', 20, -1, NULL), (5, 'Unrelated', 50, 0, NULL)"
     )
@@ -86,7 +97,10 @@ def cluster_db():
 def test_cluster_choices_include_each_parent_once(cluster_db):
     choices = get_cluster_choices()
     assert choices[0] == ("", "")
-    assert sorted(choices[1:]) == [(1, "Parent"), (2, "Other parent")]
+    assert sorted(choices[1:]) == [
+        (1, "Parent", {"data-charge": -1}),
+        (2, "Other parent", {"data-charge": -1}),
+    ]
 
 
 def test_pathways_context_includes_only_selected_parent_and_products(form, cluster_db):
@@ -130,6 +144,113 @@ def load(page, form, hash="voltagecontrols"):
     page.add_script_tag(path=str(STATIC_JS))
 
 
+def assert_voltages(page, values):
+    for index, value in enumerate(values, 1):
+        for kind in ("number", "range"):
+            expect(
+                page.locator(f'input[type="{kind}"][name="voltage-voltage{index}"]')
+            ).to_have_value(str(value))
+
+
+def test_automatic_voltage_defaults_and_notices(page, form):
+    form.cluster.data = ""
+    load(page, form, "fragmentationpathways")
+    negative = VOLTAGES_NEGATIVE.magnitude.tolist()
+    positive = VOLTAGES_POSITIVE.magnitude.tolist()
+    assert_voltages(page, negative)
+    notice = page.locator('[role="status"]').filter(has_text="Voltages have changed")
+    expect(notice).to_have_count(0)
+    page.select_option("#cluster", "2")
+    assert_voltages(page, positive)
+    expect(notice).to_have_text(
+        "Voltages have changed to the default for positive clusters. ×"
+    )
+    page.set_viewport_size({"width": 375, "height": 800})
+    assert notice.bounding_box()["width"] <= 375
+    page.get_by_role("button", name="Dismiss voltage notice").click()
+    page.select_option("#cluster", "3")
+    expect(notice).to_have_count(0)
+    assert_voltages(page, positive)
+    page.select_option("#cluster", "1")
+    assert_voltages(page, negative)
+    expect(notice).to_contain_text("default for negative clusters")
+    page.get_by_role("button", name="Dismiss voltage notice").click()
+    page.select_option("#cluster", "4")
+    page.select_option("#cluster", "")
+    expect(notice).to_have_count(0)
+    assert_voltages(page, negative)
+
+
+@pytest.mark.parametrize("kind", ["number", "range"])
+def test_edited_voltages_require_explicit_reset(page, form, kind):
+    load(page, form)
+    control = page.locator(f'input[type="{kind}"][name="voltage-voltage1"]')
+    control.fill("-23")
+    control.fill("-19")
+    page.click('a[href="#fragmentationpathways"]')
+    page.select_option("#cluster", "2")
+    assert_voltages(page, VOLTAGES_NEGATIVE.magnitude.tolist())
+    warning = page.locator('[role="status"]').filter(
+        has_text="voltages have not changed"
+    )
+    expect(warning).to_contain_text("cluster charge has changed to positive")
+    page.get_by_role("button", name="Dismiss voltage notice").click()
+    page.select_option("#cluster", "1")
+    expect(warning).to_contain_text("cluster charge has changed to negative")
+    page.select_option("#cluster", "2")
+    warning.get_by_role("link", name="Voltages page").click()
+    expect(page.locator('div[name="voltagecontrols"]')).to_be_visible()
+    page.get_by_role("button", name="Set to default").click()
+    assert_voltages(page, VOLTAGES_POSITIVE.magnitude.tolist())
+    expect(page.locator('[name="voltages_edited"]')).to_have_value("false")
+    expect(warning).to_have_count(0)
+    page.click('a[href="#fragmentationpathways"]')
+    page.select_option("#cluster", "1")
+    assert_voltages(page, VOLTAGES_NEGATIVE.magnitude.tolist())
+
+
+def test_voltage_reset_clears_errors_without_selected_cluster(page, form):
+    form.cluster.data = ""
+    form.voltage.voltage1.data = -23
+    form.voltage.voltage1.errors = ["Invalid voltage"]
+    load(page, form)
+    page.click('a[href="#voltagecontrols"]')
+    page.get_by_role("button", name="Set to default").click()
+    assert_voltages(page, VOLTAGES_NEGATIVE.magnitude.tolist())
+    number = page.locator('input[type="number"][name="voltage-voltage1"]')
+    assert number.evaluate("el => el.validity.customError") is False
+    expect(number).not_to_have_attribute("aria-invalid", "true")
+
+
+@pytest.mark.parametrize("edited", [False, True])
+def test_voltage_state_survives_failed_submission(page, form, edited):
+    load(page, form, "fragmentationpathways")
+    page.select_option("#cluster", "2")
+    if edited:
+        page.click('a[href="#voltagecontrols"]')
+        page.locator('input[type="number"][name="voltage-voltage1"]').fill("23")
+    submitted = ExampleSettingsForm(
+        form._request,
+        formdata=FormData(page.locator("form").evaluate("el => [...new FormData(el)]")),
+    )
+    submitted.simulation.realizations.errors = ["Invalid realizations"]
+    load(page, submitted, "fragmentationpathways")
+    expect(page.locator('[name="voltages_edited"]')).to_have_value(str(edited).lower())
+    expected = VOLTAGES_POSITIVE.magnitude.tolist()
+    if edited:
+        expected[0] = 23
+    assert_voltages(page, expected)
+    page.click('a[href="#fragmentationpathways"]')
+    page.select_option("#cluster", "1")
+    if edited:
+        assert_voltages(page, expected)
+        expect(
+            page.locator('[role="status"]').filter(has_text="voltages have not changed")
+        ).to_be_visible()
+    else:
+        assert_voltages(page, VOLTAGES_NEGATIVE.magnitude.tolist())
+
+
 def test_error_collection_and_order(form):
     form.form_errors = ["Form error"]
     form.gas.form.form_errors = ["Gas form error"]
@@ -157,6 +278,7 @@ def test_error_collection_and_order(form):
         "instrument",
         "voltage",
         "simulation",
+        "voltages_edited",
     ]
 
 
