@@ -20,7 +20,7 @@
     "@tailwindcss/cli": "^4.2.2",
     "3dmol": "^2.5.4",
     "alpinejs": "^3.15.8",
-    "esbuild": "^0.27.4",
+    "esbuild": "^0.28.2",
     "htmx-ext-sse": "^2.2.4",
     "htmx.org": "^2.0.8",
     "lit": "^3.3.3",
