@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from vms.ray_auth import local_ray_auth
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -72,3 +74,61 @@ def test_container_auth_startup(tmp_path, credentials):
         assert settings["token"] == (
             "test-token" if credentials == "environment" else None
         )
+
+
+@pytest.fixture
+def unwritable_ray_home(monkeypatch, tmp_path):
+    for key in ("RAY_AUTH_TOKEN", "RAY_AUTH_TOKEN_PATH"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("RAY_AUTH_MODE", "token")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("vms.ray_auth.os.access", lambda *args: False)
+    return tmp_path
+
+
+def test_embedded_ray_token_without_writable_home(unwritable_ray_home):
+    with pytest.raises(RuntimeError, match="startup failed"):
+        with local_ray_auth("local"):
+            token = Path(os.environ["RAY_AUTH_TOKEN_PATH"])
+            assert len(token.read_text()) == 64
+            assert token.stat().st_mode & 0o777 == 0o600
+            assert token.parent.stat().st_mode & 0o777 == 0o700
+            raise RuntimeError("startup failed")
+    assert not token.exists()
+    assert "RAY_AUTH_TOKEN_PATH" not in os.environ
+    assert not (unwritable_ray_home / ".ray").exists()
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    ["file", "environment", "default", "disabled", "remote", "writable"],
+)
+def test_embedded_ray_preserves_auth_configuration(
+    unwritable_ray_home, monkeypatch, configuration
+):
+    address = "local"
+    if configuration == "file":
+        # A missing explicitly configured file must fail rather than silently
+        # switching to newly generated credentials.
+        monkeypatch.setenv("RAY_AUTH_TOKEN_PATH", "/missing/token")
+    elif configuration == "environment":
+        monkeypatch.setenv("RAY_AUTH_TOKEN", "test-token")
+    elif configuration == "default":
+        token = unwritable_ray_home / ".ray" / "auth_token"
+        token.parent.mkdir()
+        token.write_text("test-token")
+    elif configuration == "disabled":
+        monkeypatch.setenv("RAY_AUTH_MODE", "disabled")
+    elif configuration == "remote":
+        address = "127.0.0.1:6379"
+    else:
+        monkeypatch.setattr("vms.ray_auth.os.access", lambda *args: True)
+    original = {
+        key: value for key, value in os.environ.items() if key.startswith("RAY_AUTH_")
+    }
+    with local_ray_auth(address):
+        assert {
+            key: value
+            for key, value in os.environ.items()
+            if key.startswith("RAY_AUTH_")
+        } == original
