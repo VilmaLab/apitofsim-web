@@ -22,6 +22,24 @@ window.UnitSystem = UnitSystemCls;
 AlpineModule.data('quantityinput', quantityinput);
 AlpineModule.data('settingsForm', settingsform);
 AlpineModule.data('unitswitcher', unitswitcher);
+AlpineModule.data('resultFrame', () => ({
+  observer: null as ResizeObserver | null,
+  observe() {
+    this.observer?.disconnect();
+    const frame = this.$el as HTMLIFrameElement;
+    const body = frame.contentDocument?.body;
+    if (!body) return;
+    // Observe natural content height, not the iframe viewport: plots and
+    // transmission results can grow or shrink after the initial load.
+    this.observer = new ResizeObserver(() => {
+      frame.style.height = `${Math.ceil(body.getBoundingClientRect().height)}px`;
+    });
+    this.observer.observe(body);
+  },
+  destroy() {
+    this.observer?.disconnect();
+  },
+}));
 AlpineModule.data('tabHover', () => ({
   hovered: null as string | null,
   pointer: null as string | null,
