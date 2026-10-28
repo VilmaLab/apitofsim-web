@@ -20,6 +20,7 @@ from .assets import ASSETS
 from .jobs.queue import scheduler_context
 from .markdown_ext import MarkdownExtension
 from .pintweb.alpine import quantity_display
+from .ray_auth import local_ray_auth
 from .result_plots import make_bokeh_app
 from .settings import database_path
 
@@ -77,16 +78,18 @@ def make_runtime_env():
 
 @asynccontextmanager
 async def ray_context(app):
-    my_ray = await to_thread.run_sync(
-        partial(
-            ray.init,
-            address=environ.get("RAY_ADDRESS", "local"),
-            log_to_driver=False,
-            runtime_env=make_runtime_env(),
+    address = environ.get("RAY_ADDRESS", "local")
+    with local_ray_auth(address):
+        my_ray = await to_thread.run_sync(
+            partial(
+                ray.init,
+                address=address,
+                log_to_driver=False,
+                runtime_env=make_runtime_env(),
+            )
         )
-    )
-    with my_ray:
-        yield
+        with my_ray:
+            yield
 
 
 @asynccontextmanager

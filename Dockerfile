@@ -50,6 +50,7 @@ ENV FORWARDED_ALLOW_IPS="*"
 # in-tree caches fail (numba even raises: "cannot cache function ...").
 ENV NUMBA_CACHE_DIR="/tmp/numba-cache"
 ENV MPLCONFIGDIR="/tmp/matplotlib"
+ENV XDG_CACHE_HOME="/tmp/.cache"
 
 # Run the ASGI application
 EXPOSE 8080

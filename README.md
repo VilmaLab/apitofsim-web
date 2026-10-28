@@ -26,6 +26,11 @@ stable token, mount a readable token file and set `RAY_AUTH_TOKEN_PATH` to its
 container path. `RAY_AUTH_TOKEN` is also supported. Tokens are created at runtime,
 not baked into the image.
 
+If a deployment launches uvicorn directly, the app also creates a private
+temporary token when embedded Ray cannot write its default token directory.
+That token is removed after Ray shuts down. Supplied credentials and existing
+default tokens take precedence. Fontconfig uses `/tmp/.cache` in the image.
+
 To opt out for an isolated development container, pass
 `-e RAY_AUTH_MODE=disabled` to `docker run`.
 
