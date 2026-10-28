@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 
 {% block title %}Spectrogram{% endblock %}
+{% block body_class %}p-4 relative{% endblock %}
 
 {% block content %}
-    <div class="overflow-x-auto mx-auto w-max">{{ plot_script|safe }}</div>
+    <div class="overflow-x-auto">{{ plot_script|safe }}</div>
     <hr class="my-4">
     <h3 class="text-lg font-semibold">Transmission model</h3>
     <p class="mt-2">

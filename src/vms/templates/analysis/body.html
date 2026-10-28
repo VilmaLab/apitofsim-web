@@ -27,12 +27,12 @@
         </div>
         <div x-show="results_ready && current_tab == 'explorer'" name="explorer" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
             <template x-if="results_ready && current_tab == 'explorer'">
-                <iframe title="Explorer plot" src="/analysis/results/{{ jobid }}/explorer" class="w-full min-h-screen border-0" style="frame-sizing: content-height;"></iframe>
+                <iframe title="Explorer plot" src="/analysis/results/{{ jobid }}/explorer" class="block w-full border-0" x-data="resultFrame" @load="observe"></iframe>
             </template>
         </div>
         <div x-show="results_ready && current_tab == 'spectrogram'" name="spectrogram" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
             <template x-if="results_ready && current_tab == 'spectrogram'">
-                <iframe title="Spectrogram plot" src="/analysis/results/{{ jobid }}/spectrogram" class="w-full min-h-screen border-0" style="frame-sizing: content-height;"></iframe>
+                <iframe title="Spectrogram plot" src="/analysis/results/{{ jobid }}/spectrogram" class="block w-full border-0" x-data="resultFrame" @load="observe"></iframe>
             </template>
         </div>
     </div>

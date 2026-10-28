@@ -9,6 +9,60 @@ REALIZATIONS = 5
 RUN_TIMEOUT = 15 * 60 * 1000
 
 
+def expect_content_sized_frame(page, title):
+    page.wait_for_function(
+        """title => {
+            const frame = document.querySelector(`iframe[title="${title}"]`);
+            const doc = frame?.contentDocument;
+            return doc &&
+                Math.abs(frame.clientHeight - doc.body.getBoundingClientRect().height) <= 1 &&
+                doc.documentElement.scrollHeight <= frame.clientHeight + 1;
+        }""",
+        arg=title,
+    )
+
+
+def check_explorer_layout(page):
+    frame = page.locator('iframe[title="Explorer plot"]')
+    explorer = page.frame_locator('iframe[title="Explorer plot"]')
+    expect_content_sized_frame(page, "Explorer plot")
+    explorer.get_by_role("button", name="☷", exact=True).click()
+    expect(explorer.get_by_role("button", name="Hide details »")).to_be_visible()
+    # The viewer rewrites these inline caps when opening details. Both control
+    # columns must still flow with the page rather than scroll independently.
+    caps = explorer.locator('[style*="max-height"]')
+    assert caps.count() >= 2
+    assert caps.evaluate_all(
+        "nodes => nodes.every(node => getComputedStyle(node).maxHeight === 'none')"
+    )
+    explorer.get_by_role("button", name="Hide details »").click()
+    # Hide the tall controls so plot changes determine the document height.
+    explorer.get_by_role("button", name="« Controls", exact=True).click()
+    expect(explorer.get_by_role("button", name="»", exact=True)).to_be_visible()
+    expect_content_sized_frame(page, "Explorer plot")
+    height = frame.evaluate("frame => frame.clientHeight")
+    explorer.get_by_role("button", name="»", exact=True).click()
+    explorer.get_by_role("checkbox", name="Facet pathways", exact=True).check()
+    explorer.get_by_role("checkbox", name="Cumulative", exact=True).check()
+    explorer.get_by_role("checkbox", name="Bar chart", exact=True).check()
+    explorer.get_by_role("button", name="« Controls", exact=True).click()
+    page.wait_for_function(
+        "height => document.querySelector('iframe').clientHeight > height + 100",
+        arg=height,
+    )
+    expect_content_sized_frame(page, "Explorer plot")
+    explorer.get_by_role("button", name="»", exact=True).click()
+    explorer.get_by_role("checkbox", name="Facet pathways", exact=True).uncheck()
+    explorer.get_by_role("checkbox", name="Cumulative", exact=True).uncheck()
+    explorer.get_by_role("checkbox", name="Bar chart", exact=True).uncheck()
+    explorer.get_by_role("button", name="« Controls", exact=True).click()
+    page.wait_for_function(
+        "height => document.querySelector('iframe').clientHeight <= height + 1",
+        arg=height,
+    )
+    expect_content_sized_frame(page, "Explorer plot")
+
+
 def submit_experiment(page, server, realizations):
     page.goto(server)
 
@@ -56,10 +110,16 @@ def test_default_run_completes(page, server):
     page.click('a[href="#explorer"]')
     explorer = page.frame_locator('iframe[title="Explorer plot"]')
     expect(explorer.locator(".bk-Canvas")).not_to_have_count(0, timeout=60_000)
+    check_explorer_layout(page)
 
     page.click('a[href="#spectrogram"]')
     spectrogram = page.frame_locator('iframe[title="Spectrogram plot"]')
     expect(spectrogram.locator(".bk-Canvas")).not_to_have_count(0, timeout=60_000)
+    expect_content_sized_frame(page, "Spectrogram plot")
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect_content_sized_frame(page, "Spectrogram plot")
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    page.set_viewport_size({"width": 1280, "height": 720})
 
     page.reload()
     expect(page.locator('a[href="#explorer"]')).to_be_visible()

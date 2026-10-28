@@ -49,15 +49,17 @@ def make_bokeh_app(cluster_path):
         if frame is None:
             return
         layout = frame.children[0]
-        sidebar = layout.children[0]
-        layout.styles = {**layout.styles, "min-height": "calc(100vh - 2rem)"}
-        sidebar.height_policy = "max"
-        # Let controls grow with the page, including after fullscreen changes.
-        sidebar.children[1].stylesheets.append(
-            InlineStyleSheet(
-                css=":host { max-height: none !important; flex: 1 0 auto !important; }"
+        workspace = layout.children[1]
+        # Both sidebars belong to the page flow. The viewer updates their inline
+        # viewport caps when toggling details/fullscreen, so override those caps
+        # in a stylesheet that survives those updates.
+        for sidebar in (layout.children[0], workspace.children[1]):
+            sidebar.height_policy = "max"
+            sidebar.children[1].stylesheets.append(
+                InlineStyleSheet(
+                    css=":host { max-height: none !important; overflow-y: visible !important; flex: 1 0 auto !important; }"
+                )
             )
-        )
 
     def spectrogram(doc):
         spectrogram_bokeh(database_for(doc), doc)
