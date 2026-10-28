@@ -73,7 +73,7 @@ export default (errors, voltageDefaults, voltagesEdited) => ({
         if (!panel) return invalid.length > 0;
         const name = panel.getAttribute('name');
         this.current_tab = name;
-        this.$nextTick().then(() => {
+        this.$nextTick().then(() => new Promise(requestAnimationFrame)).then(() => {
             const control = invalid.find(control => panel.contains(control));
             if (control) {
                 control.focus();
