@@ -4,6 +4,15 @@ export default (errors, voltageDefaults, voltagesEdited) => ({
     voltagesEdited,
     voltagePolarity: 'negative',
     voltageNotice: null,
+    negativeFirstChamberAcceleration: false,
+
+    updateAccelerationWarning() {
+        const form = this.$el.closest('form');
+        const charge = Number(form.querySelector('#cluster').selectedOptions[0]?.dataset.charge);
+        const voltages = [1, 2].map(index =>
+            form.querySelector(`input[type="number"][name="voltage-voltage${index}"]`).valueAsNumber);
+        this.negativeFirstChamberAcceleration = charge * (voltages[0] - voltages[1]) < 0;
+    },
 
     selectedPolarity() {
         const charge = Number(this.$el.closest('form').querySelector('#cluster').selectedOptions[0]?.dataset.charge);
@@ -11,6 +20,7 @@ export default (errors, voltageDefaults, voltagesEdited) => ({
     },
 
     clusterChanged() {
+        this.updateAccelerationWarning();
         const polarity = this.selectedPolarity();
         if (!polarity || polarity === this.voltagePolarity) return;
         this.voltagePolarity = polarity;
@@ -30,11 +40,13 @@ export default (errors, voltageDefaults, voltagesEdited) => ({
         });
         this.voltagesEdited = false;
         this.voltageNotice = null;
+        this.updateAccelerationWarning();
     },
 
     async init() {
         this.voltagePolarity = this.selectedPolarity() || 'negative';
         await this.$nextTick();
+        this.updateAccelerationWarning();
         for (const error of errors) {
             const control = Array.from(this.$el.elements).find(control =>
                 (control.id === error.id || control.name === error.name)
@@ -52,7 +64,10 @@ export default (errors, voltageDefaults, voltagesEdited) => ({
     clearError(event) {
         // Quantity/unit controls and paired voltage inputs share their wrapper.
         const target = event.target;
-        if (target.name?.startsWith('voltage-')) this.voltagesEdited = true;
+        if (target.name?.startsWith('voltage-')) {
+            this.voltagesEdited = true;
+            this.updateAccelerationWarning();
+        }
         const quantity = target.closest('[x-data^="quantityinput"]');
         const controls = quantity ? quantity.querySelectorAll('input')
             : target.type === 'range' ? [target, target.nextElementSibling] : [target];
