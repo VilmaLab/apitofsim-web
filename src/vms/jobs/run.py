@@ -47,8 +47,7 @@ def build_input_pathways(
                 "density_hist": density_hist,
                 "product_labels": [],
                 "pathway_ids": [],
-                # TODO: Should this not be included in ClusterData by now?
-                "cluster_charge_sign": -1,
+                "cluster_charge_sign": cluster.charge,
             }
         product1 = cluster_indexed[product1_id]
         product2 = cluster_indexed[product2_id]
