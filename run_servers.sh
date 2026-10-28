@@ -121,6 +121,11 @@ fi
 
 mkdir -p "$RAY_TMP"
 
+export RAY_AUTH_MODE="${RAY_AUTH_MODE:-token}"
+if [ "$RAY_AUTH_MODE" = token ]; then
+	(umask 077; "${UV_RUN[@]}" ray get-auth-token --generate >/dev/null)
+fi
+
 if [ -z "${DATABASE-}" ]; then
 	echo "Warning: DATABASE is not set; requests will fail with KeyError: 'DATABASE'." >&2
 fi

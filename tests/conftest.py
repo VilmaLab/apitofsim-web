@@ -1,4 +1,5 @@
 import os
+import secrets
 import signal
 import socket
 import subprocess
@@ -83,6 +84,8 @@ def server(test_db, tmp_path_factory):
         **os.environ,
         "DATABASE": str(test_db),
         "RESULTS": str(tmp_path_factory.mktemp("results") / "results.duckdb"),
+        "RAY_AUTH_MODE": "token",
+        "RAY_AUTH_TOKEN_PATH": str(tmp_path_factory.mktemp("ray-auth") / "auth_token"),
         "PYTHONPATH": str(REPO_ROOT / "src")
         + os.pathsep
         + os.environ.get("PYTHONPATH", ""),
@@ -90,6 +93,12 @@ def server(test_db, tmp_path_factory):
     # Unset so that ray.init() falls back to address="local" and brings up its
     # own single node cluster rather than looking for an external one
     env.pop("RAY_ADDRESS", None)
+    env.pop("RAY_AUTH_TOKEN", None)
+    # An explicit token path must already exist; ray.init only generates at the
+    # default path. Keep test credentials separate from the developer's token.
+    token_path = Path(env["RAY_AUTH_TOKEN_PATH"])
+    token_path.touch(mode=0o600)
+    token_path.write_text(secrets.token_hex(32))
 
     log_path = Path(__file__).parent / "server.log"
     base_url = f"http://127.0.0.1:{port}"

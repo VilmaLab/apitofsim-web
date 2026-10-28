@@ -3,6 +3,7 @@ import tempfile
 
 os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 os.environ["RAY_DISABLE_FAILURE_SIGNAL_HANDLER"] = "1"
+os.environ.setdefault("RAY_AUTH_MODE", "token")
 
 import os
 from contextlib import AsyncExitStack, asynccontextmanager
