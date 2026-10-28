@@ -20,6 +20,15 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
 
     Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
 
+Docker enables Ray token authentication by default. At startup it creates a private
+token file under `/tmp`, which works with arbitrary container UIDs. To supply a
+stable token, mount a readable token file and set `RAY_AUTH_TOKEN_PATH` to its
+container path. `RAY_AUTH_TOKEN` is also supported. Tokens are created at runtime,
+not baked into the image.
+
+To opt out for an isolated development container, pass
+`-e RAY_AUTH_MODE=disabled` to `docker run`.
+
 ## Running the Application Locally with uv
 
 1. **Install uv**
@@ -40,6 +49,8 @@ Alternatively you can manually start them in separate terminals:
 
 **Start Ray:**
     ```bash
+    export RAY_AUTH_MODE=token
+    (umask 077; uv run ray get-auth-token --generate >/dev/null)
     mkdir -p /tmp/raytmp
     uv run ray start \
     --head \
@@ -53,7 +64,7 @@ Alternatively you can manually start them in separate terminals:
 
 **Run the webserver:**
     ```bash
-    RAY_ADDRESS="localhost:6379" uv run python -m vms --reload
+    RAY_AUTH_MODE=token RAY_ADDRESS="localhost:6379" uv run python -m vms --reload
     ```
 
 It's also possible to run everything in a single command, which starts a local Ray cluster and automatically builds frontend assets before startup and each reload:
@@ -61,6 +72,20 @@ It's also possible to run everything in a single command, which starts a local R
 ```bash
 uv run python -m vms --reload
 ```
+
+Ray authentication defaults to `token` in the app and `run_servers.sh`. The launcher
+ensures a token exists before starting Ray and passes the same authentication
+environment to both tmux panes. Embedded Ray generates and reuses
+`~/.ray/auth_token` automatically. A separately started Ray server and its web
+process must use the same authentication mode and token. Ray checks
+`RAY_AUTH_TOKEN`, then `RAY_AUTH_TOKEN_PATH`, then `~/.ray/auth_token`.
+An explicitly configured token file must exist and be readable. Keep token files
+private and outside the repository.
+
+To opt out locally, use `RAY_AUTH_MODE=disabled ./run_servers.sh restart` or
+`RAY_AUTH_MODE=disabled uv run python -m vms --reload`. For manual separate
+processes, set `RAY_AUTH_MODE=disabled` in both terminals and skip token generation.
+Restart existing servers when changing authentication settings.
 
 The generated `src/vms/static/index.js` and `index.css` are ignored by Git.
 `workingtitle.devserver` installs npm dependencies as needed and skips builds
@@ -101,6 +126,8 @@ test database, which is downloaded automatically on first run.
 
 The suite starts its own web server and its own Ray cluster, so `run_servers.sh` must
 not be running, and `RAY_ADDRESS` must not be set in the environment.
+The test server always enables token authentication with a private temporary token,
+independent of your shell's Ray credentials.
 
 ## Run failures
 

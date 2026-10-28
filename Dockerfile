@@ -40,6 +40,7 @@ ENV PATH="/env/bin:/tools/bin:$PATH"
 ENV DATABASE_DIR="/database/"
 ENV RESULTS="/database/results"
 ENV RAY_USE_PIP="1"
+ENV RAY_AUTH_MODE="token"
 # uvicorn only honours X-Forwarded-Proto from these peers. The TLS-terminating
 # proxy in front of the app is never loopback, so trust it, otherwise url_for
 # builds http:// URLs for an https:// page (blocked as mixed content).
