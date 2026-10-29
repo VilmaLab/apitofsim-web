@@ -1,16 +1,19 @@
 {% from "ui/_lightbox.html" import lightbox with context %}
 {% from "ui/_tabs.html" import tab_container, tab_list, tab, tab_content_sse %}
+{% from "ui/_floating_zone.html" import floating_zone %}
 
 <div
     class="tab-page"
-    :class="current_tab == 'explorer' && results_ready ? 'h-[calc(100dvh-5.5rem)] roomy:h-[calc(100dvh-7rem)] flex flex-col [&>.top-tabs]:shrink-0 [&_.action-label]:compact:hidden' : ''"
+    :class="current_tab == 'explorer' && results_ready ? 'explorer-view h-[calc(100dvh-5.5rem)] roomy:h-[calc(100dvh-7rem)] flex flex-col' : ''"
     x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}', stopped_early: {{ 'true' if info.get('cancelled_stage') else 'false' }}, cancelling: {{ 'true' if info.get('cancel_requested') else 'false' }} }"
     x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
 >
     <div sse-swap="state">{% include "analysis/state.html" %}</div>
     <div sse-swap="failure">{% include "analysis/failure.html" %}</div>
-    {% call tab_list(sse=True) %}
-        {% include "analysis/tabs.html" %}
+    {% call floating_zone('menu', 'Navigation menu') %}
+        {% call tab_list(sse=True) %}
+            {% include "analysis/tabs.html" %}
+        {% endcall %}
     {% endcall %}
     <div id="default-tab-content" class="w-full mx-auto" :class="current_tab == 'explorer' ? 'max-w-none flex-1 min-h-0 p-1 roomy:p-4' : 'max-w-5xl p-2 roomy:p-6'">
         {% call tab_content_sse('queue') %}
@@ -28,7 +31,7 @@
         </div>
         <div x-show="results_ready && current_tab == 'explorer'" name="explorer" class="h-full p-1 roomy:p-4 rounded-lg bg-gray-50" role="tabpanel">
             <template x-if="results_ready && current_tab == 'explorer'">
-                <iframe title="Explorer plot" src="/analysis/results/{{ jobid }}/explorer" class="block h-full min-h-80 roomy:min-h-0 w-full border-0" allow="fullscreen" allowfullscreen></iframe>
+                <iframe title="Explorer plot" src="/analysis/results/{{ jobid }}/explorer" class="block h-full min-h-0 w-full border-0" allow="fullscreen" allowfullscreen></iframe>
             </template>
         </div>
         <div x-show="results_ready && current_tab == 'spectrogram'" name="spectrogram" class="p-2 roomy:p-4 rounded-lg bg-gray-50" role="tabpanel">
@@ -37,7 +40,8 @@
             </template>
         </div>
     </div>
-    <div class="page-action gap-3 flex-wrap">
+    {% call floating_zone('actions', 'Actions menu') %}
+    <div class="page-action gap-3">
         {% from "ui/_actions.html" import job_results, new_experiment %}
         {{ new_experiment() }}
         {{ job_results() }}
@@ -51,4 +55,5 @@
         </form>
         {% endif %}
     </div>
+    {% endcall %}
 </div>

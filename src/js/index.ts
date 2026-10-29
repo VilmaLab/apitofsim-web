@@ -73,6 +73,10 @@ function responsiveTabs(list: HTMLElement) {
     scheduled = false;
     const items = Array.from(list.querySelectorAll<HTMLElement>(':scope > li[role="tab"]'));
     if (!items.length) return;
+    if (getComputedStyle(list).flexDirection === 'column') {
+      list.dataset.mode = 'natural';
+      return;
+    }
 
     // SSE can replace the items; apply the row's hover state to the new markup.
     items.forEach(item => {
@@ -129,3 +133,42 @@ function responsiveTabs(list: HTMLElement) {
 }
 
 document.querySelectorAll<HTMLElement>('[data-responsive-tabs]').forEach(responsiveTabs);
+
+function responsiveActions(row: HTMLElement) {
+  const context = document.createElement('canvas').getContext('2d');
+  if (!context) return;
+  let scheduled = false;
+  const update = () => {
+    scheduled = false;
+    if (!row.clientWidth) return;
+    const buttons = Array.from(row.querySelectorAll<HTMLElement>('a, button'))
+      .filter(button => button.getClientRects().length);
+    const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+    const natural = buttons.reduce((width, button) => {
+      const style = getComputedStyle(button);
+      const label = button.querySelector<HTMLElement>('.action-label');
+      context.font = label ? getComputedStyle(label).font : style.font;
+      const text = Math.ceil(context.measureText(label?.textContent?.trim() || '').width);
+      return width + (button.querySelector('.icon')?.getBoundingClientRect().width || 0)
+        + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+        + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)
+        + text + (text ? parseFloat(style.columnGap) || 0 : 0);
+    }, gap * Math.max(0, buttons.length - 1));
+    row.dataset.icons = String(natural > row.clientWidth);
+  };
+  const schedule = () => {
+    if (!scheduled) {
+      scheduled = true;
+      requestAnimationFrame(update);
+    }
+  };
+  new ResizeObserver(schedule).observe(row);
+  new MutationObserver(schedule).observe(row, {
+    childList: true, subtree: true, characterData: true,
+    attributes: true, attributeFilter: ['style'],
+  });
+  document.fonts.ready.then(schedule);
+  schedule();
+}
+
+document.querySelectorAll<HTMLElement>('.page-action').forEach(responsiveActions);
