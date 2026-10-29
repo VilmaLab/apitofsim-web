@@ -7,64 +7,6 @@ from starlette.responses import StreamingResponse
 from .queue import get_status_dict
 
 
-def build_input_pathways(
-    config,
-    histograms,
-    cluster_indexed,
-    name_lookup,
-    pathway_lookup,
-    k_rates,
-    cluster_dos,
-):
-    from apitofsim.api import (
-        Histogram,
-        MassSpecInputFragmentationPathway,
-        scaled_density,
-        scaled_rate_const,
-    )
-
-    density_hist_params, rate_hist_params = histograms
-    retval = None
-    for pathway_id, (
-        cluster_id,
-        product1_id,
-        product2_id,
-    ) in pathway_lookup.items():
-        cluster = cluster_indexed[cluster_id]
-        if retval is None:
-            density_cluster = cluster_dos[cluster_id]
-            density_hist = scaled_density(
-                Histogram.from_mesh(
-                    *density_hist_params,
-                    density_cluster,
-                )
-            )
-            retval = {
-                "pathways": [],
-                "cluster": cluster,
-                "cluster_id": cluster_id,
-                "cluster_label": name_lookup[cluster_id],
-                "density_hist": density_hist,
-                "product_labels": [],
-                "pathway_ids": [],
-                "cluster_charge_sign": cluster.charge,
-            }
-        product1 = cluster_indexed[product1_id]
-        product2 = cluster_indexed[product2_id]
-        rate_const = k_rates[pathway_id]
-        rate_hist = scaled_rate_const(
-            Histogram.from_mesh(
-                *rate_hist_params,
-                rate_const,
-            )
-        )
-        retval["pathways"].append(
-            MassSpecInputFragmentationPathway(cluster, product1, product2, rate_hist)
-        )
-        retval["pathway_ids"].append(pathway_id)
-    return retval
-
-
 def setup_result_db(database_path, result_db_path):
     # Use DDL without foreign keys since they're not supported across multiple schemas in DuckDB
     import apitofsim.workflow.sql_files_nofk as sql
@@ -110,12 +52,24 @@ def simulation_events(**arguments):
         db = context.get("db")
         if db is not None and "run_id" in context:
             try:
-                db.record_failure(
-                    context["run_id"],
-                    failure["exception_type"],
-                    json.dumps(failure),
-                    cluster_id=context.get("cluster_id"),
-                )
+                # The upstream iterator saves execution failures and links partial
+                # events to them. Enrich that row without creating another failure.
+                recorded = db.db.execute(
+                    "SELECT id FROM experiment_failure WHERE experiment_run_id = ?",
+                    [context["run_id"]],
+                ).fetchone()
+                if recorded is None:
+                    db.record_failure(
+                        context["run_id"],
+                        failure["exception_type"],
+                        json.dumps(failure),
+                        cluster_id=context.get("cluster_id"),
+                    )
+                else:
+                    db.db.execute(
+                        "UPDATE experiment_failure SET msg = ? WHERE id = ?",
+                        [json.dumps(failure), recorded[0]],
+                    )
             except Exception as persistence_exc:
                 failure["database_error"] = str(persistence_exc)
         save_failure(result_db_path, failure)
@@ -140,7 +94,6 @@ def run_simulation(**arguments):
 
 def _run_simulation(
     pathways,
-    histograms,
     histogram_precision,
     config,
     database_path,
@@ -152,18 +105,10 @@ def _run_simulation(
     from time import time
 
     from apitofsim.api import (
-        CollisionEvent,
-        EscapeEvent,
-        FragmentationEvent,
-        InitEvent,
-        MassSpecFinalResult,
         MassSpecIntermediateCounter,
         MassSpecLogItem,
-        MassSpectrometer,
-        mass_spec_iter,
     )
-    from apitofsim.workflow.db import EventRecorder
-    from apitofsim.workflow.runners import DerivedDataPreparer
+    from apitofsim.workflow.runners import ExperimentRunner, RecordedMassSpecResult
     from jinja2 import Environment
     from minify_html_onepass import minify
 
@@ -175,7 +120,9 @@ def _run_simulation(
     db = setup_result_db(database_path, result_db_path)
     context["db"] = db
     config_id = db.insert_config("webrun", config)
-    current_run_id = db.insert_run(config_id)
+    runner = ExperimentRunner(db)
+    runner.start_run(config_id)
+    current_run_id = runner.current_run_id
     context["run_id"] = current_run_id
     jinja_env = Environment(loader=jinja_loader)
 
@@ -196,10 +143,6 @@ def _run_simulation(
     survived = 0
     fragmented = 0
     iterations = 0
-
-    preparer = DerivedDataPreparer(db)
-
-    cluster_indexed, name_lookup, pathway_lookup = db.get_all_lookups(pathways=pathways)
 
     def render_template(path):
         html = jinja_env.get_template(path).render(
@@ -233,8 +176,7 @@ def _run_simulation(
     def fmt_duration(took):
         return f"{took:.1f}s" if took >= 1 else f"{took * 1000:.0f}ms"
 
-    skimmer_np = k_rates = cluster_dos = None
-    mass_spec = None
+    prepared = None
     skimmer_start = None
     while 1:
         if processing == "queue":
@@ -254,10 +196,9 @@ def _run_simulation(
             context["stage"] = processing
             yield b"stage", processing
             yield update_pane("skimmer")
-            skimmer_np, k_rates, cluster_dos = preparer.run_preliminaries(
+            prepared = runner.prepare_from_config(
                 config,
-                cluster_indexed,
-                pathway_lookup=pathway_lookup,
+                pathways=pathways,
                 cached_densityandrate=histogram_precision,
                 show_progress=False,
             )
@@ -268,99 +209,49 @@ def _run_simulation(
             statuses["apitof"] = "processing"
             processing = "apitof"
             yield update_pane("tabs")
-            mass_spec = MassSpectrometer(
-                skimmer_np,
-                config["lengths"],
-                config["voltages"],
-                config["T"],
-                config["pressures"],
-                quadrupole=config["quadrupole"],
-            )
         elif processing == "apitof":
             enter_stage(cancel_control, processing)
             context["stage"] = processing
             yield b"stage", processing
             yield update_pane("apitof")
             yield update_pane("tabs")
-            group = build_input_pathways(
-                config,
-                histograms,
-                cluster_indexed,
-                name_lookup,
-                pathway_lookup,
-                k_rates,
-                cluster_dos,
-            )
-            assert group is not None
-            context["cluster_id"] = group["cluster_id"]
-
-            from apitofsim.api import MassSpecSubstanceSingleInput
-
+            assert prepared is not None
+            if len(prepared.groups) != 1:
+                raise ValueError("Web runs require pathways from exactly one cluster")
+            group = prepared.groups[0]
+            context["cluster_id"] = group.cluster_id
             realizations = config["N"]
-            subs = MassSpecSubstanceSingleInput(
-                group["cluster"],
-                group["pathways"],
-                config["gas"],
-                group["density_hist"],
-                group["cluster_charge_sign"],
-            )
-
-            assert mass_spec is not None
-            event_recorder = EventRecorder(db, group["pathway_ids"])
-            experiment_result_id = None
+            terminal = None
             with (
-                mass_spec_iter(
-                    mass_spec,
-                    subs,
-                    realizations,
-                    sample_mode=2,
-                    strict=True,
-                    logconf=(1, True),
+                runner.iter_mass_spec(
+                    prepared, group, realizations, sample_mode=2, loglevel=1
                 ) as it,
                 cancel_iterator(cancel_control, it),
             ):
                 for result in it:
                     if isinstance(
-                        result, (MassSpecIntermediateCounter, MassSpecFinalResult)
+                        result, (MassSpecIntermediateCounter, RecordedMassSpecResult)
                     ):
-                        context["counts"]["completed"] = int(
-                            result.counters.n_realizations
-                        )
+                        if isinstance(result, RecordedMassSpecResult):
+                            terminal = result
+                            counters = result.result.counters
+                        else:
+                            counters = result.counters
+                        context["counts"]["completed"] = int(counters.n_realizations)
                         yield b"progress", json.dumps(context["counts"])
-                    if isinstance(result, MassSpecIntermediateCounter):
-                        counters = result.counters
                         survived = counters.n_fragmented_total.sum()
                         fragmented = counters.n_escaped_total
                         iterations = survived + fragmented
                         yield update_pane("apitof")
-                    elif isinstance(result, MassSpecFinalResult):
-                        final_cancelled = result.cancelled
-                        counters = result.counters
-                        survived = counters.n_fragmented_total.sum()
-                        fragmented = counters.n_escaped_total
-                        iterations = survived + fragmented
-                        experiment_result_id = db.record_result(
-                            current_run_id,
-                            counters,
-                            timings=result.timings,
-                            cluster_id=group["cluster_id"],
-                            pathway_ids=group["pathway_ids"],
-                        )
-                        event_recorder.relate_realizations(experiment_result_id)
-                        yield update_pane("apitof")
-                    elif isinstance(
-                        result,
-                        (InitEvent, CollisionEvent, FragmentationEvent, EscapeEvent),
-                    ):
-                        event_recorder(result)
                     elif isinstance(result, MassSpecLogItem):
                         log.append(f"{result.type}: {result.name}")
                         yield b"apitoflog", "\n".join(log)
-            if experiment_result_id is None:
+            if terminal is None:
                 raise RuntimeError("Simulation ended without a final result")
+            final_cancelled = terminal.result.cancelled
             context["result"] = {
                 "experiment": current_run_id,
-                "cluster": group["cluster_id"],
+                "cluster": group.cluster_id,
             }
             validate_output(
                 db, counters, realizations, context, cancelled=final_cancelled
@@ -374,7 +265,7 @@ def _run_simulation(
     if not final_cancelled or counters.n_realizations > 0:
         yield (
             b"result",
-            json.dumps({"experiment": current_run_id, "cluster": group["cluster_id"]}),
+            json.dumps({"experiment": current_run_id, "cluster": group.cluster_id}),
         )
     statuses["apitof"] = "cancelled" if final_cancelled else "done"
     yield update_pane("tabs")
