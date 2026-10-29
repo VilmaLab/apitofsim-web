@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
 {% block title %}{{ plot|capitalize }}{% endblock %}
-{% block body_class %}p-4 relative{% endblock %}
+{% block body_class %}h-dvh overflow-hidden p-4 relative{% endblock %}
 
 {% block content %}
-    <div class="overflow-x-auto">{{ plot_script|safe }}</div>
+    <div class="h-full min-h-0 min-w-0 [&>div]:h-full">{{ plot_script|safe }}</div>
 {% endblock %}

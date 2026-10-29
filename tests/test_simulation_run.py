@@ -22,44 +22,95 @@ def expect_content_sized_frame(page, title):
     )
 
 
-def check_explorer_layout(page):
+def check_explorer_layout(page, tmp_path):
     frame = page.locator('iframe[title="Explorer plot"]')
     explorer = page.frame_locator('iframe[title="Explorer plot"]')
-    expect_content_sized_frame(page, "Explorer plot")
-    explorer.get_by_role("button", name="☷", exact=True).click()
-    expect(explorer.get_by_role("button", name="Hide details »")).to_be_visible()
-    # The viewer's page layout keeps both control columns in document flow.
-    caps = explorer.locator(".explorer-controls, .explorer-details")
-    expect(caps).to_have_count(2)
-    for controls in caps.all():
-        expect(controls).to_have_css("overflow-y", "visible")
-        assert controls.evaluate("node => node.scrollHeight <= node.clientHeight + 1")
-    explorer.get_by_role("button", name="Hide details »").click()
-    # Hide the tall controls so plot changes determine the document height.
-    explorer.get_by_role("button", name="« Controls", exact=True).click()
-    expect(explorer.get_by_role("button", name="»", exact=True)).to_be_visible()
-    expect_content_sized_frame(page, "Explorer plot")
-    height = frame.evaluate("frame => frame.clientHeight")
-    explorer.get_by_role("button", name="»", exact=True).click()
+    body = explorer.locator("body")
+    root = explorer.locator(".explorer-bokeh-frame")
+    height = frame.evaluate("el => el.clientHeight")
+
+    def expect_host_fit():
+        page.wait_for_function("""() => {
+            const iframe = document.querySelector('iframe[title="Explorer plot"]');
+            const doc = iframe.contentDocument;
+            const root = doc.querySelector('.explorer-bokeh-frame');
+            const padding = parseFloat(getComputedStyle(doc.body).paddingTop) +
+                parseFloat(getComputedStyle(doc.body).paddingBottom);
+            return root && Math.abs(root.clientHeight - (iframe.clientHeight - padding)) <= 1 &&
+                doc.documentElement.scrollHeight <= iframe.clientHeight &&
+                doc.documentElement.scrollWidth <= iframe.clientWidth;
+        }""")
+
+    expect_host_fit()
+    expect(root).to_have_css("overflow", "hidden")
     explorer.get_by_role("checkbox", name="Facet pathways", exact=True).check()
     explorer.get_by_role("checkbox", name="Cumulative", exact=True).check()
     explorer.get_by_role("checkbox", name="Bar chart", exact=True).check()
-    explorer.get_by_role("button", name="« Controls", exact=True).click()
-    page.wait_for_function(
-        "height => document.querySelector('iframe').clientHeight > height + 100",
-        arg=height,
-    )
-    expect_content_sized_frame(page, "Explorer plot")
-    explorer.get_by_role("button", name="»", exact=True).click()
-    explorer.get_by_role("checkbox", name="Facet pathways", exact=True).uncheck()
-    explorer.get_by_role("checkbox", name="Cumulative", exact=True).uncheck()
-    explorer.get_by_role("checkbox", name="Bar chart", exact=True).uncheck()
-    explorer.get_by_role("button", name="« Controls", exact=True).click()
-    page.wait_for_function(
-        "height => document.querySelector('iframe').clientHeight <= height + 1",
-        arg=height,
-    )
-    expect_content_sized_frame(page, "Explorer plot")
+    explorer.get_by_role("button", name="☷", exact=True).click()
+    expect(explorer.get_by_role("button", name="Hide details »")).to_be_visible()
+    # Supply long details so all three regions overflow independently.
+    body.evaluate("""() => {
+        const details = [...Bokeh.documents[0].all_models]
+            .find(model => model.css_classes?.includes('explorer-details'));
+        details.children[0].text = '<div style="height:1600px">Long details</div>';
+    }""")
+    geometry = """() => {
+        const classes = ['explorer-controls', 'explorer-center', 'explorer-details'];
+        return classes.map(cls => {
+            const model = [...Bokeh.documents[0].all_models]
+                .find(model => model.css_classes?.includes(cls));
+            const el = Bokeh.index.find_one(model).el;
+            const rect = el.getBoundingClientRect();
+            return [rect.x, rect.y, rect.width, rect.height, el.scrollTop];
+        }).concat([[window.scrollX, window.scrollY]]);
+    }"""
+    for index, selector in enumerate(
+        (".explorer-controls", ".explorer-center", ".explorer-details")
+    ):
+        region = explorer.locator(selector)
+        expect(region).to_have_css("overflow", "auto")
+        page.wait_for_function(
+            """cls => {
+                const target = document.querySelector('iframe[title="Explorer plot"]').contentWindow;
+                const model = [...target.Bokeh.documents[0].all_models]
+                    .find(model => model.css_classes?.includes(cls));
+                const el = target.Bokeh.index.find_one(model).el;
+                return el.scrollHeight > el.clientHeight + 25;
+            }""",
+            arg=selector[1:],
+        )
+        before = body.evaluate(geometry)
+        outer_scroll = page.evaluate("window.scrollY")
+        region.evaluate("el => el.scrollTop = 25")
+        expect(region).to_have_js_property("scrollTop", 25)
+        before[index][-1] = 25
+        assert body.evaluate(geometry) == before
+        assert page.evaluate("window.scrollY") == outer_scroll
+        region.evaluate("el => el.scrollTop = 0")
+    assert frame.evaluate("el => el.clientHeight") == height
+    expect_host_fit()
+
+    explorer.get_by_role("button", name="Fullscreen", exact=True).click()
+    page.wait_for_function("""() => document.querySelector('iframe[title="Explorer plot"]')
+        .contentDocument.fullscreenElement !== null""")
+    expect(explorer.locator(".explorer-center")).to_have_css("overflow", "auto")
+    body.evaluate("document.exitFullscreen()")
+    page.wait_for_function("""() => document.querySelector('iframe[title="Explorer plot"]')
+        .contentDocument.fullscreenElement === null""")
+    expect_host_fit()
+    assert frame.evaluate("el => el.clientHeight") == height
+
+    # Resizing the host alone must resize the Explorer, without viewport changes.
+    frame.evaluate("el => el.style.height = '360px'")
+    expect_host_fit()
+    assert frame.evaluate("el => el.clientHeight") == 360
+    frame.evaluate("el => el.style.removeProperty('height')")
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect_host_fit()
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.screenshot(path=str(tmp_path / "explorer-mobile.png"), full_page=True)
+    page.set_viewport_size({"width": 1280, "height": 720})
+    expect_host_fit()
 
 
 def submit_experiment(page, server, realizations):
@@ -81,7 +132,7 @@ def submit_experiment(page, server, realizations):
     page.click('button[type="submit"]')
 
 
-def test_default_run_completes(page, server):
+def test_default_run_completes(page, server, tmp_path):
     page_errors = []
     page.on("pageerror", lambda error: page_errors.append(error))
     page.set_default_timeout(60_000)
@@ -109,7 +160,7 @@ def test_default_run_completes(page, server):
     page.click('a[href="#explorer"]')
     explorer = page.frame_locator('iframe[title="Explorer plot"]')
     expect(explorer.locator(".bk-Canvas")).not_to_have_count(0, timeout=60_000)
-    check_explorer_layout(page)
+    check_explorer_layout(page, tmp_path)
 
     page.click('a[href="#spectrogram"]')
     spectrogram = page.frame_locator('iframe[title="Spectrogram plot"]')

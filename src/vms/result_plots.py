@@ -43,7 +43,7 @@ def make_bokeh_app(cluster_path):
         return databases[jobid]
 
     def explorer(doc):
-        explorer_bokeh(database_for(doc), doc, layout="page")
+        explorer_bokeh(database_for(doc), doc, layout="contained")
 
     def spectrogram(doc):
         spectrogram_bokeh(database_for(doc), doc)
