@@ -467,9 +467,11 @@ def test_config_round_trip_uses_apitofsim_schema(config_form, output_db):
     from vms.forms import Q_
 
     form, _ = config_form
+    form.pathways[0].pathway.process_formdata(["12"])
     arguments = form.get_data()
+    assert arguments["pathways"] == [12]
     config = arguments["config"]
-    assert set(arguments) == {"config", "pathways", "histograms", "histogram_precision"}
+    assert set(arguments) == {"config", "pathways", "histogram_precision"}
     assert arguments["histogram_precision"] == (10, 20)
     assert set(config) == {
         "voltages",

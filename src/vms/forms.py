@@ -343,9 +343,10 @@ def get_cluster_choices():
 
 
 class SingleFragmentationPathwayForm(Form):
-    pathway = HiddenField(
+    pathway = IntegerField(
         "Fragmentation pathway",
         validators=[InputRequired()],
+        widget=HiddenInput(),
     )
     enabled = BooleanField("Enabled", default=True)
     fragmentation_energy = FloatField(validators=[Optional()])
@@ -434,10 +435,10 @@ class SettingsForm(StarletteForm):
             int(x) for x in data["simulation"]["histogram_precision"].split(",")
         )
         result["histogram_precision"] = histogram_precision
-        result["histograms"] = tuple(
+        histograms = tuple(
             get_connection().get_histogram_params(x) for x in histogram_precision
         )
-        density_params, rate_params = result["histograms"]
+        density_params, rate_params = histograms
         if density_params is None or rate_params is None:
             raise ValueError("Selected histogram configuration is missing")
         bin_width, energy_max = density_params

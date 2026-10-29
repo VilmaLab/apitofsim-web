@@ -1,6 +1,3 @@
-import json
-from contextlib import chdir
-
 from markupsafe import Markup
 from pint import get_application_registry
 from wtforms.widgets import html_params
@@ -42,21 +39,3 @@ class PairedRangeInputWidget:
             <input type="number" oninput="this.previousElementSibling.value = this.value" {number_params}>
             """.strip()
         )
-
-
-def parse_config_pint(fn):
-    from apitofsim import get_clusters, get_gas, parse_config_with_particles
-
-    config = parse_config_with_particles(fn)
-    clusters = get_clusters(config)
-    gas = get_gas(config["config"])
-    return {"gas": gas, "pathways": [clusters]}
-
-
-def parse_config_list(fn):
-    with open(fn) as f:
-        config_dict = json.load(f)
-        for k, conf_info in config_dict.items():
-            with chdir(conf_info["cwd"]):
-                config_dict[k] = parse_config_pint(conf_info["config"])
-    return config_dict

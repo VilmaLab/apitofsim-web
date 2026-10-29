@@ -96,7 +96,10 @@ class References:
         return resolve()
 
 
-def test_worker_failure_saved_in_database_and_sidecar(monkeypatch, job, test_db):
+@pytest.mark.parametrize("already_recorded", [False, True])
+def test_worker_failure_saved_in_database_and_sidecar(
+    monkeypatch, job, test_db, already_recorded
+):
     result_path, _ = job
 
     def broken_run(context, **arguments):
@@ -104,6 +107,11 @@ def test_worker_failure_saved_in_database_and_sidecar(monkeypatch, job, test_db)
         context["db"] = db
         context["run_id"] = db.insert_run(db.insert_config("test", {}))
         context["stage"] = "skimmer"
+        if already_recorded:
+            failure_id = db.record_failure(
+                context["run_id"], "ValueError", "Injected preliminary failure"
+            )
+            db.db.execute("INSERT INTO realization VALUES (1, ?)", [failure_id])
         yield b"stage", "skimmer"
         raise ValueError("Injected preliminary failure")
 
@@ -118,6 +126,14 @@ def test_worker_failure_saved_in_database_and_sidecar(monkeypatch, job, test_db)
         name, message = connection.execute(
             "SELECT exc_name, msg FROM experiment_failure"
         ).fetchone()
+        assert connection.execute(
+            "SELECT count(*) FROM experiment_failure"
+        ).fetchone() == (1,)
+        if already_recorded:
+            assert connection.execute(
+                "SELECT count(*) FROM realization JOIN experiment_failure "
+                "ON realization.experiment_result_id = experiment_failure.id"
+            ).fetchone() == (1,)
     assert name == "ValueError"
     assert json.loads(message)["run_id"] == failure["run_id"]
 
