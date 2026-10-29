@@ -3,7 +3,7 @@
 
 <div
     class="tab-page"
-    :class="current_tab == 'explorer' && results_ready ? 'h-[calc(100dvh-5.5rem)] sm:h-[calc(100dvh-7rem)] flex flex-col [&>.top-tabs]:shrink-0 [&_.action-label]:max-sm:hidden' : ''"
+    :class="current_tab == 'explorer' && results_ready ? 'h-[calc(100dvh-5.5rem)] roomy:h-[calc(100dvh-7rem)] flex flex-col [&>.top-tabs]:shrink-0 [&_.action-label]:compact:hidden' : ''"
     x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}', stopped_early: {{ 'true' if info.get('cancelled_stage') else 'false' }}, cancelling: {{ 'true' if info.get('cancel_requested') else 'false' }} }"
     x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
 >
@@ -12,26 +12,26 @@
     {% call tab_list(sse=True) %}
         {% include "analysis/tabs.html" %}
     {% endcall %}
-    <div id="default-tab-content" class="w-full mx-auto" :class="current_tab == 'explorer' ? 'max-w-none flex-1 min-h-0 p-1 sm:p-4' : 'max-w-5xl p-2 sm:p-6'">
+    <div id="default-tab-content" class="w-full mx-auto" :class="current_tab == 'explorer' ? 'max-w-none flex-1 min-h-0 p-1 roomy:p-4' : 'max-w-5xl p-2 roomy:p-6'">
         {% call tab_content_sse('queue') %}
             {% include "analysis/queue.html" %}
         {% endcall %}
         {% call tab_content_sse('skimmer') %}
             {# {{ skimmer|safe }} #}
         {% endcall %}
-        <div x-show="current_tab == 'apitof'" name="apitof" class="p-2 sm:p-4 rounded-lg bg-gray-50" role="tabpanel">
+        <div x-show="current_tab == 'apitof'" name="apitof" class="p-2 roomy:p-4 rounded-lg bg-gray-50" role="tabpanel">
             <div sse-swap="apitof"></div>
             <div class="m-4">
                 <a class="px-4 py-3 bg-gray-50 hover:text-gray-900 hover:bg-gray-100 inline-block my-2" @click="log_open = !log_open" href="#">Toggle log</a>
                 <pre class="m-2" x-show="log_open" sse-swap="apitoflog"></pre>
             </div>
         </div>
-        <div x-show="results_ready && current_tab == 'explorer'" name="explorer" class="h-full p-1 sm:p-4 rounded-lg bg-gray-50" role="tabpanel">
+        <div x-show="results_ready && current_tab == 'explorer'" name="explorer" class="h-full p-1 roomy:p-4 rounded-lg bg-gray-50" role="tabpanel">
             <template x-if="results_ready && current_tab == 'explorer'">
-                <iframe title="Explorer plot" src="/analysis/results/{{ jobid }}/explorer" class="block h-full min-h-80 sm:min-h-0 w-full border-0" allow="fullscreen" allowfullscreen></iframe>
+                <iframe title="Explorer plot" src="/analysis/results/{{ jobid }}/explorer" class="block h-full min-h-80 roomy:min-h-0 w-full border-0" allow="fullscreen" allowfullscreen></iframe>
             </template>
         </div>
-        <div x-show="results_ready && current_tab == 'spectrogram'" name="spectrogram" class="p-2 sm:p-4 rounded-lg bg-gray-50" role="tabpanel">
+        <div x-show="results_ready && current_tab == 'spectrogram'" name="spectrogram" class="p-2 roomy:p-4 rounded-lg bg-gray-50" role="tabpanel">
             <template x-if="results_ready && current_tab == 'spectrogram'">
                 <iframe title="Spectrogram plot" src="/analysis/results/{{ jobid }}/spectrogram" class="block w-full border-0" x-data="resultFrame" @load="observe"></iframe>
             </template>

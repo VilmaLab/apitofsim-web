@@ -1,8 +1,20 @@
 @import "tailwindcss" source(none);
 @source "../vms";
 
+/* Keep compact phone spacing in either orientation. */
+@custom-variant roomy {
+    @media (width >= 40rem) and (height >= 40rem), (width >= 64rem) {
+        @slot;
+    }
+}
+@custom-variant compact {
+    @media (width < 40rem), (width < 64rem) and (height < 40rem) {
+        @slot;
+    }
+}
+
 .top-tabs {
-    @apply mt-2 mb-2 sm:mt-6 sm:mb-4;
+    @apply mt-2 mb-2 roomy:mt-6 roomy:mb-4;
     --tab-label-gap: 4px;
     justify-content: safe center;
     display: flex;
@@ -64,7 +76,7 @@
 }
 
 .page-action {
-    @apply fixed bottom-2 right-2 max-w-[calc(100%-1rem)] sm:bottom-4 sm:right-4 sm:max-w-[calc(100%-2rem)];
+    @apply fixed bottom-2 right-2 max-w-[calc(100%-1rem)] roomy:bottom-4 roomy:right-4 roomy:max-w-[calc(100%-2rem)];
     z-index: 10;
     display: flex;
     justify-content: flex-end;
