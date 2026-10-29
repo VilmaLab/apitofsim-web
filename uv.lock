@@ -13,7 +13,7 @@ supported-markers = [
 ]
 
 [manifest]
-overrides = [{ name = "apitofsim", extras = ["plot"], git = "https://github.com/VilmaLab/apitofsim.git?rev=abf9f9422814faa673a6fc973e0b48ab96e1218e" }]
+overrides = [{ name = "apitofsim", extras = ["plot"], git = "https://github.com/VilmaLab/apitofsim.git?rev=f2066dc18bced4b7a59f3243b783b29cd9b4348a" }]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -126,7 +126,7 @@ wheels = [
 [[package]]
 name = "apitofsim"
 version = "0.25.0"
-source = { git = "https://github.com/VilmaLab/apitofsim.git?rev=abf9f9422814faa673a6fc973e0b48ab96e1218e#abf9f9422814faa673a6fc973e0b48ab96e1218e" }
+source = { git = "https://github.com/VilmaLab/apitofsim.git?rev=f2066dc18bced4b7a59f3243b783b29cd9b4348a#f2066dc18bced4b7a59f3243b783b29cd9b4348a" }
 dependencies = [
     { name = "ase" },
     { name = "click" },
@@ -2457,7 +2457,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.14.2" },
-    { name = "apitofsim", git = "https://github.com/VilmaLab/apitofsim.git?rev=abf9f9422814faa673a6fc973e0b48ab96e1218e" },
+    { name = "apitofsim", git = "https://github.com/VilmaLab/apitofsim.git?rev=f2066dc18bced4b7a59f3243b783b29cd9b4348a" },
     { name = "apitofsim-resultviewer", git = "https://github.com/VilmaLab/apitofsim-resultviewer.git?rev=dcd679f7f0c4cc6da047086bace354f056a04ba4" },
     { name = "ase", specifier = ">=3.26.0" },
     { name = "duckdb", specifier = ">=1.4.1" },

@@ -449,6 +449,14 @@ def config_form(form):
     form.simulation.histogram_precision.data = "10,20"
     form.simulation.realizations.data = 5
     form.voltage.voltage1.data = -23
+    # Form iteration order must not determine the simulator's voltage order.
+    form.voltage.form._fields = dict(reversed(form.voltage.form._fields.items()))
+    form.gas.pressure_first_chamber.data = Q_(0.195, "kPa")
+    form.gas.pressure_second_chamber.data = Q_(0.035, "mbar")
+    form.instrument.quadrupole.dc_quadrupole.data = Q_(0.015, "kV")
+    form.instrument.quadrupole.ac_quadrupole.data = Q_(0.25, "kV")
+    form.instrument.quadrupole.radiofrequency_quadrupole.data = Q_(1.5, "MHz")
+    form.instrument.quadrupole.half_distance_between_quadrupole_rods.data = Q_(6, "mm")
     # Exercise unit conversion as well as the geometry's positional contract.
     form.instrument.instrument_geometry.length_of_skimmer.data = Q_(0.7, "mm")
     try:
@@ -504,7 +512,12 @@ def test_config_round_trip_uses_apitofsim_schema(config_form, output_db):
     assert stored["bin_width"] == Q_(20, "K")
     assert stored["energy_max"] == Q_(200_000, "K")
     assert stored["energy_max_rate"] == Q_(100_000, "K")
-    assert stored["quadrupole"].ac_field == Q_(200, "V")
+    np.testing.assert_allclose(stored["pressures"].to("Pa").magnitude, [195, 3.5])
+    assert stored["alpha_factor"] == Q_(0.25, "halfturn")
+    assert stored["quadrupole"].dc_field == Q_(15, "V")
+    assert stored["quadrupole"].ac_field == Q_(250, "V")
+    assert stored["quadrupole"].radiofrequency == Q_(1.5, "MHz")
+    assert stored["quadrupole"].r_quadrupole == Q_(6, "mm")
     assert stored["gas"].radius == config["gas"].radius
     assert json.loads(dump_to_raw(stored)) == json.loads(dump_to_raw(config))
 

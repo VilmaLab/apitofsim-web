@@ -96,9 +96,9 @@ class References:
         return resolve()
 
 
-@pytest.mark.parametrize("already_recorded", [False, True])
+@pytest.mark.parametrize("unrelated_failure", [False, True])
 def test_worker_failure_saved_in_database_and_sidecar(
-    monkeypatch, job, test_db, already_recorded
+    monkeypatch, job, test_db, unrelated_failure
 ):
     result_path, _ = job
 
@@ -107,9 +107,9 @@ def test_worker_failure_saved_in_database_and_sidecar(
         context["db"] = db
         context["run_id"] = db.insert_run(db.insert_config("test", {}))
         context["stage"] = "skimmer"
-        if already_recorded:
+        if unrelated_failure:
             failure_id = db.record_failure(
-                context["run_id"], "ValueError", "Injected preliminary failure"
+                context["run_id"], "RuntimeError", "Earlier attempt"
             )
             db.db.execute("INSERT INTO realization VALUES (1, ?)", [failure_id])
         yield b"stage", "skimmer"
@@ -123,19 +123,23 @@ def test_worker_failure_saved_in_database_and_sidecar(
     assert "ValueError: Injected preliminary failure" in failure["traceback"]
     assert json.loads(failure_path(result_path).read_text()) == failure
     with duckdb.connect(str(result_path), read_only=True) as connection:
-        name, message = connection.execute(
-            "SELECT exc_name, msg FROM experiment_failure"
+        name, message, diagnostics = connection.execute(
+            "SELECT exc_name, msg, diagnostics FROM experiment_failure ORDER BY id DESC LIMIT 1"
         ).fetchone()
         assert connection.execute(
             "SELECT count(*) FROM experiment_failure"
-        ).fetchone() == (1,)
-        if already_recorded:
+        ).fetchone() == (2 if unrelated_failure else 1,)
+        if unrelated_failure:
             assert connection.execute(
                 "SELECT count(*) FROM realization JOIN experiment_failure "
                 "ON realization.experiment_result_id = experiment_failure.id"
             ).fetchone() == (1,)
+            assert connection.execute(
+                "SELECT msg, diagnostics FROM experiment_failure ORDER BY id LIMIT 1"
+            ).fetchone() == ("Earlier attempt", None)
     assert name == "ValueError"
-    assert json.loads(message)["run_id"] == failure["run_id"]
+    assert message == "Injected preliminary failure"
+    assert json.loads(diagnostics) == {"web": failure}
 
 
 @pytest.mark.parametrize("error", [RuntimeError("Worker died <script>"), None])

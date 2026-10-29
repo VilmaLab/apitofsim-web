@@ -352,12 +352,6 @@ class SingleFragmentationPathwayForm(Form):
     fragmentation_energy = FloatField(validators=[Optional()])
 
 
-def canonical_numpy_quantity(unit, *quantities):
-    from numpy import array
-
-    return Q_(array([quantity.to(unit).magnitude for quantity in quantities]), unit)
-
-
 class SettingsForm(StarletteForm):
     cluster = SelectField(
         "Cluster",
@@ -390,8 +384,7 @@ class SettingsForm(StarletteForm):
         super().__init__(request, *args, **kwargs)
 
     def get_data(self):
-        from apitofsim import Gas, Quadrupole
-        from numpy import array
+        from apitofsim import CONFIG_FIELDS, build_config
 
         data = self.data
         result = {}
@@ -399,38 +392,9 @@ class SettingsForm(StarletteForm):
             pathway["pathway"] for pathway in data["pathways"] if pathway["enabled"]
         ]
         gas = data["gas"]
-        gas_model = Gas(
-            *(
-                gas[k]
-                for k in ("gas_molecule_radius", "gas_molecule_mass", "adiabatic_index")
-            )
-        )
-        pressures = canonical_numpy_quantity(
-            "Pa",
-            gas["pressure_first_chamber"],
-            gas["pressure_second_chamber"],
-        )
-        lengths = canonical_numpy_quantity(
-            "m",
-            data["instrument"]["instrument_geometry"]["length_of_first_chamber"],
-            data["instrument"]["instrument_geometry"][
-                "length_between_skimmer_and_front_quadrupole"
-            ],
-            data["instrument"]["instrument_geometry"][
-                "length_between_front_quadrupole_and_back_quadrupole"
-            ],
-            data["instrument"]["instrument_geometry"][
-                "length_between_back_quadrupole_and_2nd_skimmer"
-            ],
-            data["instrument"]["instrument_geometry"]["length_of_skimmer"],
-        )
-        quadrupole_dict = data["instrument"]["quadrupole"]
-        quadrupole = Quadrupole(
-            quadrupole_dict["dc_quadrupole"],
-            quadrupole_dict["ac_quadrupole"],
-            quadrupole_dict["radiofrequency_quadrupole"],
-            quadrupole_dict["half_distance_between_quadrupole_rods"],
-        )
+        geometry = data["instrument"]["instrument_geometry"]
+        skimmer = data["instrument"]["skimmer_geometry"]
+        quadrupole = data["instrument"]["quadrupole"]
         histogram_precision = tuple(
             int(x) for x in data["simulation"]["histogram_precision"].split(",")
         )
@@ -445,32 +409,45 @@ class SettingsForm(StarletteForm):
         rate_bin_width, energy_max_rate = rate_params
         if bin_width != rate_bin_width:
             raise ValueError("Density and rate histograms must use the same bin width")
-        result["config"] = {
-            "voltages": Q_(array(list(data["voltage"].values())), "V"),
-            "quadrupole": quadrupole,
-            "N": data["simulation"]["realizations"],
-            "bin_width": bin_width,
-            "energy_max": energy_max,
-            "energy_max_rate": energy_max_rate,
-            "dc": Q_(
-                data["instrument"]["skimmer_geometry"][
-                    "radius_at_smallest_cross_section_skimmer"
-                ],
-                "meter",
-            ),
-            "alpha_factor": Q_(
-                data["instrument"]["skimmer_geometry"]["angle_of_skimmer"],
-                "multiple_of_PI",
-            ),
-            "N_iter": data["simulation"]["skimmer"]["iterations_eq1"],
-            "M_iter": data["simulation"]["skimmer"]["iterations_eq2"],
-            "resolution": data["simulation"]["skimmer"]["solved_points"],
-            "tolerance": data["simulation"]["skimmer"]["tolerance"],
-            "T": gas["temperature_"],
-            "gas": gas_model,
-            "pressures": pressures,
-            "lengths": lengths,
-        }
+        result["config"] = build_config(
+            lengths={
+                "L0": geometry["length_of_first_chamber"],
+                "Lsk": geometry["length_of_skimmer"],
+                "L1": geometry["length_between_skimmer_and_front_quadrupole"],
+                "L2": geometry["length_between_front_quadrupole_and_back_quadrupole"],
+                "L3": geometry["length_between_back_quadrupole_and_2nd_skimmer"],
+            },
+            voltages={
+                component: Q_(data["voltage"][f"voltage{i}"], "V")
+                for i, component in enumerate(CONFIG_FIELDS["voltages"].components, 1)
+            },
+            pressures={
+                "first": gas["pressure_first_chamber"],
+                "second": gas["pressure_second_chamber"],
+            },
+            gas={
+                "radius": gas["gas_molecule_radius"],
+                "mass": gas["gas_molecule_mass"],
+                "adiabatic_index": gas["adiabatic_index"],
+            },
+            quadrupole={
+                "dc_field": quadrupole["dc_quadrupole"],
+                "ac_field": quadrupole["ac_quadrupole"],
+                "radiofrequency": quadrupole["radiofrequency_quadrupole"],
+                "r_quadrupole": quadrupole["half_distance_between_quadrupole_rods"],
+            },
+            N=data["simulation"]["realizations"],
+            bin_width=bin_width,
+            energy_max=energy_max,
+            energy_max_rate=energy_max_rate,
+            dc=skimmer["radius_at_smallest_cross_section_skimmer"],
+            alpha_factor=Q_(skimmer["angle_of_skimmer"], "multiple_of_PI"),
+            N_iter=data["simulation"]["skimmer"]["iterations_eq1"],
+            M_iter=data["simulation"]["skimmer"]["iterations_eq2"],
+            resolution=data["simulation"]["skimmer"]["solved_points"],
+            tolerance=data["simulation"]["skimmer"]["tolerance"],
+            T=gas["temperature_"],
+        )
         return result
 
 
