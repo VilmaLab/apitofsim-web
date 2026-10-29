@@ -196,7 +196,7 @@ def pathways_context(form, cluster_id, *, submitted=False):
                 "product1": (pathway.product1_id, product1["common_name"]),
                 "product2": (pathway.product2_id, product2["common_name"]),
                 "bonding_energy": bonding_energy,
-                "form": submitted_entries.get(str(pathway.id))
+                "form": submitted_entries.get(pathway.id)
                 if submitted
                 else form.pathways.append_entry({"pathway": pathway.id}).form,
             }
