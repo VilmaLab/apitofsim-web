@@ -5,7 +5,7 @@ description = "Web interface to APi-ToF mass spectrometer simulator code"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "apitofsim",
+    "apitofsim==0.26.0",
     "anyio>=4.14.2",
     "ase>=3.26.0",
     "duckdb>=1.4.1",
@@ -55,7 +55,7 @@ dev = [
 
 [tool.uv]
 # Resultviewer declares older wheel URLs; use the web app's simulation version.
-override-dependencies = ["apitofsim[plot]"]
+override-dependencies = ["apitofsim[plot]==0.26.0"]
 environments = [
   "sys_platform == 'linux' and platform_machine == 'x86_64'",
   "sys_platform == 'darwin' and platform_machine == 'arm64'",
@@ -63,7 +63,10 @@ environments = [
 ]
 
 [tool.uv.sources]
-# Development pin for the public runner API; replace with a release before merging.
-apitofsim = { git = "https://github.com/VilmaLab/apitofsim.git", rev = "f2066dc18bced4b7a59f3243b783b29cd9b4348a" }
-apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git", rev = "dcd679f7f0c4cc6da047086bace354f056a04ba4" }
+apitofsim = [
+  { url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.26.0/apitofsim-0.26.0-cp313-abi3-manylinux_2_34_x86_64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+  { url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.26.0/apitofsim-0.26.0-cp313-abi3-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin' and platform_machine == 'arm64'" },
+  { url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.26.0/apitofsim-0.26.0-cp313-abi3-win_amd64.whl", marker = "sys_platform == 'win32' and platform_machine == 'AMD64'" },
+]
+apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git", rev = "3581e842bfc55e6fbfb9a7d483967d7b0a54d188" }
 workingtitle = { git = "https://github.com/frankier/workingtitle.git" }

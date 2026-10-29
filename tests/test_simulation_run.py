@@ -28,16 +28,12 @@ def check_explorer_layout(page):
     expect_content_sized_frame(page, "Explorer plot")
     explorer.get_by_role("button", name="☷", exact=True).click()
     expect(explorer.get_by_role("button", name="Hide details »")).to_be_visible()
-    # Both control columns must flow with the page without internal scrolling,
-    # regardless of how the standalone viewer sets its inline styles.
-    caps = explorer.locator(".embedded-explorer-controls")
+    # The viewer's page layout keeps both control columns in document flow.
+    caps = explorer.locator(".explorer-controls, .explorer-details")
     expect(caps).to_have_count(2)
-    assert caps.evaluate_all(
-        """nodes => nodes.every(node =>
-            getComputedStyle(node).maxHeight === 'none' &&
-            getComputedStyle(node).overflowY === 'visible' &&
-            node.scrollHeight <= node.clientHeight + 1)"""
-    )
+    for controls in caps.all():
+        expect(controls).to_have_css("overflow-y", "visible")
+        assert controls.evaluate("node => node.scrollHeight <= node.clientHeight + 1")
     explorer.get_by_role("button", name="Hide details »").click()
     # Hide the tall controls so plot changes determine the document height.
     explorer.get_by_role("button", name="« Controls", exact=True).click()

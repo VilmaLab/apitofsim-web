@@ -3,7 +3,6 @@
 import duckdb
 from apitofresview.webapp import explorer_bokeh, spectrogram_bokeh
 from apitofsim.workflow.db import RealizationDatabase
-from bokeh.models import InlineStyleSheet
 from bokeh.server.asgi import BokehASGI
 
 
@@ -44,27 +43,7 @@ def make_bokeh_app(cluster_path):
         return databases[jobid]
 
     def explorer(doc):
-        explorer_bokeh(database_for(doc), doc)
-        frame = doc.select_one({"css_classes": ["explorer-bokeh-frame"]})
-        if frame is None:
-            return
-        # The standalone viewer fills its viewport. Inside an auto-sized iframe,
-        # that height plus page padding makes the iframe grow on every resize.
-        frame.styles.update(height="auto", overflow="visible")
-        layout = frame.children[0]
-        workspace = layout.children[1]
-        # Both sidebars belong to the page flow. The viewer updates their inline
-        # viewport caps when toggling details/fullscreen, so override those caps
-        # in a stylesheet that survives those updates.
-        for sidebar in (layout.children[0], workspace.children[1]):
-            sidebar.height_policy = "max"
-            controls = sidebar.children[1]
-            controls.css_classes.append("embedded-explorer-controls")
-            controls.stylesheets.append(
-                InlineStyleSheet(
-                    css=":host { max-height: none !important; overflow: visible !important; flex: 1 0 auto !important; }"
-                )
-            )
+        explorer_bokeh(database_for(doc), doc, layout="page")
 
     def spectrogram(doc):
         spectrogram_bokeh(database_for(doc), doc)
