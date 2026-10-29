@@ -54,6 +54,12 @@ def request(path="/analysis/updates"):
     )
 
 
+def run_async(function, *args):
+    # Playwright's session-scoped sync API may already own this thread's loop.
+    with ThreadPoolExecutor() as executor:
+        return executor.submit(lambda: asyncio.run(function(*args))).result()
+
+
 def read_stream():
     async def read():
         info = get_status_dict().get(JOB_ID)
@@ -70,7 +76,7 @@ def read_stream():
         response = await update_analysis(request())
         return b"".join([chunk async for chunk in response.body_iterator]).decode()
 
-    return asyncio.run(read())
+    return run_async(read)
 
 
 class References:
@@ -167,7 +173,7 @@ def test_sse_failure_replays_and_survives_restart(job, error):
     # Simulate a server restart: restore the job from its durable diagnostics.
     get_status_dict().clear()
     assert read_stream() == stream
-    response = asyncio.run(analysis(request("/analysis")))
+    response = run_async(analysis, request("/analysis"))
     assert b"Simulation failed" in response.body
     assert b'data-status="failed"' in response.body
 
@@ -302,9 +308,7 @@ def test_failure_visible_in_browser(page, job, outcome, tmp_path):
     result_path, info = job
     page_errors = []
     page.on("pageerror", lambda error: page_errors.append(error))
-    # Playwright's sync API already owns an event loop in this thread.
-    with ThreadPoolExecutor() as executor:
-        response = executor.submit(asyncio.run, analysis(request("/analysis"))).result()
+    response = run_async(analysis, request("/analysis"))
     failure = {
         "status": outcome,
         "stage": "apitof",
@@ -327,8 +331,7 @@ def test_failure_visible_in_browser(page, job, outcome, tmp_path):
         log=[],
     )
     info["aiter"] = References([(b"apitof", pane), (b"failure", json.dumps(failure))])
-    with ThreadPoolExecutor() as executor:
-        stream = executor.submit(read_stream).result()
+    stream = read_stream()
 
     def serve(route):
         path = urlparse(route.request.url).path
@@ -398,8 +401,7 @@ def test_cancelled_before_simulation_closes_database(monkeypatch, job):
             consume_event(info, event, data)
         finish_job(info)
 
-    with ThreadPoolExecutor() as pool:
-        pool.submit(asyncio.run, finish()).result()
+    run_async(finish)
     assert info["status"] == "cancelled"
     assert not result_path.exists()
     assert "failure" not in info
