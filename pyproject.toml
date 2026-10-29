@@ -64,6 +64,6 @@ environments = [
 
 [tool.uv.sources]
 # Development pin for the public runner API; replace with a release before merging.
-apitofsim = { git = "https://github.com/VilmaLab/apitofsim.git", rev = "abf9f9422814faa673a6fc973e0b48ab96e1218e" }
+apitofsim = { git = "https://github.com/VilmaLab/apitofsim.git", rev = "f2066dc18bced4b7a59f3243b783b29cd9b4348a" }
 apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git", rev = "dcd679f7f0c4cc6da047086bace354f056a04ba4" }
 workingtitle = { git = "https://github.com/frankier/workingtitle.git" }

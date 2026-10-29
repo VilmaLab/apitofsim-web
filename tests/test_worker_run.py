@@ -2,6 +2,7 @@
 
 import json
 from contextlib import contextmanager
+from pathlib import Path
 from time import time
 
 import duckdb
@@ -44,7 +45,10 @@ def worker_arguments(test_db, tmp_path):
     )
 
 
-@pytest.mark.parametrize("outcome", ["complete", "cancelled", "failed"])
+@pytest.mark.parametrize(
+    "outcome",
+    ["complete", "cancelled", "failed", "startup_failed", "diagnostics_failed"],
+)
 def test_recording_worker(worker_arguments, monkeypatch, outcome):
     if outcome == "cancelled":
 
@@ -55,12 +59,23 @@ def test_recording_worker(worker_arguments, monkeypatch, outcome):
 
         monkeypatch.setattr("vms.jobs.cancellation.cancel_iterator", cancel_immediately)
         worker_arguments["config"]["N"] = 10_000_000
-    elif outcome == "failed":
+    elif outcome in ("failed", "startup_failed", "diagnostics_failed"):
 
         def fail(*args, **kwargs):
             raise RuntimeError("Injected result write failure")
 
-        monkeypatch.setattr(RealizationDatabase, "record_result", fail)
+        if outcome == "startup_failed":
+            monkeypatch.setattr("apitofsim.api.mass_spec_iter", fail)
+        else:
+            monkeypatch.setattr(RealizationDatabase, "record_result", fail)
+        if outcome == "diagnostics_failed":
+
+            def fail_diagnostics(*args, **kwargs):
+                raise OSError("Cannot enrich diagnostics")
+
+            monkeypatch.setattr(
+                RealizationDatabase, "add_failure_diagnostics", fail_diagnostics
+            )
 
     events = list(simulation_events(**worker_arguments))
     messages = {event: data for event, data in events}
@@ -74,26 +89,39 @@ def test_recording_worker(worker_arguments, monkeypatch, outcome):
             metadata["dos_histogram_id"],
             metadata["rate_histogram_id"],
         ) == worker_arguments["histogram_precision"]
-        failures = db.execute("SELECT id, msg FROM experiment_failure").fetchall()
+        failures = db.execute(
+            "SELECT id, msg, diagnostics FROM experiment_failure"
+        ).fetchall()
         results = db.execute(
             "SELECT id FROM multi_pathway_experiment_result"
         ).fetchall()
         assert db.execute(
             "SELECT count(*) FROM realization WHERE experiment_result_id IS NULL"
         ).fetchone() == (0,)
-        if outcome == "failed":
+        if outcome in ("failed", "startup_failed", "diagnostics_failed"):
             assert len(failures) == 1
             assert results == []
             assert b"result" not in messages
             failure = json.loads(messages[b"failure"])
             assert failure["message"] == "Injected result write failure"
-            assert json.loads(failures[0][1]) == failure
+            assert failures[0][1] == "Injected result write failure"
             assert (
-                db.execute(
-                    "SELECT count(*) FROM realization WHERE experiment_result_id = ?",
-                    [failures[0][0]],
-                ).fetchone()[0]
-                > 0
+                json.loads(Path(result_path).with_suffix(".failure.json").read_text())
+                == failure
+            )
+            if outcome == "diagnostics_failed":
+                assert failures[0][2] is None
+                assert failure["database_error"] == "Cannot enrich diagnostics"
+            else:
+                assert json.loads(failures[0][2]) == {"web": failure}
+            recorded_realizations = db.execute(
+                "SELECT count(*) FROM realization WHERE experiment_result_id = ?",
+                [failures[0][0]],
+            ).fetchone()[0]
+            assert (
+                (recorded_realizations == 0)
+                if outcome == "startup_failed"
+                else (recorded_realizations > 0)
             )
         else:
             assert failures == []

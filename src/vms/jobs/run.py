@@ -34,6 +34,8 @@ def setup_result_db(database_path, result_db_path):
 
 
 def simulation_events(**arguments):
+    from apitofsim.workflow import recorded_failure
+
     from vms.jobs.failures import describe_failure, save_failure
 
     from .cancellation import JobCancelled
@@ -52,24 +54,18 @@ def simulation_events(**arguments):
         db = context.get("db")
         if db is not None and "run_id" in context:
             try:
-                # The upstream iterator saves execution failures and links partial
-                # events to them. Enrich that row without creating another failure.
-                recorded = db.db.execute(
-                    "SELECT id FROM experiment_failure WHERE experiment_run_id = ?",
-                    [context["run_id"]],
-                ).fetchone()
-                if recorded is None:
-                    db.record_failure(
+                recorded = recorded_failure(exc)
+                failure_id = (
+                    recorded.failure_id
+                    if recorded is not None
+                    else db.record_failure(
                         context["run_id"],
                         failure["exception_type"],
-                        json.dumps(failure),
+                        str(exc),
                         cluster_id=context.get("cluster_id"),
                     )
-                else:
-                    db.db.execute(
-                        "UPDATE experiment_failure SET msg = ? WHERE id = ?",
-                        [json.dumps(failure), recorded[0]],
-                    )
+                )
+                db.add_failure_diagnostics(failure_id, {"web": failure})
             except Exception as persistence_exc:
                 failure["database_error"] = str(persistence_exc)
         save_failure(result_db_path, failure)
