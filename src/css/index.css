@@ -2,13 +2,12 @@
 @source "../vms";
 
 .top-tabs {
+    @apply mt-2 mb-2 sm:mt-6 sm:mb-4;
     --tab-label-gap: 4px;
     justify-content: safe center;
     display: flex;
     gap: 1rem;
     width: 100%;
-    margin-top: 1.5rem;
-    margin-bottom: 1rem;
     overflow-x: auto;
     scrollbar-width: thin;
 }
@@ -65,10 +64,7 @@
 }
 
 .page-action {
-    position: fixed;
-    bottom: 1rem;
-    right: 1rem;
-    max-width: calc(100% - 2rem);
+    @apply fixed bottom-2 right-2 max-w-[calc(100%-1rem)] sm:bottom-4 sm:right-4 sm:max-w-[calc(100%-2rem)];
     z-index: 10;
     display: flex;
     justify-content: flex-end;
