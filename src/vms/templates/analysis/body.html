@@ -3,6 +3,7 @@
 
 <div
     class="tab-page"
+    :class="current_tab == 'explorer' && results_ready ? 'h-[calc(100dvh-7rem)] flex flex-col [&>.top-tabs]:shrink-0 [&_.action-label]:max-sm:hidden' : ''"
     x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}', stopped_early: {{ 'true' if info.get('cancelled_stage') else 'false' }}, cancelling: {{ 'true' if info.get('cancel_requested') else 'false' }} }"
     x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
 >
@@ -11,7 +12,7 @@
     {% call tab_list(sse=True) %}
         {% include "analysis/tabs.html" %}
     {% endcall %}
-    <div id="default-tab-content" class="p-6 w-full mx-auto" :class="current_tab == 'explorer' ? 'max-w-none' : 'max-w-5xl'">
+    <div id="default-tab-content" class="w-full mx-auto" :class="current_tab == 'explorer' ? 'max-w-none flex-1 min-h-0 p-2 sm:p-4' : 'max-w-5xl p-6'">
         {% call tab_content_sse('queue') %}
             {% include "analysis/queue.html" %}
         {% endcall %}
@@ -25,9 +26,9 @@
                 <pre class="m-2" x-show="log_open" sse-swap="apitoflog"></pre>
             </div>
         </div>
-        <div x-show="results_ready && current_tab == 'explorer'" name="explorer" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
+        <div x-show="results_ready && current_tab == 'explorer'" name="explorer" class="h-full p-2 sm:p-4 rounded-lg bg-gray-50" role="tabpanel">
             <template x-if="results_ready && current_tab == 'explorer'">
-                <iframe title="Explorer plot" src="/analysis/results/{{ jobid }}/explorer" class="block h-[clamp(320px,70dvh,900px)] w-full border-0" allow="fullscreen" allowfullscreen></iframe>
+                <iframe title="Explorer plot" src="/analysis/results/{{ jobid }}/explorer" class="block h-full min-h-80 sm:min-h-0 w-full border-0" allow="fullscreen" allowfullscreen></iframe>
             </template>
         </div>
         <div x-show="results_ready && current_tab == 'spectrogram'" name="spectrogram" class="p-4 rounded-lg bg-gray-50" role="tabpanel">
@@ -43,9 +44,9 @@
         {% if can_cancel %}
         <form action="/analysis/cancel?jobid={{ jobid }}" method="post" x-show="job_status == 'pending' || job_status == 'running'" @submit="cancelling = true">
             <input type="hidden" name="csrf_token" value="{{ cancel_token }}">
-            <button type="submit" :disabled="cancelling" class="cursor-pointer hover:scale-105 bg-red-500 text-white inline-flex items-center gap-2 px-4 py-3 rounded-lg disabled:opacity-60 disabled:cursor-wait">
+            <button type="submit" :disabled="cancelling" :aria-label="cancelling ? 'Cancelling…' : 'Cancel'" :title="cancelling ? 'Cancelling…' : 'Cancel'" class="cursor-pointer hover:scale-105 bg-red-500 text-white inline-flex items-center gap-2 px-4 py-3 rounded-lg disabled:opacity-60 disabled:cursor-wait">
                 <svg aria-hidden="true" class="icon" viewBox="0 0 448 512"><use href="#fa-stop"></use></svg>
-                <span x-text="cancelling ? 'Cancelling…' : 'Cancel'">Cancel</span>
+                <span class="action-label" x-text="cancelling ? 'Cancelling…' : 'Cancel'">Cancel</span>
             </button>
         </form>
         {% endif %}
