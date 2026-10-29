@@ -10,7 +10,7 @@
                     {% if job.get('cancel_requested') and job.status == 'running' %}Cancelling…
                     {% elif job.status == 'pending' %}Queued{% if job.jobs_ahead is defined %} · {{ job.jobs_ahead }} ahead{% endif %}
                     {% elif job.status == 'running' %}Processing · {{ {'queue': 'Starting', 'skimmer': 'Skimmer', 'apitof': 'APi-ToF MS'}.get(job.get('stage', 'queue')) }}
-                    {% elif job.status == 'done' %}Finished{% if job.get('cancelled_stage') %} — cancelled early{% endif %}
+                    {% elif job.status == 'done' %}Finished{% if job.get('cancelled_stage') %} — stopped early{% endif %}
                     {% elif job.status == 'incomplete' %}Incomplete output
                     {% else %}Failed{% endif %}
                 </p>

@@ -1,13 +1,17 @@
-<div x-init="job_status = '{{ info.status }}'; cancelling = {{ 'true' if info.get('cancel_requested') else 'false' }}; results_ready = {{ 'true' if 'result' in info else 'false' }}" role="status">
+<div x-init="job_status = '{{ info.status }}'; stopped_early = {{ 'true' if info.get('cancelled_stage') else 'false' }}; cancelling = {{ 'true' if info.get('cancel_requested') else 'false' }}; results_ready = {{ 'true' if 'result' in info else 'false' }}" role="status">
     {% if info.status == 'cancelled' %}
         <div class="p-4 mb-4 rounded-lg bg-yellow-50 text-yellow-900">
             <h1 class="text-2xl font-bold">Simulation cancelled</h1>
             <p>No realizations completed. Output files have been removed.</p>
         </div>
     {% elif info.status == 'done' and info.get('cancelled_stage') %}
-        <div class="p-4 mb-4 rounded-lg bg-yellow-50 text-yellow-900">
-            <h1 class="text-2xl font-bold">Finished — cancelled early</h1>
-            <p>Realizations completed: {{ info.counts.completed }}/{{ info.counts.requested }}. Results are available below. Trajectories from interrupted realizations may be incomplete.</p>
+        <div x-data="{ dismissed: false }" x-show="!dismissed" class="p-4 mb-4 rounded-lg bg-yellow-50 text-yellow-900 flex items-start gap-4">
+            <div class="min-w-0 flex-1">
+                <h1 class="text-2xl font-bold">Finished — stopped early</h1>
+                <p>Realizations completed: {{ info.counts.completed }}/{{ info.counts.requested }}. Results are available below. Trajectories from interrupted realizations may be incomplete.</p>
+            </div>
+            <button type="button" @click="dismissed = true" aria-label="Dismiss stopped early notice"
+                    class="shrink-0 cursor-pointer rounded px-2 py-1 hover:bg-yellow-100 focus-visible:outline-2">&times;</button>
         </div>
     {% elif info.get('cancel_requested') and info.status in ('pending', 'running') %}
         <p class="p-4 mb-4 rounded-lg bg-yellow-50 text-yellow-900">Cancelling… Waiting for the worker to stop and close output files.</p>

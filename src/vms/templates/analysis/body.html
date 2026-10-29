@@ -3,7 +3,7 @@
 
 <div
     class="tab-page"
-    x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}', cancelling: {{ 'true' if info.get('cancel_requested') else 'false' }} }"
+    x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}', stopped_early: {{ 'true' if info.get('cancelled_stage') else 'false' }}, cancelling: {{ 'true' if info.get('cancel_requested') else 'false' }} }"
     x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
 >
     <div sse-swap="state">{% include "analysis/state.html" %}</div>

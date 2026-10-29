@@ -1,5 +1,6 @@
 import json
 from base64 import b64encode
+from pathlib import Path
 from time import time
 
 import pytest
@@ -124,11 +125,59 @@ def test_retained_cancelled_results_reload_and_sse(client, history):
             "/analysis/updates?jobid=partial", headers={"accept": "text/event-stream"}
         ),
     ]:
-        assert "Finished — cancelled early" in response.text
+        assert "Finished — stopped early" in response.text
         assert 'data-tab="apitof" data-status="cancelled"' in response.text
         assert 'href="#explorer"' in response.text
         assert 'href="#spectrogram"' in response.text
-    assert "cancelled early" in client.get("/jobs").text
+    assert "stopped early" in client.get("/jobs").text
+
+
+@pytest.mark.parametrize("live_update", [False, True])
+def test_stopped_early_notice_and_heading(page, client, history, live_update):
+    from lxml import html
+    from playwright.sync_api import expect
+
+    from vms.resources import templates
+
+    info = history(
+        "partial",
+        state="running" if live_update else "done",
+        **({} if live_update else {"cancelled_stage": "apitof"}),
+        counts={"requested": 100, "completed": 3},
+    )
+    document = html.fromstring(client.get("/analysis?jobid=partial").text)
+    body = document.xpath('//div[@class="tab-page"]')[0]
+    pane = body.xpath('.//div[@sse-swap="apitof"]')[0]
+    pane.append(
+        html.fromstring(
+            templates.env.get_template("analysis/apitof.html").render(
+                iterations=3,
+                realizations=100,
+                fragmented=1,
+                survived=2,
+                ratio=2 / 3,
+            )
+        )
+    )
+    page.set_content(html.tostring(body, encoding="unicode"))
+    page.evaluate("window.location.hash = 'apitof'")
+    page.add_script_tag(
+        path=str(Path(__file__).resolve().parents[1] / "src/vms/static/index.js")
+    )
+    if live_update:
+        expect(page.locator("#status")).to_have_text("Running simulation...")
+        info.update(status="done", cancelled_stage="apitof")
+        state = templates.env.get_template("analysis/state.html").render(info=info)
+        page.locator('[sse-swap="state"]').evaluate(
+            "(el, state) => el.innerHTML = state", state
+        )
+    notice = page.get_by_role("heading", name="Finished — stopped early")
+    expect(notice).to_be_visible()
+    expect(page.locator("#status")).to_have_text("Simulation stopped early")
+    page.get_by_role("button", name="Dismiss stopped early notice").click()
+    expect(notice).to_be_hidden()
+    expect(page.locator("#status")).to_be_visible()
+    expect(page.locator("#status")).to_have_text("Simulation stopped early")
 
 
 def test_preparation_handoff_refuses_simulation_after_cancel(monkeypatch):

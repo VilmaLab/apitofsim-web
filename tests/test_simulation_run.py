@@ -229,9 +229,9 @@ def test_cancel_preserves_partial_results_and_history(page, server, tmp_path):
     )
 
     page.get_by_role("button", name="Cancel", exact=True).click()
-    expect(
-        page.get_by_role("heading", name="Finished — cancelled early")
-    ).to_be_visible(timeout=RUN_TIMEOUT)
+    expect(page.get_by_role("heading", name="Finished — stopped early")).to_be_visible(
+        timeout=RUN_TIMEOUT
+    )
     expect(page.locator('li[data-tab="apitof"]')).to_have_attribute(
         "data-status", "cancelled"
     )
@@ -250,11 +250,14 @@ def test_cancel_preserves_partial_results_and_history(page, server, tmp_path):
         "data-status", "cancelled"
     )
     expect(page.locator('a[href="#explorer"]')).to_be_visible()
-    expect(
-        page.get_by_role("heading", name="Finished — cancelled early")
-    ).to_be_visible()
+    expect(page.get_by_role("heading", name="Finished — stopped early")).to_be_visible()
+    page.locator('a[href="#apitof"]').click()
+    expect(page.locator("#status")).to_have_text("Simulation stopped early")
+    page.get_by_role("button", name="Dismiss stopped early notice").click()
+    expect(page.get_by_role("heading", name="Finished — stopped early")).to_be_hidden()
+    expect(page.locator("#status")).to_be_visible()
     page.get_by_role("link", name="Job/results", exact=True).click()
-    expect(page.locator("#job-list")).to_contain_text("Finished — cancelled early")
+    expect(page.locator("#job-list")).to_contain_text("Finished — stopped early")
     expect(page.locator("#job-list a").first).to_have_attribute(
         "href", result_url.split("#")[0].replace(server, "")
     )
