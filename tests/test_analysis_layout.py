@@ -71,7 +71,7 @@ def test_mobile_actions_are_compact_and_stay_at_bottom(analysis_page):
     page.set_viewport_size({"width": 390, "height": 360})
     page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
     assert page.locator(".page-action").evaluate(
-        "el => Math.abs(el.getBoundingClientRect().bottom - (innerHeight - 16)) < 1"
+        "el => Math.abs(el.getBoundingClientRect().bottom - (innerHeight - 8)) < 1"
     )
 
     page.get_by_role("link", name="Queue", exact=True).click()
