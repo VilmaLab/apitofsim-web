@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode
 
 import duckdb
 import pytest
@@ -117,6 +118,7 @@ def test_pathways_context_includes_only_selected_parent_and_products(form, clust
     assert pathways[10]["product2"] == (4, "Product B")
     assert pathways[11]["product2"] == (3, "Product A")
     assert all(pathway["bonding_energy"] == 1 for pathway in pathways.values())
+    assert [entry.name for entry in form.pathways] == ["pathways-0", "pathways-1"]
 
 
 def render(form):
@@ -355,7 +357,6 @@ def test_invalid_post_preserves_pathways_and_custom_instrument(page, server):
         'input[name^="pathways-"][name$="-fragmentation_energy"]'
     ).first
     expect(energy).to_be_visible()
-    energy.fill("invalid energy")
     enabled = page.locator('input[name^="pathways-"][name$="-enabled"]').first
     enabled.uncheck()
     energy_name = energy.get_attribute("name")
@@ -364,17 +365,29 @@ def test_invalid_post_preserves_pathways_and_custom_instrument(page, server):
     page.select_option("#instrument-select", "custom")
     angle = page.locator("#instrument-skimmer_geometry-angle_of_skimmer")
     expect(angle).to_be_visible()
-    angle.fill("invalid angle")
+    angle_name = angle.get_attribute("name")
+
+    # Numeric controls cannot contain arbitrary text. Simulate a malformed POST
+    # to exercise server validation and restoration of the rest of the form.
+    def invalid_post(route):
+        data = dict(parse_qsl(route.request.post_data, keep_blank_values=True))
+        data[energy_name] = "invalid energy"
+        data[angle_name] = "invalid angle"
+        route.continue_(post_data=urlencode(data))
+
+    page.route(server + "/", invalid_post, times=1)
     page.click('a[href="#simulation"]')
     page.click('button[type="submit"]')
     expect(page.locator(f'input[name="{energy_name}"]')).to_be_focused()
-    expect(page.locator(f'input[name="{energy_name}"]')).to_have_value("invalid energy")
+    expect(page.locator(f'input[name="{energy_name}"]')).to_have_attribute(
+        "value", "invalid energy"
+    )
     expect(page.locator(f'input[name="{enabled_name}"]')).not_to_be_checked()
     expect(page.locator('[role="alert"]')).to_have_count(0)
     page.locator(f'input[name="{energy_name}"]').fill("0.1")
     page.click('button[type="submit"]')
     expect(angle).to_be_focused()
-    expect(angle).to_have_value("invalid angle")
+    expect(angle).to_have_attribute("value", "invalid angle")
     assert angle.evaluate("el => el.validationMessage") == "Not a valid float value."
 
 

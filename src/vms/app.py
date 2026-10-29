@@ -178,7 +178,8 @@ def pathways_context(form, cluster_id, *, submitted=False):
     )
     if not submitted:
         # FieldList's placeholder is not a real pathway and must not be submitted.
-        form.pathways.entries.clear()
+        while form.pathways.entries:
+            form.pathways.pop_entry()
     for pathway in pathways_relations.itertuples():
         cluster = clusters[pathway.cluster_id]
         product1 = clusters[pathway.product1_id]
