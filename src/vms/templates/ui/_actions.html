@@ -1,7 +1,7 @@
 {% macro action(href, label, icon, color) -%}
-<a href="{{ href }}" class="hover:scale-105 {{ color }} inline-flex items-center gap-2 px-4 py-3 rounded-lg">
+<a href="{{ href }}" aria-label="{{ label }}" title="{{ label }}" class="hover:scale-105 {{ color }} inline-flex items-center gap-2 px-4 py-3 rounded-lg">
     <svg aria-hidden="true" class="icon" viewBox="0 0 {{ '384 512' if icon == 'clipboard' else '512 512' }}"><use href="#fa-{{ icon }}"></use></svg>
-    {{ label }}
+    <span class="action-label">{{ label }}</span>
 </a>
 {%- endmacro %}
 
