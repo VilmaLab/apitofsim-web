@@ -51,12 +51,6 @@ def test_db():
     return [download_if_missing(name) for name in TEST_DB_FILES][0]
 
 
-def free_port():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
-
-
 def wait_until_serving(base_url, process, log_path):
     deadline = time.monotonic() + SERVER_STARTUP_TIMEOUT
     while time.monotonic() < deadline:
@@ -79,52 +73,66 @@ def wait_until_serving(base_url, process, log_path):
 @pytest.fixture(scope="session")
 def server(test_db, tmp_path_factory):
     """A real Starlette server, with Ray started automatically inside it."""
-    port = free_port()
-    env = {
-        **os.environ,
-        "DATABASE": str(test_db),
-        "RESULTS": str(tmp_path_factory.mktemp("results") / "results.duckdb"),
-        "RAY_AUTH_MODE": "token",
-        "RAY_AUTH_TOKEN_PATH": str(tmp_path_factory.mktemp("ray-auth") / "auth_token"),
-        "PYTHONPATH": str(REPO_ROOT / "src")
-        + os.pathsep
-        + os.environ.get("PYTHONPATH", ""),
-    }
-    # Unset so that ray.init() falls back to address="local" and brings up its
-    # own single node cluster rather than looking for an external one
-    env.pop("RAY_ADDRESS", None)
-    env.pop("RAY_AUTH_TOKEN", None)
-    # An explicit token path must already exist; ray.init only generates at the
-    # default path. Keep test credentials separate from the developer's token.
-    token_path = Path(env["RAY_AUTH_TOKEN_PATH"])
-    token_path.touch(mode=0o600)
-    token_path.write_text(secrets.token_hex(32))
+    # Reserve the port throughout Ray startup; its services also bind ephemeral ports.
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        env = {
+            **os.environ,
+            "DATABASE": str(test_db),
+            "RESULTS": str(tmp_path_factory.mktemp("results") / "results.duckdb"),
+            "RAY_AUTH_MODE": "token",
+            "RAY_AUTH_TOKEN_PATH": str(
+                tmp_path_factory.mktemp("ray-auth") / "auth_token"
+            ),
+            "PYTHONPATH": str(REPO_ROOT / "src")
+            + os.pathsep
+            + os.environ.get("PYTHONPATH", ""),
+        }
+        # Unset so that ray.init() falls back to address="local" and brings up its
+        # own single node cluster rather than looking for an external one
+        env.pop("RAY_ADDRESS", None)
+        env.pop("RAY_AUTH_TOKEN", None)
+        # An explicit token path must already exist; ray.init only generates at the
+        # default path. Keep test credentials separate from the developer's token.
+        token_path = Path(env["RAY_AUTH_TOKEN_PATH"])
+        token_path.touch(mode=0o600)
+        token_path.write_text(secrets.token_hex(32))
 
-    log_path = Path(__file__).parent / "server.log"
-    base_url = f"http://127.0.0.1:{port}"
-    with log_path.open("w") as log:
-        # No --debug: the reloader would fork a second copy of the app, and so
-        # of Ray too
-        process = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "vms:app", "--port", str(port)],
-            cwd=REPO_ROOT,
-            env=env,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            # Own process group, so that Ray's children can be cleaned up along
-            # with the server if it does not go quietly
-            start_new_session=True,
-        )
-        try:
-            wait_until_serving(base_url, process, log_path)
-            yield base_url
-        finally:
-            process.send_signal(signal.SIGINT)
+        log_path = Path(__file__).parent / "server.log"
+        base_url = f"http://127.0.0.1:{port}"
+        with log_path.open("w") as log:
+            # No --debug: the reloader would fork a second copy of the app, and so
+            # of Ray too
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "vms:app",
+                    "--fd",
+                    str(listener.fileno()),
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                # Own process group, so that Ray's children can be cleaned up along
+                # with the server if it does not go quietly
+                start_new_session=True,
+                pass_fds=(listener.fileno(),),
+            )
             try:
-                process.wait(timeout=60)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
+                wait_until_serving(base_url, process, log_path)
+                yield base_url
+            finally:
+                process.send_signal(signal.SIGINT)
+                try:
+                    process.wait(timeout=60)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
 
 
 @pytest.fixture
