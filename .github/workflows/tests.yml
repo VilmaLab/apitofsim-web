@@ -39,22 +39,7 @@ jobs:
           enable-cache: true
 
       - name: Install project and test dependencies
-        # Source development pins need the same native dependencies as upstream.
-        # Release wheels do not need this setup.
-        # Keep setup before uv sync, which builds the native extension.
-        run: |
-          apitofsim_rev="$(python3 -c 'import tomllib; source = tomllib.load(open("pyproject.toml", "rb"))["tool"]["uv"]["sources"]["apitofsim"]; print(source.get("rev", "") if isinstance(source, dict) and "git" in source else "")')"
-          if [ -n "$apitofsim_rev" ]; then
-            sudo apt-get update
-            sudo apt-get install -y libeigen3-dev
-            installer="$(mktemp)"
-            trap 'rm -f "$installer"' EXIT
-            curl --fail --location --silent --show-error \
-              "https://raw.githubusercontent.com/VilmaLab/apitofsim/${apitofsim_rev}/ci/install_tbb.sh" \
-              --output "$installer"
-            sudo bash "$installer"
-          fi
-          uv sync --all-groups --all-extras
+        run: uv sync --locked --all-groups --all-extras
 
       - name: Install Chromium
         run: .venv/bin/playwright install --with-deps chromium
