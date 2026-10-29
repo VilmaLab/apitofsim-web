@@ -43,7 +43,10 @@
         {% if can_cancel %}
         <form action="/analysis/cancel?jobid={{ jobid }}" method="post" x-show="job_status == 'pending' || job_status == 'running'" @submit="cancelling = true">
             <input type="hidden" name="csrf_token" value="{{ cancel_token }}">
-            <button type="submit" :disabled="cancelling" class="cursor-pointer hover:scale-105 bg-red-500 text-white inline-flex items-center px-4 py-3 rounded-lg disabled:opacity-60 disabled:cursor-wait" x-text="cancelling ? 'Cancelling…' : 'Cancel'">Cancel</button>
+            <button type="submit" :disabled="cancelling" class="cursor-pointer hover:scale-105 bg-red-500 text-white inline-flex items-center gap-2 px-4 py-3 rounded-lg disabled:opacity-60 disabled:cursor-wait">
+                <svg aria-hidden="true" class="icon" viewBox="0 0 448 512"><use href="#fa-stop"></use></svg>
+                <span x-text="cancelling ? 'Cancelling…' : 'Cancel'">Cancel</span>
+            </button>
         </form>
         {% endif %}
     </div>
