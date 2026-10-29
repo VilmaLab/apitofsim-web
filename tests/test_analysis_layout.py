@@ -59,10 +59,17 @@ def test_explorer_fills_available_height(analysis_page, height):
 
 def test_mobile_actions_are_compact_and_stay_at_bottom(analysis_page):
     page = analysis_page
-    page.set_viewport_size({"width": 390, "height": 844})
     labels = page.locator(".page-action .action-label")
-    for label in labels.all():
-        expect(label).to_be_hidden()
+    for width, height in ((390, 844), (844, 390), (932, 430)):
+        page.set_viewport_size({"width": width, "height": height})
+        for label in labels.all():
+            expect(label).to_be_hidden()
+        expect(page.locator("body")).to_have_css("padding-left", "8px")
+        expect(page.locator(".top-tabs")).to_have_css("margin-top", "8px")
+        expect(page.locator(".page-action")).to_have_css("bottom", "8px")
+        expect(page.locator(".page-action")).to_have_css("right", "8px")
+        expect(page.locator("#default-tab-content")).to_have_css("padding", "4px")
+        expect(page.locator('[name="explorer"]')).to_have_css("padding", "4px")
     expect(page.get_by_role("link", name="New experiment", exact=True)).to_be_visible()
     expect(page.get_by_role("link", name="Job/results", exact=True)).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
