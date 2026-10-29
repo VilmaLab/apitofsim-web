@@ -1,5 +1,5 @@
 <div class="m-4">
-    <h1 id="status" class="text-4xl my-4" x-show="job_status != 'failed' && job_status != 'incomplete'" x-text="job_status == 'done' ? 'Simulation finished' : job_status == 'cancelled' ? 'Simulation cancelled' : 'Running simulation...'">Running simulation...</h1>
+    <h1 id="status" class="text-4xl my-4" x-show="job_status != 'failed' && job_status != 'incomplete'" x-text="job_status == 'done' ? (stopped_early ? 'Simulation stopped early' : 'Simulation finished') : job_status == 'cancelled' ? 'Simulation cancelled' : 'Running simulation...'">Running simulation...</h1>
     <p class="text-2xl my-2">Iterations: <span id="iterations">{{ iterations }}/{{ realizations }}</span></p>
     <p class="text-2xl my-2">Fragmented: {{ fragmented }}</p>
     <p class="text-2xl my-2">Survived: {{ survived }}</p>
