@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="responsive-embedded-sizing" content="allow-origins=*">
-    <script src="{{ url_for('static', path='/index.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', path='/index.css') }}?v={{ asset_version('index.css') }}">
+    <script src="{{ url_for('static', path='/index.js') }}?v={{ asset_version('index.js') }}" defer></script>
     <title>{% block title %}{% endblock %}</title>
     <style>
-        @import "{{ url_for('static', path='/index.css') }}";
         input[type=range].vertical {
             writing-mode: vertical-lr;
             direction: rtl;

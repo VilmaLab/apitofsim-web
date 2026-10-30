@@ -16,7 +16,7 @@ from anyio import to_thread
 from apitofsim.api import ureg
 from starlette.templating import Jinja2Templates
 
-from .assets import ASSETS
+from .assets import ASSETS, asset_version
 from .jobs.queue import scheduler_context
 from .markdown_ext import MarkdownExtension
 from .pintweb.alpine import quantity_display
@@ -25,6 +25,7 @@ from .result_plots import make_bokeh_app
 from .settings import database_path
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates.env.globals["asset_version"] = asset_version
 jinja_loader = templates.env.loader
 bokeh_application = make_bokeh_app(database_path)
 

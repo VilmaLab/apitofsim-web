@@ -1,8 +1,11 @@
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from playwright.sync_api import expect
+
+from vms.assets import asset_version
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -14,6 +17,7 @@ def analysis_page(page):
         loader=FileSystemLoader(ROOT / "src/vms/templates"),
         autoescape=select_autoescape(),
     )
+    env.globals["asset_version"] = asset_version
     html = env.get_template("analysis/analysis.html").render(
         url_for=lambda name, path: f"/static{path}",
         completed=True,
@@ -24,7 +28,7 @@ def analysis_page(page):
     )
 
     def serve(route):
-        path = route.request.url.split("layout.test", 1)[1]
+        path = urlsplit(route.request.url).path
         if path.startswith("/static/"):
             route.fulfill(path=ROOT / "src/vms" / path.lstrip("/"))
         elif path.startswith("/analysis/results/"):
