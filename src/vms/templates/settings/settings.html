@@ -61,7 +61,7 @@ document.addEventListener("click", () => {
                     <span class="tab-label">Simulation</span>
                 {% endcall %}
             {% endcall %}
-            <div id="default-tab-content" class="mx-auto p-2 sm:p-6"
+            <div id="default-tab-content" class="mx-auto max-w-full p-2 sm:p-6"
                  x-data="{ clusterSelected: {{ 'true' if form.cluster.data not in (none, 'None', '') else 'false' }} }"
                  :class="current_tab == 'about' ? 'max-w-5xl' : (current_tab == 'fragmentationpathways' && clusterSelected ? 'w-full' : 'w-fit')">
                 {% if form_errors %}
@@ -152,7 +152,7 @@ can be found on
                         {{ tooltip('Set the gas properties, temperature, and chamber pressures used in the simulation.', 'substrate-tooltip', 'Substrate') }}
                     </h2>
                     <div class="flex flex-col md:flex-row gap-6 md:gap-4">
-                        <fieldset class="min-w-0 rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                        <fieldset class="min-w-0 max-w-full rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
                             <legend>Gas</legend>
                             <div class="flex flex-col items-center gap-4">
                                 {{ lightbox('img/substrate.png', 'w-full mx-auto p-4 max-w-md h-auto border border-gray-300 bg-white', 'block max-w-full') }}
@@ -161,7 +161,7 @@ can be found on
                                 {% endwith %}
                             </div>
                         </fieldset>
-                        <fieldset class="shrink-0 rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                        <fieldset class="min-w-0 max-w-full shrink-0 rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
                             <legend>Environment</legend>
                             <div class="flex flex-col items-center gap-4">
                                 <svg-focus class="shrink-0" diagram="#diagram" region="#region-pressure_temperature" labels="#labels-pressure_temperature" title="Gas pressure and temperature"></svg-focus>
@@ -235,13 +235,13 @@ can be found on
                         {{ tooltip('Choose the number of realizations and numerical settings for the simulation.', 'simulation-tooltip', 'Simulation') }}
                     </h2>
                     <div class="flex flex-col items-center gap-4">
-                        <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                        <fieldset class="min-w-0 max-w-full rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
                             <legend>General simulation</legend>
                             {% with form=form.simulation, exclude_fields=['skimmer'] %}
                                 {% include "ui/_table_form.html" %}
                             {% endwith %}
                         </fieldset>
-                        <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
+                        <fieldset class="min-w-0 max-w-full rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
                             <legend>Skimmer simulation</legend>
                             {% with form=form.simulation.skimmer %}
                                 {% include "ui/_table_form.html" %}
