@@ -68,5 +68,5 @@ apitofsim = [
   { url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.26.0/apitofsim-0.26.0-cp313-abi3-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin' and platform_machine == 'arm64'" },
   { url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.26.0/apitofsim-0.26.0-cp313-abi3-win_amd64.whl", marker = "sys_platform == 'win32' and platform_machine == 'AMD64'" },
 ]
-apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git", rev = "3581e842bfc55e6fbfb9a7d483967d7b0a54d188" }
+apitofsim-resultviewer = { git = "https://github.com/VilmaLab/apitofsim-resultviewer.git", rev = "e74366c8a13831d5a151a335d0b592aa9adc73e8" }
 workingtitle = { git = "https://github.com/frankier/workingtitle.git" }
