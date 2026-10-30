@@ -82,7 +82,7 @@ def test_mobile_explorer_overlays(analysis_page):
         expect(page.locator(".top-tabs")).to_have_css("flex-direction", "row")
         assert page.locator(".top-tabs").bounding_box()["y"] == 8
         actions = page.locator(".page-action").bounding_box()
-        assert actions["y"] + actions["height"] == height - 8
+        assert actions["y"] + actions["height"] == height - 72
         assert page.locator('iframe[title="Explorer plot"]').bounding_box() == frame
         toggle.click()
         expect(page.locator("#menu-panel")).to_be_hidden()
@@ -104,13 +104,15 @@ def test_explorer_toggle_drag_does_not_toggle_controls(analysis_page):
     page.set_viewport_size({"width": 390, "height": 844})
     toggle = page.get_by_role("button", name="Toggle Explorer controls", exact=True)
     before = toggle.bounding_box()
+    assert before["x"] + before["width"] == 390 - 8
+    assert before["y"] + before["height"] == 844 - 8
     x, y = before["x"] + 28, before["y"] + 28
     page.mouse.move(x, y)
     page.mouse.down()
-    page.mouse.move(x + 150, y - 200, steps=10)
+    page.mouse.move(x - 150, y - 200, steps=10)
     page.mouse.up()
     after = toggle.bounding_box()
-    assert after["x"] == before["x"] + 150
+    assert after["x"] == before["x"] - 150
     assert after["y"] == before["y"] - 200
     expect(toggle).to_have_attribute("aria-expanded", "false")
     toggle.click()

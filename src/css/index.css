@@ -126,6 +126,10 @@
         @apply m-0;
     }
 
+    .explorer-view .page-action {
+        bottom: 4.5rem;
+    }
+
     .explorer-view:not([data-controls-open="true"]) .menu-zone,
     .explorer-view:not([data-controls-open="true"]) .page-action {
         display: none;
