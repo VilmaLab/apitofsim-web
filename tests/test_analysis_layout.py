@@ -120,8 +120,14 @@ def test_explorer_toggle_drag_does_not_toggle_controls(analysis_page):
     toggle.press("ArrowRight")
     assert toggle.bounding_box()["x"] == after["x"] + 8
     page.set_viewport_size({"width": 844, "height": 390})
-    bounds = toggle.bounding_box()
-    assert 8 <= bounds["y"] <= 390 - bounds["height"] - 8
+    # Resize events and Alpine's style updates finish asynchronously.
+    page.wait_for_function(
+        """el => {
+            const bounds = el.getBoundingClientRect();
+            return bounds.top >= 8 && bounds.bottom <= innerHeight - 8;
+        }""",
+        arg=toggle.element_handle(),
+    )
 
 
 def test_actions_collapse_only_when_labels_do_not_fit(analysis_page):
