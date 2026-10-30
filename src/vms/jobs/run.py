@@ -235,8 +235,8 @@ def _run_simulation(
                             counters = result.counters
                         context["counts"]["completed"] = int(counters.n_realizations)
                         yield b"progress", json.dumps(context["counts"])
-                        survived = counters.n_fragmented_total.sum()
-                        fragmented = counters.n_escaped_total
+                        survived = counters.n_escaped_total
+                        fragmented = counters.n_fragmented_total.sum()
                         iterations = survived + fragmented
                         yield update_pane("apitof")
                     elif isinstance(result, MassSpecLogItem):
