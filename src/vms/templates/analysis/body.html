@@ -11,7 +11,7 @@
 >
     <button type="button" x-ref="explorerToggle" x-data="draggableToggle" class="explorer-toggle cursor-grab active:cursor-grabbing bg-gray-50 rounded-lg p-3 shadow touch-none select-none"
             aria-label="Toggle Explorer controls" title="Toggle controls; drag or use arrow keys to move" aria-controls="menu-panel actions-panel"
-            :aria-expanded="String(controls_open)" :style="{ left: x + 'px', top: y + 'px' }"
+            :aria-expanded="String(controls_open)" :style="x === null ? { right: '8px', bottom: '8px' } : { left: x + 'px', top: y + 'px' }"
             @click="if (!moved) controls_open = !controls_open; moved = false"
             @pointerdown="start($event)" @pointermove="move($event)" @pointerup="end($event)"
             @pointercancel="drag = null; moved = false" @lostpointercapture="drag = null"

@@ -61,23 +61,31 @@ AlpineModule.data('tabHover', () => ({
 }));
 
 AlpineModule.data('draggableToggle', () => ({
-  x: 8,
-  y: Math.max(8, window.innerHeight / 2 - 28),
+  x: null as number | null,
+  y: null as number | null,
   moved: false,
   drag: null as { id: number; x: number; y: number; left: number; top: number } | null,
+  position() {
+    const rect = this.$el.getBoundingClientRect();
+    this.x ??= rect.left;
+    this.y ??= rect.top;
+  },
   clamp() {
+    if (this.x === null || this.y === null) return;
     this.x = Math.max(8, Math.min(this.x, innerWidth - this.$el.offsetWidth - 8));
     this.y = Math.max(8, Math.min(this.y, innerHeight - this.$el.offsetHeight - 8));
   },
   nudge(x: number, y: number) {
-    this.x += x;
-    this.y += y;
+    this.position();
+    this.x = this.x! + x;
+    this.y = this.y! + y;
     this.clamp();
   },
   start(event: PointerEvent) {
     if (event.button !== 0) return;
+    this.position();
     this.moved = false;
-    this.drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: this.x, top: this.y };
+    this.drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: this.x!, top: this.y! };
     this.$el.setPointerCapture(event.pointerId);
   },
   move(event: PointerEvent) {
