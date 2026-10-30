@@ -1,20 +1,31 @@
 {% from "ui/_lightbox.html" import lightbox with context %}
 {% from "ui/_tabs.html" import tab_container, tab_list, tab, tab_content_sse %}
-{% from "ui/_floating_zone.html" import floating_zone %}
 
 <div
     class="tab-page"
+    :data-controls-open="String(controls_open)"
     :class="current_tab == 'explorer' && results_ready ? 'explorer-view h-[calc(100dvh-5.5rem)] roomy:h-[calc(100dvh-7rem)] flex flex-col' : ''"
-    x-data="{ current_tab: 'queue', log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}', stopped_early: {{ 'true' if info.get('cancelled_stage') else 'false' }}, cancelling: {{ 'true' if info.get('cancel_requested') else 'false' }} }"
-    x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'"
+    x-data="{ current_tab: 'queue', controls_open: false, log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}', stopped_early: {{ 'true' if info.get('cancelled_stage') else 'false' }}, cancelling: {{ 'true' if info.get('cancel_requested') else 'false' }} }"
+    x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'; $watch('current_tab', () => controls_open = false)"
+    @keydown.escape="controls_open = false; if ($refs.explorerToggle.getClientRects().length) $refs.explorerToggle.focus()"
 >
+    <button type="button" x-ref="explorerToggle" x-data="draggableToggle" class="explorer-toggle cursor-grab active:cursor-grabbing bg-gray-50 rounded-lg p-3 shadow touch-none select-none"
+            aria-label="Toggle Explorer controls" title="Toggle controls; drag or use arrow keys to move" aria-controls="menu-panel actions-panel"
+            :aria-expanded="String(controls_open)" :style="{ left: x + 'px', top: y + 'px' }"
+            @click="if (!moved) controls_open = !controls_open; moved = false"
+            @pointerdown="start($event)" @pointermove="move($event)" @pointerup="end($event)"
+            @pointercancel="drag = null; moved = false" @lostpointercapture="drag = null"
+            @resize.window="clamp()" @keydown.left.prevent="nudge(-8, 0)" @keydown.right.prevent="nudge(8, 0)"
+            @keydown.up.prevent="nudge(0, -8)" @keydown.down.prevent="nudge(0, 8)">
+        <svg aria-hidden="true" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
     <div sse-swap="state">{% include "analysis/state.html" %}</div>
     <div sse-swap="failure">{% include "analysis/failure.html" %}</div>
-    {% call floating_zone('menu', 'Navigation menu') %}
+    <div id="menu-panel" class="menu-zone">
         {% call tab_list(sse=True) %}
             {% include "analysis/tabs.html" %}
         {% endcall %}
-    {% endcall %}
+    </div>
     <div id="default-tab-content" class="w-full mx-auto" :class="current_tab == 'explorer' ? 'max-w-none flex-1 min-h-0 p-1 roomy:p-4' : 'max-w-5xl p-2 roomy:p-6'">
         {% call tab_content_sse('queue') %}
             {% include "analysis/queue.html" %}
@@ -40,8 +51,7 @@
             </template>
         </div>
     </div>
-    {% call floating_zone('actions', 'Actions menu') %}
-    <div class="page-action gap-3">
+    <div id="actions-panel" class="page-action gap-3">
         {% from "ui/_actions.html" import job_results, new_experiment %}
         {{ new_experiment() }}
         {{ job_results() }}
@@ -55,5 +65,4 @@
         </form>
         {% endif %}
     </div>
-    {% endcall %}
 </div>
