@@ -548,3 +548,24 @@ def test_config_rejects_incompatible_histograms(config_form, invalid):
         message = "Density and rate histograms must use the same bin width"
     with pytest.raises(ValueError, match=message):
         form.get_data()
+
+
+@pytest.mark.parametrize("tab", ["gas", "simulation"])
+@pytest.mark.parametrize("width", [320, 360, 390, 640, 768, 1280])
+def test_settings_forms_fit_viewport(page, form, tab, width):
+    page.set_viewport_size({"width": width, "height": 844})
+    page.route("http://testserver/", lambda route: route.fulfill(body=render(form)))
+    page.route(
+        "http://testserver/static/**",
+        lambda route: route.fulfill(
+            path=STATIC_JS.parent
+            / route.request.url.split("/static/", 1)[1].split("?")[0]
+        ),
+    )
+    page.goto(f"http://testserver/#{tab}")
+    panel = page.locator(f'div[name="{tab}"]')
+    expect(panel).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    for control in panel.locator('input:not([type="hidden"]), select').all():
+        bounds = control.bounding_box()
+        assert 0 <= bounds["x"] < bounds["x"] + bounds["width"] <= width
