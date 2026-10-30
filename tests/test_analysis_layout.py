@@ -63,55 +63,63 @@ def test_explorer_fills_available_height(analysis_page, height):
 
 def test_mobile_explorer_overlays(analysis_page):
     page = analysis_page
-    navigation = page.get_by_role("button", name="Navigation menu", exact=True)
-    actions = page.get_by_role("button", name="Actions menu", exact=True)
+    toggle = page.get_by_role("button", name="Toggle Explorer controls", exact=True)
     for width, height in ((390, 844), (844, 390), (932, 430)):
         page.set_viewport_size({"width": width, "height": height})
-        expect(navigation).to_be_visible()
-        expect(actions).to_be_visible()
+        expect(toggle).to_be_visible()
         expect(page.locator("#menu-panel")).to_be_hidden()
         expect(page.locator("#actions-panel")).to_be_hidden()
-        expect(page.locator("body")).to_have_css("padding-left", "8px")
-        expect(page.locator("#default-tab-content")).to_have_css("padding", "4px")
-        expect(page.locator('[name="explorer"]')).to_have_css("padding", "4px")
-        assert navigation.bounding_box()["x"] == 8
-        assert navigation.bounding_box()["y"] == 8
-        bounds = actions.bounding_box()
-        assert bounds["x"] + bounds["width"] == width - 8
-        assert bounds["y"] + bounds["height"] == height - 8
         frame = page.locator('iframe[title="Explorer plot"]').bounding_box()
         assert frame["y"] <= 20
         assert frame["y"] + frame["height"] >= height - 20
         assert page.evaluate("document.documentElement.scrollHeight <= innerHeight")
-
-        navigation.hover()
-        expect(navigation).to_have_attribute("aria-expanded", "true")
+        toggle.click()
+        expect(toggle).to_have_attribute("aria-expanded", "true")
         expect(page.get_by_role("link", name="Queue", exact=True)).to_be_visible()
-        page.mouse.move(width / 2, height / 2)
-        expect(page.locator("#menu-panel")).to_be_hidden()
-        actions.hover()
         expect(
             page.get_by_role("link", name="New experiment", exact=True)
         ).to_be_visible()
-        page.mouse.move(width / 2, height / 2)
+        expect(page.locator(".top-tabs")).to_have_css("flex-direction", "row")
+        assert page.locator(".top-tabs").bounding_box()["y"] == 8
+        actions = page.locator(".page-action").bounding_box()
+        assert actions["y"] + actions["height"] == height - 8
+        assert page.locator('iframe[title="Explorer plot"]').bounding_box() == frame
+        toggle.click()
+        expect(page.locator("#menu-panel")).to_be_hidden()
         expect(page.locator("#actions-panel")).to_be_hidden()
 
-    # Taps/clicks pin either menu open; Escape closes it and restores focus.
-    navigation.click()
-    page.mouse.move(400, 200)
+    toggle.press("Enter")
     expect(page.locator("#menu-panel")).to_be_visible()
-    navigation.press("Escape")
+    toggle.press("Escape")
     expect(page.locator("#menu-panel")).to_be_hidden()
-    expect(navigation).to_be_focused()
-    actions.focus()
-    actions.press("Enter")
-    expect(page.locator("#actions-panel")).to_be_visible()
-    actions.press("Escape")
-    expect(page.locator("#actions-panel")).to_be_hidden()
-    navigation.click()
+    expect(toggle).to_be_focused()
+    toggle.click()
     page.get_by_role("link", name="Queue", exact=True).click()
-    expect(navigation).to_be_hidden()
+    expect(toggle).to_be_hidden()
     expect(page.locator(".top-tabs")).to_be_visible()
+
+
+def test_explorer_toggle_drag_does_not_toggle_controls(analysis_page):
+    page = analysis_page
+    page.set_viewport_size({"width": 390, "height": 844})
+    toggle = page.get_by_role("button", name="Toggle Explorer controls", exact=True)
+    before = toggle.bounding_box()
+    x, y = before["x"] + 28, before["y"] + 28
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + 150, y - 200, steps=10)
+    page.mouse.up()
+    after = toggle.bounding_box()
+    assert after["x"] == before["x"] + 150
+    assert after["y"] == before["y"] - 200
+    expect(toggle).to_have_attribute("aria-expanded", "false")
+    toggle.click()
+    expect(toggle).to_have_attribute("aria-expanded", "true")
+    toggle.press("ArrowRight")
+    assert toggle.bounding_box()["x"] == after["x"] + 8
+    page.set_viewport_size({"width": 844, "height": 390})
+    bounds = toggle.bounding_box()
+    assert 8 <= bounds["y"] <= 390 - bounds["height"] - 8
 
 
 def test_actions_collapse_only_when_labels_do_not_fit(analysis_page):

@@ -60,6 +60,43 @@ AlpineModule.data('tabHover', () => ({
   },
 }));
 
+AlpineModule.data('draggableToggle', () => ({
+  x: 8,
+  y: Math.max(8, window.innerHeight / 2 - 28),
+  moved: false,
+  drag: null as { id: number; x: number; y: number; left: number; top: number } | null,
+  clamp() {
+    this.x = Math.max(8, Math.min(this.x, innerWidth - this.$el.offsetWidth - 8));
+    this.y = Math.max(8, Math.min(this.y, innerHeight - this.$el.offsetHeight - 8));
+  },
+  nudge(x: number, y: number) {
+    this.x += x;
+    this.y += y;
+    this.clamp();
+  },
+  start(event: PointerEvent) {
+    if (event.button !== 0) return;
+    this.moved = false;
+    this.drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: this.x, top: this.y };
+    this.$el.setPointerCapture(event.pointerId);
+  },
+  move(event: PointerEvent) {
+    if (!this.drag || this.drag.id !== event.pointerId) return;
+    const x = event.clientX - this.drag.x;
+    const y = event.clientY - this.drag.y;
+    this.moved ||= Math.hypot(x, y) > 4;
+    if (this.moved) {
+      this.x = this.drag.left + x;
+      this.y = this.drag.top + y;
+      this.clamp();
+    }
+  },
+  end(event: PointerEvent) {
+    if (this.$el.hasPointerCapture(event.pointerId)) this.$el.releasePointerCapture(event.pointerId);
+    this.drag = null;
+  },
+}));
+
 window.Alpine = AlpineModule;
 AlpineModule.start();
 
@@ -73,10 +110,6 @@ function responsiveTabs(list: HTMLElement) {
     scheduled = false;
     const items = Array.from(list.querySelectorAll<HTMLElement>(':scope > li[role="tab"]'));
     if (!items.length) return;
-    if (getComputedStyle(list).flexDirection === 'column') {
-      list.dataset.mode = 'natural';
-      return;
-    }
 
     // SSE can replace the items; apply the row's hover state to the new markup.
     items.forEach(item => {

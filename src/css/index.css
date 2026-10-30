@@ -91,7 +91,7 @@
 }
 
 .page-action[data-icons="true"] .action-label,
-.zone-toggle {
+.explorer-toggle {
     display: none;
 }
 
@@ -108,48 +108,26 @@
         height: calc(100dvh - 1rem);
     }
 
-    .explorer-view .floating-zone {
+    .explorer-view .explorer-toggle {
         position: fixed;
-        z-index: 20;
-        display: flex;
-        flex-direction: column;
+        z-index: 30;
+        display: block;
     }
 
     .explorer-view .menu-zone {
+        position: fixed;
+        z-index: 20;
         top: 0.5rem;
         left: 0.5rem;
-        align-items: flex-start;
-    }
-
-    .explorer-view .actions-zone {
-        bottom: 0.5rem;
-        right: 0.5rem;
-        flex-direction: column-reverse;
-        align-items: flex-end;
-    }
-
-    .explorer-view .zone-toggle {
-        display: block;
-    }
-
-    .explorer-view .zone-panel {
-        @apply rounded-lg bg-white/95 p-1 shadow-lg;
-        display: none;
-        max-height: calc(100dvh - 5rem);
-        max-width: calc(100dvw - 1rem);
-        overflow: auto;
-    }
-
-    .explorer-view .floating-zone[data-open="true"] .zone-panel {
-        display: block;
+        width: calc(100% - 1rem);
     }
 
     .explorer-view .menu-zone .top-tabs {
-        @apply m-0 flex-col gap-1;
+        @apply m-0 rounded-lg bg-white/95 shadow-lg;
     }
 
-    .explorer-view .actions-zone .page-action {
-        position: static;
-        width: calc(100dvw - 1.5rem);
+    .explorer-view:not([data-controls-open="true"]) .menu-zone,
+    .explorer-view:not([data-controls-open="true"]) .page-action {
+        display: none;
     }
 }
