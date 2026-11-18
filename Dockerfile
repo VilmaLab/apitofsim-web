@@ -1,63 +1,68 @@
-FROM docker.io/library/node:22 AS frontend
+ARG DEPENDENCY_IMAGE=dependencies
+
+FROM docker.io/library/python:3.14-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f AS python
+FROM ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff AS uv
+
+FROM python AS dependency-builder
+# Git is required for the locked Git dependencies and is confined to this stage.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=uv /uv /usr/local/bin/uv
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
+WORKDIR /build
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+  uv sync --locked --no-default-groups --no-install-project --no-editable \
+  && sha256sum pyproject.toml uv.lock > /opt/dependency-inputs.sha256
+
+FROM python AS dependencies
+# RDKit's Cairo renderer needs the X11 client libraries for molecular drawings.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends fontconfig libgomp1 libtbb12 libxext6 libxrender1 rclone \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=dependency-builder /opt/venv /opt/venv
+COPY --from=dependency-builder /opt/dependency-inputs.sha256 /opt/
+ENV PATH="/opt/venv/bin:$PATH"
+
+FROM docker.io/library/node:22-slim AS frontend
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
-RUN npm ci --ignore-scripts
+RUN --mount=type=cache,target=/root/.npm npm ci --ignore-scripts
 COPY src ./src
 RUN npm run build
 
-FROM docker.io/mambaorg/micromamba:2.9.0 AS builder
+FROM python AS wheel
+WORKDIR /build
+COPY --from=uv /uv /usr/local/bin/uv
+COPY pyproject.toml README.md uv.lock ./
+COPY src/vms ./src/vms
+COPY --from=frontend /app/src/vms/static/index.css /app/src/vms/static/index.js ./src/vms/static/
+RUN --mount=type=cache,target=/root/.cache/uv \
+  uv build --wheel --no-sources --out-dir /wheel \
+  && sha256sum pyproject.toml uv.lock > /wheel/dependency-inputs.sha256 \
+  && sha256sum /wheel/*.whl > /wheel/app-wheel.sha256
 
-## Step 1. Build application
-COPY --chown=$MAMBA_USER:$MAMBA_USER . /tmp/apitofsim-web
-COPY --from=frontend --chown=$MAMBA_USER:$MAMBA_USER /app/src/vms/static/index.css /app/src/vms/static/index.js /tmp/apitofsim-web/src/vms/static/
-USER root
-RUN mkdir /env /tools && chown $MAMBA_USER:$MAMBA_USER /env /tools
-USER $MAMBA_USER
-WORKDIR /tmp/
-ENV PATH="/tools/bin:/env/bin:$PATH"
-# The extra tools get their own prefix: adding them to /env makes micromamba
-# re-solve the whole locked environment (400+ packages including ray-all), which
-# needs several GB of RAM and gets OOM-killed on the build runner (exit 137).
-RUN --mount=type=cache,target=/opt/conda/pkgs \
-  micromamba create --copy -p /tools --yes rclone bash git uv
-RUN --mount=type=cache,target=/opt/conda/pkgs \
-  micromamba create --copy -p /env --yes \
-  --file /tmp/apitofsim-web/env-container.lock
-# The project's dependencies include git and URL sources from [tool.uv.sources],
-# which pip cannot resolve; use uv, and git for the git sources.
-RUN micromamba run -p /env uv pip install --python /env/bin/python /tmp/apitofsim-web/
+FROM ${DEPENDENCY_IMAGE} AS runtime
+# Include the wheel hash in the layer cache key on builders that ignore bind mounts.
+COPY --from=wheel /wheel/app-wheel.sha256 /opt/
+# Mount the installer and wheel so only the installed application enters the layer.
+RUN --mount=type=bind,from=uv,source=/,target=/installer \
+    --mount=type=bind,from=wheel,source=/wheel,target=/wheel \
+  cmp /opt/dependency-inputs.sha256 /wheel/dependency-inputs.sha256 \
+  && sha256sum -c /opt/app-wheel.sha256 \
+  && /installer/uv pip install --no-cache --no-deps --python /opt/venv/bin/python /wheel/*.whl
+COPY fetch-and-start.sh /usr/local/bin/fetch-and-start.sh
 
-## Step 2. Build the runtime container
-FROM docker.io/library/debian:trixie-slim
-
-# Preserve the system TLS and timezone support from the previous base image.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates netbase tzdata \
-  && rm -rf /var/lib/apt/lists/*
-
-# Copy the application and its tools from the builder
-COPY --from=builder /env /env
-COPY --from=builder /tools /tools
-COPY --from=builder /tmp/apitofsim-web/fetch-and-start.sh /env/bin/
-
-# Place executables in the environment at the front of the path
-ENV PATH="/env/bin:/tools/bin:$PATH"
 ENV DATABASE_DIR="/database/"
 ENV RESULTS="/database/results"
-ENV RAY_USE_PIP="1"
 ENV RAY_AUTH_MODE="token"
-# uvicorn only honours X-Forwarded-Proto from these peers. The TLS-terminating
-# proxy in front of the app is never loopback, so trust it, otherwise url_for
-# builds http:// URLs for an https:// page (blocked as mixed content).
+# The TLS-terminating proxy is not loopback. Trust its forwarded scheme.
 ENV FORWARDED_ALLOW_IPS="*"
-# numba and matplotlib need writable cache directories. The image is owned by the
-# build user, but OpenShift runs the container as an arbitrary UID, so the
-# in-tree caches fail (numba even raises: "cannot cache function ...").
+# OpenShift uses an arbitrary UID, so caches must live outside the installed packages.
 ENV NUMBA_CACHE_DIR="/tmp/numba-cache"
 ENV MPLCONFIGDIR="/tmp/matplotlib"
 ENV XDG_CACHE_HOME="/tmp/.cache"
 
-# Run the ASGI application
 EXPOSE 8080
-# Only ever use 1 worker since it is stateful
-CMD ["/tools/bin/bash", "/env/bin/fetch-and-start.sh"]
+CMD ["/bin/bash", "/usr/local/bin/fetch-and-start.sh"]

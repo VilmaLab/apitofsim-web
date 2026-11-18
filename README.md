@@ -13,7 +13,7 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
 2.  **Run the Docker container:**
 
     ```bash
-    docker run -p 5000:5000 apitofsim-web
+    docker run -p 5000:8080 apitofsim-web
     ```
 
 3.  **Access the application:**
@@ -33,6 +33,28 @@ default tokens take precedence. Fontconfig uses `/tmp/.cache` in the image.
 
 To opt out for an isolated development container, pass
 `-e RAY_AUTH_MODE=disabled` to `docker run`.
+
+### Reusing the runtime dependency image
+
+`./scripts/build-container.sh` builds the dependency image once and reuses it for
+subsequent app builds. It tags the dependency image with a hash of the Dockerfile,
+`pyproject.toml`, and `uv.lock`. Set `CONTAINER_ENGINE=podman` to use Podman.
+The runtime installs the production dependencies from `uv.lock` and adds the
+application wheel in its own layer.
+
+For Rahti, log in to the integrated registry and use the checkout of the commit
+you want to build. Publish the dependency image to the project once per key and
+pass its tag to the app build.
+
+```bash
+dependency_image=$(PUBLISH_DEPENDENCIES_TO=image-registry.apps.2.rahti.csc.fi/apitofsimweb/apitofsim-web-dependencies \
+  ./scripts/build-container.sh --dependencies-only)
+oc -n apitofsimweb start-build apitofsim-web-git --commit="$(git rev-parse HEAD)" \
+  --build-arg "DEPENDENCY_IMAGE=image-registry.openshift-image-registry.svc:5000/apitofsimweb/apitofsim-web-dependencies:${dependency_image##*:}"
+```
+
+The regular Docker build and Rahti builds without `DEPENDENCY_IMAGE` build the
+dependency stage from source.
 
 ## Running the Application Locally with uv
 
