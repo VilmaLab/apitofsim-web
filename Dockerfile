@@ -27,8 +27,13 @@ RUN --mount=type=cache,target=/opt/conda/pkgs \
 # which pip cannot resolve; use uv, and git for the git sources.
 RUN micromamba run -p /env uv pip install --python /env/bin/python /tmp/apitofsim-web/
 
-## Step 2. Build the final bare container
-FROM gcr.io/distroless/base-debian13
+## Step 2. Build the runtime container
+FROM docker.io/library/debian:trixie-slim
+
+# Preserve the system TLS and timezone support from the previous base image.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates netbase tzdata \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy the application and its tools from the builder
 COPY --from=builder /env /env
