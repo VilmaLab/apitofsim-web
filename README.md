@@ -53,6 +53,18 @@ failures surfaced to the scheduler are reported by the web process.
 
 Sampling rates range from `0.0` to `1.0` and do not affect error reporting.
 
+## Accessing the Ray dashboard on CSC Rahti
+
+Log in with `oc` and select the OpenShift project that contains the app pod.
+Pass the pod name to the tunnel script.
+
+```bash
+./scripts/tunnel-ray-dashboard.sh apitofsim-web-git-6c49f7b599-hqx9k
+```
+
+Open [http://127.0.0.1:8265](http://127.0.0.1:8265) while the script is running.
+Press Ctrl+C to close the tunnel.
+
 ## Running the Application Locally with uv
 
 1. **Install uv**
