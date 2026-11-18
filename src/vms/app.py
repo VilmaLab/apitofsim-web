@@ -14,6 +14,7 @@ from uuid import uuid4
 import holoviews as hv
 import matplotlib
 import numpy
+import sentry_sdk
 from apitofsim.api import ureg
 from apitofsim.transmission import TRANSMISSION_MODELS
 from lxml import etree
@@ -36,6 +37,7 @@ from .forms import (
     settings_errors,
 )
 from .jobs import get_status_dict, update_analysis
+from .monitoring import init_sentry
 from .resources import bokeh_application, lifespan, templates
 from .settings import database_path, results_path
 
@@ -73,6 +75,11 @@ async def settings(request):
             "result_db_path": str(result_db_path),
             "last_update": {},
             "start_time": time(),
+            "trace_headers": (
+                dict(sentry_sdk.get_current_scope().iter_trace_propagation_headers())
+                if sentry_sdk.get_client().is_active()
+                else {}
+            ),
         }
         await request.app.state.job_sender.send((job_id.hex, status[job_id.hex]))
         return RedirectResponse(f"/analysis?jobid={job_id.hex}#queue", status_code=303)
@@ -465,6 +472,7 @@ async def spectrogram_plot(request):
     )
 
 
+init_sentry("starlette")
 app = Starlette(
     routes=[
         Route("/", settings, methods=["GET", "POST"]),

@@ -1,10 +1,15 @@
 import json
+import logging
+from pathlib import Path
 
 import ray
+import sentry_sdk
 from starlette.exceptions import HTTPException
 from starlette.responses import StreamingResponse
 
 from .queue import get_status_dict
+
+logger = logging.getLogger(__name__)
 
 
 def setup_result_db(database_path, result_db_path):
@@ -68,6 +73,9 @@ def simulation_events(**arguments):
                 db.add_failure_diagnostics(failure_id, {"web": failure})
             except Exception as persistence_exc:
                 failure["database_error"] = str(persistence_exc)
+                logger.exception(
+                    "Could not record diagnostics for job %s", failure["job_id"]
+                )
         save_failure(result_db_path, failure)
     finally:
         if "db" in context:
@@ -84,8 +92,25 @@ def simulation_events(**arguments):
 
 
 @ray.remote
-def run_simulation(**arguments):
-    yield from simulation_events(**arguments)
+def run_simulation(*, trace_headers=None, **arguments):
+    if not sentry_sdk.get_client().is_active():
+        yield from simulation_events(**arguments)
+        return
+
+    with sentry_sdk.isolation_scope() as scope:
+        scope.set_tag("job_id", Path(arguments["result_db_path"]).stem)
+        transaction = sentry_sdk.continue_trace(
+            trace_headers or {}, op="queue.process", name="run_simulation"
+        )
+        with sentry_sdk.start_transaction(transaction):
+            # Ray reports exceptions that escape the generator to the scheduler.
+            # Handled simulation failures are logged here while the trace is active.
+            for event, data in simulation_events(**arguments):
+                if event == b"failure":
+                    transaction.set_status("internal_error")
+                elif event == b"cancelled":
+                    transaction.set_status("cancelled")
+                yield event, data
 
 
 def _run_simulation(
@@ -192,12 +217,15 @@ def _run_simulation(
             context["stage"] = processing
             yield b"stage", processing
             yield update_pane("skimmer")
-            prepared = runner.prepare_from_config(
-                config,
-                pathways=pathways,
-                cached_densityandrate=histogram_precision,
-                show_progress=False,
-            )
+            with sentry_sdk.start_span(
+                op="simulation.skimmer", name="Prepare simulation"
+            ):
+                prepared = runner.prepare_from_config(
+                    config,
+                    pathways=pathways,
+                    cached_densityandrate=histogram_precision,
+                    show_progress=False,
+                )
             took_str = fmt_duration(time() - skimmer_start)
             skimmer = "Finished after " + took_str
             yield update_pane("skimmer")
@@ -219,6 +247,7 @@ def _run_simulation(
             realizations = config["N"]
             terminal = None
             with (
+                sentry_sdk.start_span(op="simulation.apitof", name="Run APi-ToF"),
                 runner.iter_mass_spec(
                     prepared, group, realizations, sample_mode=2, loglevel=1
                 ) as it,

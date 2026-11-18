@@ -34,6 +34,25 @@ default tokens take precedence. Fontconfig uses `/tmp/.cache` in the image.
 To opt out for an isolated development container, pass
 `-e RAY_AUTH_MODE=disabled` to `docker run`.
 
+## Sentry monitoring
+
+Set `SENTRY_DSN` in the web process environment. With Docker, pass
+`-e SENTRY_DSN` to `docker run` to forward it from your shell. The app forwards
+the Sentry settings to its Ray workers, including on an external Ray cluster.
+Leave `SENTRY_DSN` unset to disable monitoring.
+
+Sentry collects Starlette errors, request traces, Python logs and profiles, along
+with Ray simulation errors and timings. The request that submits a
+simulation and the worker that runs it share a trace. Ray task and actor
+failures surfaced to the scheduler are reported by the web process.
+
+- `SENTRY_ENVIRONMENT` and `SENTRY_RELEASE` label events for a deployment.
+- `SENTRY_TRACES_SAMPLE_RATE` defaults to `1.0`.
+- `SENTRY_PROFILE_SESSION_SAMPLE_RATE` defaults to `0.1`. Profiles are
+  collected while sampled traces are active.
+
+Sampling rates range from `0.0` to `1.0` and do not affect error reporting.
+
 ## Running the Application Locally with uv
 
 1. **Install uv**
