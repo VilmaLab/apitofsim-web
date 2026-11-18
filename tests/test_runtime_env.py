@@ -22,3 +22,21 @@ def test_runtime_env_ships_lockfile():
         ["git", "check-ignore", "--quiet", "uv.lock"], cwd=working_dir
     )
     assert ignored.returncode == 1
+
+
+def test_runtime_env_forwards_sentry_settings(monkeypatch):
+    monkeypatch.delenv("SENTRY_DSN", raising=False)
+    monkeypatch.setenv("SENTRY_ENVIRONMENT", "test")
+    monkeypatch.setenv("SENTRY_RELEASE", "test-release")
+    monkeypatch.setenv("SENTRY_TRACES_SAMPLE_RATE", "0.5")
+    monkeypatch.setenv("SENTRY_PROFILE_SESSION_SAMPLE_RATE", "0")
+    assert "env_vars" not in make_runtime_env()
+
+    monkeypatch.setenv("SENTRY_DSN", "https://public@example.invalid/1")
+    assert make_runtime_env()["env_vars"] == {
+        "SENTRY_DSN": "https://public@example.invalid/1",
+        "SENTRY_ENVIRONMENT": "test",
+        "SENTRY_RELEASE": "test-release",
+        "SENTRY_TRACES_SAMPLE_RATE": "0.5",
+        "SENTRY_PROFILE_SESSION_SAMPLE_RATE": "0",
+    }

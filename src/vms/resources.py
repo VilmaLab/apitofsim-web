@@ -19,6 +19,7 @@ from starlette.templating import Jinja2Templates
 from .assets import ASSETS, asset_version
 from .jobs.queue import scheduler_context
 from .markdown_ext import MarkdownExtension
+from .monitoring import SENTRY_ENV_VARS, init_sentry
 from .pintweb.alpine import quantity_display
 from .ray_auth import local_ray_auth
 from .result_plots import make_bokeh_app
@@ -41,6 +42,7 @@ add_jinja_extensions(templates.env)
 def worker_process_setup_hook():
     from pint import set_application_registry
 
+    init_sentry("ray-worker")
     set_application_registry(ureg)
 
 
@@ -66,6 +68,10 @@ project_dir = Path(__file__).resolve().parents[2]
 
 def make_runtime_env():
     runtime_env = {"worker_process_setup_hook": worker_process_setup_hook}
+    if environ.get("SENTRY_DSN"):
+        runtime_env["env_vars"] = {
+            key: environ[key] for key in SENTRY_ENV_VARS if key in environ
+        }
     # A driver started with `uv run` also runs its workers under `uv run`, which
     # then syncs the worker environment from the project. Package the project
     # explicitly so workers see uv.lock and install the same versions as the

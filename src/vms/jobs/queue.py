@@ -7,6 +7,7 @@ from math import inf
 
 import anyio
 import ray
+import sentry_sdk
 
 _job_status = {}
 
@@ -72,8 +73,11 @@ def fail_job(info, exc):
     from .failures import apply_failure, describe_failure, save_failure
 
     if "failure" not in info:
-        failure = describe_failure(exc, info, info["result_db_path"])
-        save_failure(info["result_db_path"], failure)
+        with sentry_sdk.isolation_scope():
+            if trace_headers := info.get("trace_headers"):
+                sentry_sdk.continue_trace(trace_headers)
+            failure = describe_failure(exc, info, info["result_db_path"])
+            save_failure(info["result_db_path"], failure)
         apply_failure(info, failure)
     notify_job(info)
 
@@ -106,6 +110,7 @@ def start_job(info):
     info["cancel_control"] = CancellationControl.remote()
     return run_simulation.remote(
         cancel_control=info["cancel_control"],
+        trace_headers=info.get("trace_headers"),
         **info["arguments"],
         database_path=database_path,
         result_db_path=info["result_db_path"],
