@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
+import sentry_sdk
 from starlette.exceptions import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -35,12 +36,15 @@ def describe_failure(exc, context, result_db_path):
     }
     if failure["status"] == "incomplete" and "result" in context:
         failure["result"] = context["result"]
-    logger.error(
-        "Job %s failed during %s",
-        failure["job_id"],
-        failure["stage"],
-        exc_info=(type(exc), exc, exc.__traceback__),
-    )
+    with sentry_sdk.new_scope() as scope:
+        scope.set_tag("job_id", failure["job_id"])
+        scope.set_tag("job_stage", failure["stage"])
+        logger.error(
+            "Job %s failed during %s",
+            failure["job_id"],
+            failure["stage"],
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
     return failure
 
 
