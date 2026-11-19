@@ -20,11 +20,25 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
 
     Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
 
-Docker enables Ray token authentication by default. At startup it creates a private
-token file under `/tmp`, which works with arbitrary container UIDs. To supply a
-stable token, mount a readable token file and set `RAY_AUTH_TOKEN_PATH` to its
-container path. `RAY_AUTH_TOKEN` is also supported. Tokens are created at runtime,
-not baked into the image.
+The container uses tini as PID 1. The launcher fetches both database files, starts
+Ray, and waits for it to answer before starting the web server. It also runs
+dirroof alongside the server. An unexpected exit of any of these processes stops
+the container so the runtime can restart it.
+
+Set `RESULTS_DIR` to the dedicated results directory inside the container
+(default `/resultdbs`) and `RESULTS_MAX_SIZE` to its size limit (default `20G`).
+Mount a writable volume at `RESULTS_DIR` to retain results across container
+replacement. On Rahti, set `RESULTS_DIR=/database/resultdbs` to use the existing
+database volume. dirroof monitors regular files directly in this directory. It
+deletes older files when the directory exceeds the limit and skips files it
+tracks as open. The filesystem and container's seccomp profile must support
+fanotify.
+
+Docker enables Ray token authentication by default. For the local head, the
+launcher creates a private token file under `/tmp` if credentials are absent.
+To supply a stable token, mount a readable token file and set
+`RAY_AUTH_TOKEN_PATH` to its container path. `RAY_AUTH_TOKEN` is also supported.
+An explicit external `RAY_ADDRESS` uses that cluster and its credentials.
 
 If a deployment launches uvicorn directly, the app also creates a private
 temporary token when embedded Ray cannot write its default token directory.
@@ -191,7 +205,8 @@ independent of your shell's Ray credentials.
 ## Run failures
 
 Set `RESULTS_DIR` to the directory for user result databases and failure
-diagnostics. It defaults to `resultdbs` in the web server's working directory.
+diagnostics. Outside the container it defaults to `resultdbs` in the web
+server's working directory.
 Existing deployments using `RESULTS` still use the parent of that path when
 `RESULTS_DIR` is unset.
 

@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python AS dependencies
 # RDKit's Cairo renderer needs the X11 client libraries for molecular drawings.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends fontconfig libgomp1 libtbb12 libxext6 libxrender1 rclone \
+  && apt-get install -y --no-install-recommends fontconfig libgomp1 libtbb12 libxext6 libxrender1 rclone tini \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=dependency-builder /opt/venv /opt/venv
 COPY --from=dependency-builder /opt/dependency-inputs.sha256 /opt/
@@ -52,9 +52,14 @@ RUN --mount=type=bind,from=uv,source=/,target=/installer \
   cmp /opt/dependency-inputs.sha256 /wheel/dependency-inputs.sha256 \
   && sha256sum -c /opt/app-wheel.sha256 \
   && /installer/uv pip install --no-cache --no-deps --python /opt/venv/bin/python /wheel/*.whl
-COPY fetch-and-start.sh /usr/local/bin/fetch-and-start.sh
+ADD --checksum=sha256:9ef2a30753d91ecf0c1f9b8d2a6a94bf67886faa0c48284e5e435909b2608ddd --chmod=0755 https://github.com/frankier/dirroof/releases/download/v0.1.1/dirroof-filc-0.1.1-linux-x86_64 /usr/local/bin/dirroof
+COPY fetch-and-run.sh /usr/local/bin/fetch-and-run.sh
+# Rahti assigns an arbitrary UID with access through group 0.
+RUN install -d -m 0775 /resultdbs
 
 ENV DATABASE_DIR="/database/"
+ENV RESULTS_DIR="/resultdbs"
+ENV RESULTS_MAX_SIZE="20G"
 ENV RAY_AUTH_MODE="token"
 # The TLS-terminating proxy is not loopback. Trust its forwarded scheme.
 ENV FORWARDED_ALLOW_IPS="*"
@@ -64,4 +69,5 @@ ENV MPLCONFIGDIR="/tmp/matplotlib"
 ENV XDG_CACHE_HOME="/tmp/.cache"
 
 EXPOSE 8080
-CMD ["/bin/bash", "/usr/local/bin/fetch-and-start.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/usr/local/bin/fetch-and-run.sh"]
