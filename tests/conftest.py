@@ -141,12 +141,12 @@ def output_db(tmp_path):
     import duckdb
     from apitofsim.workflow import sql_files_nofk as sql
 
-    from vms.jobs.run import setup_result_db
+    from vms.db import open_result_db
 
     clusters = tmp_path / "clusters.duckdb"
     with duckdb.connect(str(clusters)) as connection:
         connection.execute(sql.pathway + sql.histograms + sql.pathway_report)
-    db = setup_result_db(clusters, tmp_path / "output.duckdb")
+    db = open_result_db(clusters, tmp_path / "output.duckdb", readonly=False)
     try:
         yield db
     finally:

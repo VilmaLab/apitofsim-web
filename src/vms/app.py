@@ -29,7 +29,7 @@ from starlette.staticfiles import StaticFiles
 from starlette_wtf import CSRFProtectMiddleware, csrf_protect, csrf_token
 
 from .cluster_info import enrich_cluster
-from .db import DatabaseMiddleware, get_connection
+from .db import DatabaseMiddleware, get_connection, open_result_db
 from .forms import (
     INSTRUMENT_FORMS,
     SettingsForm,
@@ -134,16 +134,17 @@ def hypothetical_spectrogram(cluster_ids, masses, max_mass=None):
         line.attrib["__COLON__style"] = (
             f"(active_cluster || current_cluster) == {cluster_id} ? {{'stroke': 'var(--color-blue-700)', 'z-index': 1}} : {{}}"
         )
-    # Draw the current cluster on top of the others
-    lines[-1].addnext(
-        etree.XML(
-            """
-            <g style="pointer-events: none;">
-                <use __COLON__href="'#spectrogram-line-cluster-' + (active_cluster || current_cluster)"/>
-            </g>
-            """
+    if lines:
+        # Draw the current cluster on top of the others
+        lines[-1].addnext(
+            etree.XML(
+                """
+                <g style="pointer-events: none;">
+                    <use __COLON__href="'#spectrogram-line-cluster-' + (active_cluster || current_cluster)"/>
+                </g>
+                """
+            )
         )
-    )
     return (
         etree.tostring(tree, encoding="unicode")
         .replace("__AT_SYMBOL__", "@")
@@ -372,8 +373,6 @@ async def transmissioncalc(request):
     from apitofsim.plotting.spectrogram import get_intensities
     from apitofsim.transmission import transform_intensity
 
-    from vms.result_plots import open_result_db
-
     jobid = request.path_params.get("jobid")
     model = request.path_params.get("model")
 
@@ -385,13 +384,13 @@ async def transmissioncalc(request):
     result = job.get("result")
     experiment = result["experiment"]
     cluster = result["cluster"]
-    db = open_result_db(database_path, job["result_db_path"])
-    df = get_intensities(
-        db,
-        experiment_id=experiment,
-        cluster_id=cluster,
-        is_single_pathway=False,
-    )
+    with open_result_db(database_path, job["result_db_path"]) as db:
+        df = get_intensities(
+            db,
+            experiment_id=experiment,
+            cluster_id=cluster,
+            is_single_pathway=False,
+        )
     transform_intensity(df, model)
     counts = {
         "input_clusters": None,
@@ -439,27 +438,23 @@ async def transmissioncalc(request):
 
 
 async def spectrogram_plot(request):
-    # Get result db
-    from vms.result_plots import open_result_db
-
     jobid = request.path_params["jobid"]
     job = status.get(jobid)
     if job is None:
         raise HTTPException(404)
-    db = open_result_db(database_path, job["result_db_path"])
     result = job["result"]
-    experiment = list(db.iter_configs())
-    if len(experiment) != 1:
-        raise HTTPException(
-            500, detail="Result database has unexpected number of configs"
+    with open_result_db(database_path, job["result_db_path"]) as db:
+        configs = list(db.iter_configs())
+        if len(configs) != 1:
+            raise HTTPException(
+                500, detail="Result database has unexpected number of configs"
+            )
+        voltages = configs[0].config["voltages"]
+        cluster_charge = (
+            db.experiment_clusters_query(result["experiment"], result["cluster"])
+            .select("cluster_charge")
+            .fetchone()[0]
         )
-    experiment = experiment[0]
-    voltages = experiment.config["voltages"]
-    cluster_charge = (
-        db.experiment_clusters_query(result["experiment"], result["cluster"])
-        .select("cluster_charge")
-        .fetchone()[0]
-    )
     plot_script = prepare_plot(request, "spectrogram")
     return render_template(
         request,

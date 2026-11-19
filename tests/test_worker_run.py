@@ -5,16 +5,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from time import time
 
-import duckdb
 import pytest
-from apitofsim.workflow.db import RealizationDatabase, SuperClusterDatabase
+from apitofsim.workflow.db import ExperimentDatabase, SuperClusterDatabase
 from starlette.requests import Request
 
 from vms.app import app
-from vms.db import current_db
+from vms.db import current_db, open_result_db
 from vms.forms import SettingsForm, get_histogram_precision_choices
 from vms.jobs.run import simulation_events
-from vms.result_plots import open_result_db
 
 
 @pytest.fixture
@@ -65,22 +63,23 @@ def test_recording_worker(worker_arguments, monkeypatch, outcome):
             raise RuntimeError("Injected result write failure")
 
         if outcome == "startup_failed":
-            monkeypatch.setattr("apitofsim.api.mass_spec_iter", fail)
+            monkeypatch.setattr("apitofsim.api._mass_spec_batches", fail)
         else:
-            monkeypatch.setattr(RealizationDatabase, "record_result", fail)
+            monkeypatch.setattr(ExperimentDatabase, "record_result", fail)
         if outcome == "diagnostics_failed":
 
             def fail_diagnostics(*args, **kwargs):
                 raise OSError("Cannot enrich diagnostics")
 
             monkeypatch.setattr(
-                RealizationDatabase, "add_failure_diagnostics", fail_diagnostics
+                ExperimentDatabase, "add_failure_diagnostics", fail_diagnostics
             )
 
     events = list(simulation_events(**worker_arguments))
     messages = {event: data for event, data in events}
     result_path = worker_arguments["result_db_path"]
-    with duckdb.connect(result_path, read_only=True) as db:
+    with open_result_db(worker_arguments["database_path"], result_path) as output:
+        db = output.db
         run_id, metadata = db.execute(
             "SELECT id, run_config FROM experiment_run"
         ).fetchone()
@@ -95,9 +94,6 @@ def test_recording_worker(worker_arguments, monkeypatch, outcome):
         results = db.execute(
             "SELECT id FROM multi_pathway_experiment_result"
         ).fetchall()
-        assert db.execute(
-            "SELECT count(*) FROM realization WHERE experiment_result_id IS NULL"
-        ).fetchone() == (0,)
         if outcome in ("failed", "startup_failed", "diagnostics_failed"):
             assert len(failures) == 1
             assert results == []
@@ -115,7 +111,9 @@ def test_recording_worker(worker_arguments, monkeypatch, outcome):
             else:
                 assert json.loads(failures[0][2]) == {"web": failure}
             recorded_realizations = db.execute(
-                "SELECT count(*) FROM realization WHERE experiment_result_id = ?",
+                "SELECT count(*) FROM realization JOIN event_execution "
+                "ON realization.experiment_result_id = event_execution.result_id "
+                "WHERE event_execution.failure_id = ?",
                 [failures[0][0]],
             ).fetchone()[0]
             assert (
@@ -125,22 +123,28 @@ def test_recording_worker(worker_arguments, monkeypatch, outcome):
             )
         else:
             assert failures == []
-            assert len(results) == 1
             if outcome == "cancelled":
                 counts = json.loads(messages[b"cancelled"])["counts"]
                 assert counts["completed"] < 10_000_000
+                assert len(results) == int(counts["completed"] > 0)
+                assert db.execute("SELECT status FROM event_execution").fetchone() == (
+                    "cancelled",
+                )
                 assert (b"result" in messages) == (counts["completed"] > 0)
             else:
+                assert len(results) == 1
                 assert b"failure" not in messages
                 assert b"cancelled" not in messages
                 result = json.loads(messages[b"result"])
                 assert result["experiment"] == run_id
                 assert json.loads(messages[b"progress"])["completed"] == 2
-    if outcome == "complete":
-        db = open_result_db(worker_arguments["database_path"], result_path)
-        try:
-            curves = db.pathway_rate_curves(run_id, result["cluster"], results[0][0])
-            assert len(curves) == len(worker_arguments["pathways"])
-            assert all(curve.histogram is not None for curve in curves)
-        finally:
-            db.close()
+                assert output.events_path.suffix == ".parquet"
+                assert output.events_path.is_file()
+                assert output.realizations_query(run_id=run_id).count(
+                    "*"
+                ).fetchone() == (2,)
+                curves = output.pathway_rate_curves(
+                    run_id, result["cluster"], results[0][0]
+                )
+                assert len(curves) == len(worker_arguments["pathways"])
+                assert all(curve.histogram is not None for curve in curves)
