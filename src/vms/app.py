@@ -39,7 +39,7 @@ from .forms import (
 from .jobs import get_status_dict, update_analysis
 from .monitoring import init_sentry
 from .resources import bokeh_application, lifespan, templates
-from .settings import database_path, results_path
+from .settings import database_path, job_result_path
 
 matplotlib.use("SVG")
 hv.extension("matplotlib")  # type: ignore
@@ -60,8 +60,7 @@ async def settings(request):
     if await form.validate_on_submit():
         arguments = form.get_data()
         job_id = uuid4()
-        result_db_path = Path(results_path).with_name(f"{job_id.hex}.duckdb")
-        result_db_path.parent.mkdir(parents=True, exist_ok=True)
+        result_db_path = job_result_path(job_id.hex)
         status[job_id.hex] = {  # type: ignore
             "status": "pending",
             "owner": request.session.setdefault("job_owner", uuid4().hex),
@@ -266,9 +265,16 @@ async def cancel_analysis(request):
 
 
 async def jobs(request):
+    from .jobs.failures import result_db_missing, result_sidecar_missing
+
     owner = request.session.get("job_owner")
     entries = [
-        {**info, "jobid": jobid}
+        {
+            **info,
+            "jobid": jobid,
+            "sidecar_missing": result_sidecar_missing(info),
+            "result_missing": result_db_missing(info),
+        }
         for jobid, info in status.items()
         if owner is not None
         and info.get("owner") == owner
@@ -283,14 +289,22 @@ async def jobs(request):
     )
 
 
+def redirect_to_jobs(request):
+    if request.headers.get("HX-Request") == "true":
+        return HTMLResponse("", headers={"HX-Redirect": "/jobs"})
+    return RedirectResponse("/jobs", status_code=303)
+
+
 async def analysis(request):
     from vms.jobs.cancellation import cancelled_statuses
-    from vms.jobs.failures import failure_statuses
+    from vms.jobs.failures import failure_statuses, result_db_missing
 
     from .jobs import process_jobid
 
     jobid = process_jobid(request)
     info = status[jobid]
+    if result_db_missing(info):
+        return redirect_to_jobs(request)
     completed = "result" in info
     can_cancel = info.get("owner") is not None and info.get(
         "owner"
@@ -331,21 +345,29 @@ async def analysis(request):
     )
 
 
-def prepare_plot(request, plot, jobid=None, **kwargs):
-    if jobid is None:
-        jobid = request.path_params["jobid"]
+def result_job(jobid):
     info = status.get(jobid)
     if info is None or "result" not in info:
         raise HTTPException(404)
+    if not Path(info["result_db_path"]).is_file():
+        raise FileNotFoundError(info["result_db_path"])
+    return info
+
+
+def prepare_plot(request, plot, jobid, result, **kwargs):
     from bokeh.embed import server_document
 
-    result = info["result"]
     plot_url = str(request.url_for("bokeh", path=f"/{plot}"))
     return server_document(plot_url, arguments={"jobid": jobid, **result, **kwargs})
 
 
 async def explorer_plot(request):
-    plot_script = prepare_plot(request, "explorer")
+    jobid = request.path_params["jobid"]
+    try:
+        job = result_job(jobid)
+    except FileNotFoundError:
+        return redirect_to_jobs(request)
+    plot_script = prepare_plot(request, "explorer", jobid, job["result"])
     return render_template(
         request,
         "analysis/plot.html",
@@ -357,8 +379,12 @@ async def explorer_plot(request):
 async def transmission(request):
     jobid = request.path_params["jobid"]
     model = request.path_params["model"]
+    try:
+        job = result_job(jobid)
+    except FileNotFoundError:
+        return redirect_to_jobs(request)
     plot_script = prepare_plot(
-        request, "spectrogram", jobid=jobid, transmission_model=model
+        request, "spectrogram", jobid, job["result"], transmission_model=model
     )
     return render_template(
         request,
@@ -378,19 +404,18 @@ async def transmissioncalc(request):
 
     if jobid is None or model is None:
         raise HTTPException(404)
-    job = status.get(jobid)
-    if job is None:
-        raise HTTPException(404)
-    result = job.get("result")
-    experiment = result["experiment"]
-    cluster = result["cluster"]
-    with open_result_db(database_path, job["result_db_path"]) as db:
-        df = get_intensities(
-            db,
-            experiment_id=experiment,
-            cluster_id=cluster,
-            is_single_pathway=False,
-        )
+    try:
+        job = result_job(jobid)
+        result = job["result"]
+        with open_result_db(database_path, job["result_db_path"]) as db:
+            df = get_intensities(
+                db,
+                experiment_id=result["experiment"],
+                cluster_id=result["cluster"],
+                is_single_pathway=False,
+            )
+    except FileNotFoundError:
+        return redirect_to_jobs(request)
     transform_intensity(df, model)
     counts = {
         "input_clusters": None,
@@ -439,23 +464,24 @@ async def transmissioncalc(request):
 
 async def spectrogram_plot(request):
     jobid = request.path_params["jobid"]
-    job = status.get(jobid)
-    if job is None:
-        raise HTTPException(404)
-    result = job["result"]
-    with open_result_db(database_path, job["result_db_path"]) as db:
-        configs = list(db.iter_configs())
-        if len(configs) != 1:
-            raise HTTPException(
-                500, detail="Result database has unexpected number of configs"
+    try:
+        job = result_job(jobid)
+        result = job["result"]
+        with open_result_db(database_path, job["result_db_path"]) as db:
+            experiment = list(db.iter_configs())
+            if len(experiment) != 1:
+                raise HTTPException(
+                    500, detail="Result database has unexpected number of configs"
+                )
+            voltages = experiment[0].config["voltages"]
+            cluster_charge = (
+                db.experiment_clusters_query(result["experiment"], result["cluster"])
+                .select("cluster_charge")
+                .fetchone()[0]
             )
-        voltages = configs[0].config["voltages"]
-        cluster_charge = (
-            db.experiment_clusters_query(result["experiment"], result["cluster"])
-            .select("cluster_charge")
-            .fetchone()[0]
-        )
-    plot_script = prepare_plot(request, "spectrogram")
+    except FileNotFoundError:
+        return redirect_to_jobs(request)
+    plot_script = prepare_plot(request, "spectrogram", jobid, result)
     return render_template(
         request,
         "analysis/spectrogram.html",

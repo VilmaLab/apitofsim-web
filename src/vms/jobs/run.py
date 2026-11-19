@@ -324,6 +324,7 @@ def sse_yolo(data, event=None):
 
 async def update_analysis(request):
     from vms.jobs import process_jobid
+    from vms.jobs.failures import result_db_missing
 
     from .queue import notify_job
 
@@ -343,6 +344,11 @@ async def update_analysis(request):
             # when it arrives while the response is yielding its previous snapshot.
             changed = info["changed"]
             terminal = info["status"] in ("done", "failed", "incomplete", "cancelled")
+            if terminal and result_db_missing(info):
+                for event in (b"result-deleted", b"done"):
+                    for bit in sse_safe("", event=event):
+                        yield bit
+                return
             snapshot = dict(info["last_update"])
             for event, data in snapshot.items():
                 if sent.get(event) != data:

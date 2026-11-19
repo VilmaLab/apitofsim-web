@@ -28,7 +28,7 @@ def pytest_configure(config):
     env = pytest.MonkeyPatch()
     config.add_cleanup(env.undo)
     env.setenv("DATABASE", str(DATASETS_DIR / TEST_DB_FILES[0]))
-    env.setenv("RESULTS", str(Path(results_dir.name) / "results.duckdb"))
+    env.setenv("RESULTS_DIR", results_dir.name)
 
 
 def download_if_missing(name):
@@ -81,7 +81,7 @@ def server(test_db, tmp_path_factory):
         env = {
             **os.environ,
             "DATABASE": str(test_db),
-            "RESULTS": str(tmp_path_factory.mktemp("results") / "results.duckdb"),
+            "RESULTS_DIR": str(tmp_path_factory.mktemp("results")),
             "RAY_AUTH_MODE": "token",
             "RAY_AUTH_TOKEN_PATH": str(
                 tmp_path_factory.mktemp("ray-auth") / "auth_token"

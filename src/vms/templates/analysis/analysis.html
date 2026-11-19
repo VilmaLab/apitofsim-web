@@ -7,7 +7,7 @@
 {% block body_attrs %}
     hx-ext="sse"
     sse-connect="/analysis/updates?jobid={{ jobid }}"
-    sse-swap="message"
+    sse-swap="message,result-deleted"
     sse-close="done"
 {% endblock %}
 
@@ -15,7 +15,10 @@
     {% include "analysis/body.html" %}
     <script>
     document.body.addEventListener('htmx:sseBeforeMessage', function (e) {
-        console.log("SSE Message received:", e.detail);
+        if (e.detail.type === 'result-deleted') {
+            e.preventDefault();
+            window.location.replace('/jobs');
+        }
     })
     </script>
 {% endblock %}

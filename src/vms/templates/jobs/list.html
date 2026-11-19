@@ -2,7 +2,8 @@
     {% if jobs %}
     <ul class="space-y-4">
         {% for job in jobs %}
-        <li class="rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-4">
+        {% set deleted = job.result_missing or job.sidecar_missing %}
+        <li class="rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-4{% if deleted %} opacity-50{% endif %}">
             <div>
                 <h2 class="text-lg font-semibold">{{ job.cluster_label }}</h2>
                 <p class="text-sm text-gray-600">Submitted <time datetime="{{ job.submitted_at }}" x-data x-text="new Date($el.dateTime).toLocaleString()">{{ job.submitted_at }}</time></p>
@@ -15,8 +16,13 @@
                     {% else %}Failed{% endif %}
                 </p>
                 <p>Realizations: {{ job.counts.completed|default(0) }}/{{ job.counts.requested }}</p>
+                {% if deleted %}
+                <p>{% if job.result_missing %}The result was deleted{% else %}Some result files were deleted{% endif %} to make room for other results.</p>
+                {% endif %}
             </div>
+            {% if not job.result_missing %}
             <a href="/analysis?jobid={{ job.jobid }}" class="inline-flex rounded-lg bg-blue-700 text-white px-4 py-3">View results</a>
+            {% endif %}
         </li>
         {% endfor %}
     </ul>

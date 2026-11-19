@@ -55,7 +55,6 @@ RUN --mount=type=bind,from=uv,source=/,target=/installer \
 COPY fetch-and-start.sh /usr/local/bin/fetch-and-start.sh
 
 ENV DATABASE_DIR="/database/"
-ENV RESULTS="/database/results"
 ENV RAY_AUTH_MODE="token"
 # The TLS-terminating proxy is not loopback. Trust its forwarded scheme.
 ENV FORWARDED_ALLOW_IPS="*"

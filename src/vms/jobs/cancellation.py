@@ -1,6 +1,6 @@
 """Cancellation control shared by the scheduler and an already-running worker."""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from shutil import rmtree
 from threading import Event, Thread
@@ -84,7 +84,8 @@ def clean_job_files(info):
         owned.unlink(missing_ok=True)
     temporary = Path(str(path) + ".tmp")
     if temporary.is_dir():
-        rmtree(temporary)
+        with suppress(FileNotFoundError):
+            rmtree(temporary)
 
 
 def cancelled_statuses(info):

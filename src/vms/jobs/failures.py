@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import sentry_sdk
+from apitofsim.recording import events_filename
 from starlette.exceptions import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,33 @@ def failure_path(result_db_path):
     return Path(result_db_path).with_suffix(".failure.json")
 
 
+def result_db_missing(info):
+    failure = info.get("failure", {})
+    expected = (
+        "result" in info
+        or info["status"] == "done"
+        or failure.get("had_result_db")
+        or failure.get("run_id") is not None
+    )
+    return expected and not Path(info["result_db_path"]).is_file()
+
+
+def result_sidecar_missing(info):
+    path = info["result_db_path"]
+    if "result" in info and info.get("counts", {}).get("completed", 0) > 0:
+        if not (
+            events_filename(path, format="parquet").is_file()
+            or events_filename(path).is_file()
+        ):
+            return True
+    failure = info.get("failure")
+    return (
+        failure is not None
+        and "persistence_error" not in failure
+        and not failure_path(path).is_file()
+    )
+
+
 def describe_failure(exc, context, result_db_path):
     failure = {
         "status": "incomplete" if isinstance(exc, IncompleteOutputError) else "failed",
@@ -31,6 +59,7 @@ def describe_failure(exc, context, result_db_path):
         "message": str(exc),
         "traceback": "".join(traceback.format_exception(exc)),
         "run_id": context.get("run_id"),
+        "had_result_db": "db" in context or Path(result_db_path).is_file(),
         "cluster_id": context.get("cluster_id"),
         "counts": context.get("counts", {}),
     }
@@ -116,7 +145,7 @@ def process_jobid(request):
     from time import time
 
     from vms.jobs.queue import get_status_dict
-    from vms.settings import results_path
+    from vms.settings import job_result_path
 
     status = get_status_dict()
     jobid = request.query_params.get("jobid")
@@ -126,7 +155,7 @@ def process_jobid(request):
         # Only accept the UUID hex used for result filenames.
         if len(jobid) != 32 or any(c not in "0123456789abcdef" for c in jobid):
             raise HTTPException(404, detail="Job ID not found")
-        result_db_path = Path(results_path).with_name(f"{jobid}.duckdb")
+        result_db_path = job_result_path(jobid)
         try:
             failure = json.loads(failure_path(result_db_path).read_text())
         except FileNotFoundError, ValueError:
