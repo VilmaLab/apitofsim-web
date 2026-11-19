@@ -1,23 +1,11 @@
 """Serve resultviewer Bokeh plots from completed simulation databases."""
 
-import duckdb
 from apitofresview.webapp import explorer_bokeh, spectrogram_bokeh
-from apitofsim.workflow.db import RealizationDatabase
+from bokeh.core.properties import value as literal_value
+from bokeh.models import GlyphRenderer, Text
 from bokeh.server.asgi import BokehASGI
 
-
-def open_result_db(cluster_path, result_path):
-    cluster_path = str(cluster_path).replace("'", "''")
-    result_path = str(result_path).replace("'", "''")
-    connection = duckdb.connect()
-    connection.execute(f"ATTACH '{cluster_path}' AS clusters_db (READ_ONLY)")
-    connection.execute(f"ATTACH '{result_path}' AS results_db (READ_ONLY)")
-    connection.execute("SET search_path = 'results_db,clusters_db'")
-    db = RealizationDatabase(((connection, None)))
-    db.create_temp_views()
-    connection.execute("USE results_db")
-    connection.execute("SET search_path = 'results_db,clusters_db'")
-    return db
+from vms.db import open_result_db
 
 
 def make_bokeh_app(cluster_path):
@@ -47,5 +35,11 @@ def make_bokeh_app(cluster_path):
 
     def spectrogram(doc):
         spectrogram_bokeh(database_for(doc), doc)
+        for renderer in doc.select({"type": GlyphRenderer}):
+            glyph = renderer.glyph
+            if isinstance(glyph, Text) and glyph.text_font == "sans-serif":
+                # The viewer passes a bare font name, which Bokeh treats as a
+                # column name for this glyph property.
+                glyph.text_font = literal_value("sans-serif")
 
     return BokehASGI({"/explorer": explorer, "/spectrogram": spectrogram})

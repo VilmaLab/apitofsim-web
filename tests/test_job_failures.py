@@ -6,17 +6,20 @@ from urllib.parse import urlparse
 
 import duckdb
 import numpy as np
+import pyarrow as pa
 import pytest
 from apitofsim.api import Counters
+from apitofsim.recording import EVENT_SCHEMA, events_filename
 from playwright.sync_api import expect
 from starlette.requests import Request
 
 from vms import settings
 from vms.app import analysis, app
+from vms.db import open_result_db
 from vms.jobs import run as job_runner
 from vms.jobs.failures import IncompleteOutputError, failure_path, validate_output
 from vms.jobs.queue import consume_event, fail_job, finish_job, get_status_dict
-from vms.jobs.run import setup_result_db, simulation_events, update_analysis
+from vms.jobs.run import simulation_events, update_analysis
 from vms.resources import templates
 
 JOB_ID = "a" * 32
@@ -109,7 +112,7 @@ def test_worker_failure_saved_in_database_and_sidecar(
     result_path, _ = job
 
     def broken_run(context, **arguments):
-        db = setup_result_db(str(test_db), str(result_path))
+        db = open_result_db(test_db, result_path, readonly=False)
         context["db"] = db
         context["run_id"] = db.insert_run(db.insert_config("test", {}))
         context["stage"] = "skimmer"
@@ -117,7 +120,8 @@ def test_worker_failure_saved_in_database_and_sidecar(
             failure_id = db.record_failure(
                 context["run_id"], "RuntimeError", "Earlier attempt"
             )
-            db.db.execute("INSERT INTO realization VALUES (1, ?)", [failure_id])
+            execution = db.begin_execution(context["run_id"], 1, None, [])
+            db.finish_execution(execution, "failed", failure_id=failure_id)
         yield b"stage", "skimmer"
         raise ValueError("Injected preliminary failure")
 
@@ -137,8 +141,8 @@ def test_worker_failure_saved_in_database_and_sidecar(
         ).fetchone() == (2 if unrelated_failure else 1,)
         if unrelated_failure:
             assert connection.execute(
-                "SELECT count(*) FROM realization JOIN experiment_failure "
-                "ON realization.experiment_result_id = experiment_failure.id"
+                "SELECT count(*) FROM event_execution JOIN experiment_failure "
+                "ON event_execution.failure_id = experiment_failure.id"
             ).fetchone() == (1,)
             assert connection.execute(
                 "SELECT msg, diagnostics FROM experiment_failure ORDER BY id LIMIT 1"
@@ -202,30 +206,30 @@ def test_incomplete_output_keeps_partial_results(job):
     assert read_stream() == stream
 
 
-def populate_output(output_db, recorded=3):
-    connection = output_db.db
-    connection.execute("INSERT INTO realization VALUES (1, NULL), (2, NULL), (3, NULL)")
-    connection.execute(
-        "INSERT INTO event_info (id, realization_id, event_type, postime, velocity, "
-        "omega, rot_energy, vibrational_energy, particle_index) "
-        "SELECT id, realization_id, event_type::event_type, "
-        "{'x': 0, 'y': 0, 'z': 0, 't': 0}, "
-        "{'x': 0, 'y': 0, 'z': 0}, {'x': 0, 'y': 0, 'z': 0}, 0, 0, 0 "
-        "FROM (VALUES (1, 1, 'init'), (2, 2, 'init'), (3, 3, 'init'), "
-        "(4, 1, 'collision'), (5, 2, 'collision'), (6, 3, 'collision'), "
-        "(7, 1, 'escape'), (8, 2, 'escape')) e(id, realization_id, event_type)"
-    )
+def register_events(output_db, events):
+    columns = {field.name: [0] * len(events) for field in EVENT_SCHEMA}
+    for index, (result_id, realization, event_kind) in enumerate(events):
+        columns["result_id"][index] = result_id
+        columns["realization_index"][index] = realization
+        columns["event_index"][index] = index
+        columns["event_kind"][index] = event_kind
+    output_db.db.register("_event_archive", pa.table(columns, schema=EVENT_SCHEMA))
+
+
+def populate_output(output_db, recorded=3, *, collisions=3, fragmented=True):
+    existing = output_db.results_query().fetchone()
+    if existing is None:
+        run = output_db.insert_run(output_db.insert_config("test", {}))
+        result = output_db.begin_execution(run, 18, None, [1], recorded=True)
+    else:
+        result = existing[0]
+    events = [(result, realization, 0) for realization in range(3)]
+    events += [(result, realization, 1) for realization in range(collisions)]
+    events += [(result, realization, 5) for realization in range(min(2, recorded))]
     if recorded == 3:
-        connection.execute(
-            "INSERT INTO event_info SELECT 9, 3, 'fragmentation', postime, velocity, "
-            "omega, rot_energy, vibrational_energy, particle_index FROM event_info LIMIT 1"
-        )
-        connection.execute("INSERT INTO fragmentation_event VALUES (9, NULL)")
-    connection.execute(
-        "INSERT INTO collision_event VALUES (4, 0, 0, true), (5, 0, 0, true), (6, 0, 0, true)"
-    )
-    counters = Counters(0, 3, 0, 3, 2, np.array([1]))
-    return counters
+        events.append((result, 2, 3 if fragmented else 5))
+    register_events(output_db, events)
+    return Counters(0, 3, 0, 3, 2, np.array([1]))
 
 
 @pytest.mark.parametrize("recorded", [2, 3])
@@ -252,17 +256,14 @@ def test_validate_output_detects_missing_events(recorded, output_db):
 
 
 @pytest.mark.parametrize(
-    ("table", "message"),
+    ("options", "message"),
     [
-        ("collision_event", "recorded collisions: 2/3"),
-        ("fragmentation_event", "recorded fragmentations: 0/1"),
+        ({"collisions": 2}, "recorded collisions: 2/3"),
+        ({"fragmented": False}, "recorded fragmentations: 0/1"),
     ],
 )
-def test_validate_output_detects_missing_subtypes(output_db, table, message):
-    counters = populate_output(output_db)
-    output_db.db.execute(
-        f"DELETE FROM {table} WHERE id = (SELECT max(id) FROM {table})"
-    )
+def test_validate_output_detects_missing_event_types(output_db, options, message):
+    counters = populate_output(output_db, **options)
     with pytest.raises(IncompleteOutputError, match=message):
         validate_output(output_db, counters, 3, {})
 
@@ -278,20 +279,14 @@ def test_validate_output_uses_database_scope(output_db):
     config_id = output_db.insert_config("test", {})
     runs = [output_db.insert_run(config_id), output_db.insert_run(config_id)]
     results = [
-        output_db.record_result(run, counters, cluster_id=18, pathway_ids=[1])
-        for run in runs
+        output_db.begin_execution(run, 18, None, [1], recorded=True) for run in runs
     ]
-    output_db.db.execute(
-        "INSERT INTO realization VALUES (1, ?), (2, ?), (3, NULL)", results
-    )
-    # Context is for one run/result, but the web owns the whole database. Both
-    # other-run and unlinked records must be counted rather than hidden.
+    register_events(output_db, [(results[0], 0, 5), (results[1], 0, 0)])
+    # A web job owns the whole database, including executions outside the displayed run.
     context = {"run_id": runs[0], "result": {"experiment": runs[0], "cluster": 18}}
-    with pytest.raises(IncompleteOutputError, match="recorded realizations: 3/1"):
+    with pytest.raises(IncompleteOutputError, match="recorded realizations: 2/1"):
         validate_output(output_db, counters, 1, context)
-    assert context["counts"]["recorded_realizations"] == 3
-    assert output_db.recorded_output_query(run_id=runs[0]).fetchone()[0] == 1
-    assert output_db.recorded_output_query(result_id=results[1]).fetchone()[0] == 1
+    assert context["counts"]["recorded_realizations"] == 2
 
 
 def test_validate_empty_output(output_db):
@@ -368,7 +363,7 @@ def test_cancelled_validation_preserves_interrupted_realizations(output_db):
     assert context["counts"]["completed"] == 2
     with pytest.raises(IncompleteOutputError):
         validate_output(output_db, counters, 100, context)
-    output_db.db.execute("DELETE FROM event_info WHERE id = 8")
+    populate_output(output_db, recorded=1)
     with pytest.raises(IncompleteOutputError, match="terminal realizations"):
         validate_output(output_db, counters, 100, context, cancelled=True)
 
@@ -388,6 +383,14 @@ def test_cancelled_before_simulation_closes_database(monkeypatch, job):
             counts={"requested": 100, "completed": 0},
         )
         result_path.touch()
+        archive = events_filename(result_path)
+        for path in (
+            archive,
+            events_filename(result_path, format="parquet"),
+            Path(f"{archive}.lock"),
+            Path(f"{archive}.journal"),
+        ):
+            path.touch()
         raise JobCancelled
         yield
 
@@ -404,4 +407,5 @@ def test_cancelled_before_simulation_closes_database(monkeypatch, job):
     run_async(finish)
     assert info["status"] == "cancelled"
     assert not result_path.exists()
+    assert not list(result_path.parent.glob(f"{result_path.stem}.events.*"))
     assert "failure" not in info

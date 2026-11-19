@@ -1,5 +1,6 @@
 import json
 import logging
+from collections import deque
 from pathlib import Path
 
 import ray
@@ -7,35 +8,11 @@ import sentry_sdk
 from starlette.exceptions import HTTPException
 from starlette.responses import StreamingResponse
 
+from vms.db import open_result_db
+
 from .queue import get_status_dict
 
 logger = logging.getLogger(__name__)
-
-
-def setup_result_db(database_path, result_db_path):
-    # Use DDL without foreign keys since they're not supported across multiple schemas in DuckDB
-    import apitofsim.workflow.sql_files_nofk as sql
-    import duckdb
-    from apitofsim.workflow.db import RealizationDatabase
-
-    database_path = str(database_path).replace("'", "''")
-    result_db_path = str(result_db_path).replace("'", "''")
-    duckdb_db = duckdb.connect()
-    duckdb_db.execute(f"ATTACH '{database_path}' AS clusters_db (READ_ONLY);")
-    duckdb_db.execute(f"ATTACH '{result_db_path}' AS results_db;")
-    duckdb_db.execute("USE results_db;")
-    duckdb_db.execute("SET search_path = 'results_db,clusters_db'")
-    ddl = "\n".join(
-        [
-            sql.experiment,
-            sql.experiment_report,
-            sql.realizations,
-            sql.event_report,
-        ]
-    )
-    duckdb_db.execute(ddl)
-
-    return RealizationDatabase(((duckdb_db, None)))
 
 
 def simulation_events(**arguments):
@@ -123,12 +100,14 @@ def _run_simulation(
     start_time,
     cancel_control=None,
 ):
-    from time import time
+    from time import monotonic, time
 
     from apitofsim.api import (
         MassSpecIntermediateCounter,
         MassSpecLogItem,
+        SampleMode,
     )
+    from apitofsim.workflow.db_utils import transaction_scope
     from apitofsim.workflow.runners import ExperimentRunner, RecordedMassSpecResult
     from jinja2 import Environment
     from minify_html_onepass import minify
@@ -138,7 +117,7 @@ def _run_simulation(
     from vms.resources import jinja_loader
 
     context["counts"] = {"requested": int(config["N"])}
-    db = setup_result_db(database_path, result_db_path)
+    db = open_result_db(database_path, result_db_path, readonly=False)
     context["db"] = db
     config_id = db.insert_config("webrun", config)
     runner = ExperimentRunner(db)
@@ -160,7 +139,7 @@ def _run_simulation(
     densityandr = ""
     apitof = ""
 
-    log = []
+    log = deque(maxlen=100)
     survived = 0
     fragmented = 0
     iterations = 0
@@ -246,10 +225,17 @@ def _run_simulation(
             context["cluster_id"] = group.cluster_id
             realizations = config["N"]
             terminal = None
+            next_log_update = monotonic() + 0.25
+            # The public event iterator streams trajectory batches to Python.
+            # Use the workflow stream for progress and logs with native recording.
             with (
                 sentry_sdk.start_span(op="simulation.apitof", name="Run APi-ToF"),
-                runner.iter_mass_spec(
-                    prepared, group, realizations, sample_mode=2, loglevel=1
+                runner._iter_mass_spec(
+                    prepared,
+                    group,
+                    realizations,
+                    sample_mode=SampleMode.rejection,
+                    loglevel=1,
                 ) as it,
                 cancel_iterator(cancel_control, it),
             ):
@@ -270,10 +256,28 @@ def _run_simulation(
                         yield update_pane("apitof")
                     elif isinstance(result, MassSpecLogItem):
                         log.append(f"{result.type}: {result.name}")
-                        yield b"apitoflog", "\n".join(log)
+                        # The simulator can log per collision. Send a bounded
+                        # snapshot so it cannot delay progress or cancellation.
+                        now = monotonic()
+                        if now >= next_log_update:
+                            yield b"apitoflog", "\n".join(log)
+                            next_log_update = now + 0.25
+            if log:
+                yield b"apitoflog", "\n".join(log)
             if terminal is None:
                 raise RuntimeError("Simulation ended without a final result")
             final_cancelled = terminal.result.cancelled
+            if final_cancelled and counters.n_realizations > 0:
+                # Keep the spectrogram summary linked to the cancelled archive.
+                with transaction_scope(db.db):
+                    db.record_result(
+                        terminal.run_id,
+                        counters,
+                        terminal.result.timings,
+                        cluster_id=terminal.cluster_id,
+                        pathway_ids=terminal.pathway_ids,
+                        result_id=terminal.result_id,
+                    )
             context["result"] = {
                 "experiment": current_run_id,
                 "cluster": group.cluster_id,

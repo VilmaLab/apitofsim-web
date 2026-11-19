@@ -200,6 +200,10 @@ A run whose final counters disagree with its recorded events is marked
 **incomplete**. Its available results remain accessible with a warning about
 missing trajectories.
 
+Each new result uses a DuckDB file and a matching `.events.parquet` file.
+Keep them together when copying results. Older results with relational event
+tables require migration before the current result viewer can open them.
+
 ## Developing apitofsim-web and apitofsim
 
 Check out apitofsim and apitofsim-resultviewer as sibling directories of
@@ -209,10 +213,10 @@ apitofsim-web. From the apitofsim-web directory, run:
 ./install_dev.sh
 ```
 
-This creates `.venv-local` from the release lockfile, installs Meson build tools,
-and installs both sibling checkouts as editable packages explicitly into
-`.venv-local/bin/python`. Building apitofsim also requires a C++ toolchain and
-its native dependencies, including TBB >=2023.0 and Eigen >=3.4.
+This creates `.venv-local` from the release lockfile, installs CMake build tools,
+and installs both sibling checkouts as editable packages. Follow the
+[apitofsim build prerequisites](https://github.com/VilmaLab/apitofsim/blob/v0.32.0/docs/development.md)
+to set up the native toolchain.
 
 Set `UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local` when running development
 commands. Disabling sync preserves the editable installs instead of restoring

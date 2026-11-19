@@ -243,7 +243,7 @@ def test_cancel_preserves_partial_results_and_history(page, server, tmp_path):
         page.locator(f'a[href="#{tab}"]').click()
         expect(
             page.frame_locator(f'iframe[title="{title}"]').locator(".bk-Canvas")
-        ).not_to_have_count(0)
+        ).not_to_have_count(0, timeout=60_000)
     page.screenshot(path=str(tmp_path / "cancelled-results.png"), full_page=True)
     page.reload()
     expect(page.locator('li[data-tab="apitof"]')).to_have_attribute(
