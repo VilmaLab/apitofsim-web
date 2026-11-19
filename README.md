@@ -190,6 +190,11 @@ independent of your shell's Ray credentials.
 
 ## Run failures
 
+Set `RESULTS_DIR` to the directory for user result databases and failure
+diagnostics. It defaults to `resultdbs` in the web server's working directory.
+Existing deployments using `RESULTS` still use the parent of that path when
+`RESULTS_DIR` is unset.
+
 Failed runs show an alert with the stage, error message, and expandable traceback.
 Their diagnostics are saved as `<jobid>.failure.json` beside the run's DuckDB
 file, including counts and run/cluster IDs when available. Worker failures also

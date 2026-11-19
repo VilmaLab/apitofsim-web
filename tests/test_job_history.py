@@ -13,6 +13,7 @@ from starlette_wtf import CSRFProtectMiddleware
 
 from vms.app import app
 from vms.jobs.cancellation import CancellationControl, JobCancelled, enter_stage
+from vms.jobs.failures import failure_path
 from vms.jobs.queue import finish_job, get_status_dict
 
 
@@ -101,6 +102,7 @@ def test_history_owner_order_and_cancellation(client, history):
 
 def test_terminal_cancel_is_noop_and_list_stops_polling(client, history):
     info = history("done", state="done", result={"experiment": 1, "cluster": 18})
+    Path(info["result_db_path"]).touch()
     csrf = token(client, "done")
     client.post("/analysis/cancel?jobid=done", data={"csrf_token": csrf})
     assert "cancel_requested" not in info
@@ -119,6 +121,7 @@ def test_retained_cancelled_results_reload_and_sse(client, history):
     )
     client.portal.call(finish_job, info)
     assert info["status"] == "done"
+    Path(info["result_db_path"]).touch()
     for response in [
         client.get("/analysis?jobid=partial"),
         client.get(
@@ -130,6 +133,147 @@ def test_retained_cancelled_results_reload_and_sse(client, history):
         assert 'href="#explorer"' in response.text
         assert 'href="#spectrogram"' in response.text
     assert "stopped early" in client.get("/jobs").text
+
+
+def test_deleted_results_redirect_and_remain_in_history(client, history):
+    from lxml import html
+
+    info = history("done", state="done", result={"experiment": 1, "cluster": 18})
+    result_path = Path(info["result_db_path"])
+    result_path.touch()
+    assert client.get("/analysis?jobid=done").status_code == 200
+    result_path.unlink()
+
+    for path in (
+        "/analysis?jobid=done",
+        "/analysis/results/done/explorer",
+        "/analysis/results/done/spectrogram",
+        "/analysis/results/done/transmission/model",
+        "/analysis/results/done/transmission/model/calc",
+    ):
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/jobs"
+    response = client.get(
+        "/analysis/results/done/transmission/model/calc",
+        headers={"HX-Request": "true"},
+    )
+    assert response.headers["HX-Redirect"] == "/jobs"
+    stream = client.get(
+        "/analysis/updates?jobid=done", headers={"accept": "text/event-stream"}
+    )
+    assert "event: result-deleted" in stream.text
+    assert "event: done" in stream.text
+
+    history("pending")
+    for path in ("/jobs", "/jobs/list"):
+        rows = html.fromstring(client.get(path).text).xpath('//*[@id="job-list"]/ul/li')
+        pending, deleted = rows
+        assert "opacity-50" not in pending.attrib["class"].split()
+        assert "opacity-50" in deleted.attrib["class"].split()
+        assert (
+            "The result was deleted to make room for other results."
+            in deleted.text_content()
+        )
+        assert not deleted.xpath(".//a")
+
+
+@pytest.mark.parametrize("sidecar", ["diagnostics", "event archive"])
+def test_deleting_sidecar_fades_the_history_entry(client, history, sidecar):
+    from apitofsim.recording import events_filename
+
+    if sidecar == "diagnostics":
+        info = history(
+            "partial",
+            state="failed",
+            failure={"status": "failed", "stage": "apitof", "run_id": 1},
+        )
+    else:
+        info = history(
+            "partial",
+            state="done",
+            result={"experiment": 1, "cluster": 18},
+            counts={"completed": 3, "requested": 3},
+        )
+    result_path = Path(info["result_db_path"])
+    result_path.touch()
+    sidecar_path = (
+        failure_path(result_path)
+        if sidecar == "diagnostics"
+        else events_filename(result_path, format="parquet")
+    )
+    sidecar_path.touch()
+    assert "opacity-50" not in client.get("/jobs/list").text
+    sidecar_path.unlink()
+    response = client.get("/jobs/list")
+    assert "opacity-50" in response.text
+    assert (
+        "Some result files were deleted to make room for other results."
+        in response.text
+    )
+    assert "jobid=partial" in response.text
+
+
+def test_result_deleted_while_opening_plot(client, history, tmp_path, monkeypatch):
+    import duckdb
+
+    from vms import db
+
+    info = history("done", state="done", result={"experiment": 1, "cluster": 18})
+    result_path = Path(info["result_db_path"])
+    cluster_path = tmp_path / "clusters.duckdb"
+    for path in (cluster_path, result_path):
+        duckdb.connect(str(path)).close()
+
+    connect = duckdb.connect
+
+    def connect_after_deletion():
+        result_path.unlink()
+        return connect()
+
+    monkeypatch.setattr("vms.app.database_path", cluster_path)
+    monkeypatch.setattr(db.duckdb, "connect", connect_after_deletion)
+    response = client.get("/analysis/results/done/spectrogram", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/jobs"
+    assert not result_path.exists()
+
+
+def test_browser_redirects_when_result_is_deleted_during_page_load(
+    page, client, history
+):
+    from urllib.parse import urlsplit
+
+    from playwright.sync_api import expect
+
+    info = history("done", state="done", result={"experiment": 1, "cluster": 18})
+    result_path = Path(info["result_db_path"])
+    result_path.touch()
+    static = Path(__file__).resolve().parents[1] / "src/vms/static"
+
+    def serve(route):
+        url = urlsplit(route.request.url)
+        if url.path.startswith("/static/"):
+            route.fulfill(path=str(static / url.path.removeprefix("/static/")))
+            return
+        if url.path == "/analysis/updates":
+            result_path.unlink(missing_ok=True)
+        response = client.get(
+            url.path + ("?" + url.query if url.query else ""),
+            headers=route.request.headers,
+        )
+        route.fulfill(
+            body=response.content, content_type=response.headers["content-type"]
+        )
+
+    page.route("http://testserver/**", serve)
+    page.goto("http://testserver/analysis?jobid=done")
+    expect(page).to_have_url("http://testserver/jobs")
+    row = page.locator("#job-list li")
+    expect(row).to_have_css("opacity", "0.5")
+    expect(row).to_contain_text(
+        "The result was deleted to make room for other results."
+    )
 
 
 @pytest.mark.parametrize("live_update", [False, True])
@@ -145,6 +289,8 @@ def test_stopped_early_notice_and_heading(page, client, history, live_update):
         **({} if live_update else {"cancelled_stage": "apitof"}),
         counts={"requested": 100, "completed": 3},
     )
+    if not live_update:
+        Path(info["result_db_path"]).touch()
     document = html.fromstring(client.get("/analysis?jobid=partial").text)
     body = document.xpath('//div[@class="tab-page"]')[0]
     pane = body.xpath('.//div[@sse-swap="apitof"]')[0]

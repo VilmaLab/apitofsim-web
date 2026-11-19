@@ -1,4 +1,5 @@
 from contextvars import ContextVar
+from pathlib import Path
 
 import duckdb
 from apitofsim.workflow import sql_files_nofk as sql
@@ -25,6 +26,12 @@ def get_connection():
 
 def open_result_db(cluster_path, result_path, *, readonly=True):
     """Open a job's results and event archive alongside the shared cluster data."""
+    result_path = Path(result_path)
+    if readonly:
+        if not result_path.is_file():
+            raise FileNotFoundError(result_path)
+    else:
+        result_path.parent.mkdir(parents=True, exist_ok=True)
     clusters = str(cluster_path).replace("'", "''")
     results = str(result_path).replace("'", "''")
     access = " (READ_ONLY)" if readonly else ""
@@ -57,9 +64,13 @@ def open_result_db(cluster_path, result_path, *, readonly=True):
             _database_path=result_path,
         )
         db.create_temp_views()
+        if readonly and not result_path.is_file():
+            raise FileNotFoundError(result_path)
         return db
-    except BaseException:
+    except BaseException as exc:
         connection.close()
+        if readonly and isinstance(exc, duckdb.Error) and not result_path.is_file():
+            raise FileNotFoundError(result_path) from exc
         raise
 
 

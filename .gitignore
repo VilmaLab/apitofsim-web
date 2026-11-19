@@ -9,6 +9,7 @@
 /src/vms/static/index.js
 tests/server.log
 /test-results/
+/resultdbs/
 /.pytest_cache/
 /warnings_skimmer.dat
 /attic/

@@ -29,7 +29,7 @@ VMS_DIR = Path(__file__).resolve().parents[1] / "src/vms"
 @pytest.fixture
 def job(monkeypatch, tmp_path):
     result_path = tmp_path / f"{JOB_ID}.duckdb"
-    monkeypatch.setattr(settings, "results_path", str(tmp_path / "results.duckdb"))
+    monkeypatch.setattr(settings, "results_dir", tmp_path)
     # The app and the job queue share one status table.
     status = get_status_dict()
     status.clear()
@@ -184,6 +184,7 @@ def test_sse_failure_replays_and_survives_restart(job, error):
 
 def test_incomplete_output_keeps_partial_results(job):
     result_path, info = job
+    result_path.touch()
     failure = {
         "status": "incomplete",
         "stage": "apitof",
@@ -316,6 +317,7 @@ def test_failure_visible_in_browser(page, job, outcome, tmp_path):
         "traceback": "RuntimeError: test failure",
     }
     if outcome == "incomplete":
+        result_path.touch()
         failure["result"] = {"experiment": 1, "cluster": 18}
     pane = templates.env.get_template("analysis/apitof.html").render(
         iterations=296,

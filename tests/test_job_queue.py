@@ -3,6 +3,7 @@ import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial, wraps
+from pathlib import Path
 from time import time
 from types import SimpleNamespace
 
@@ -232,6 +233,7 @@ async def test_multiple_viewers_disconnect_and_replay(scheduler):
     async with queue.scheduler_context(scheduler.app):
         await scheduler.submit(scheduler.app, "first", gate=gate)
         second = await scheduler.submit(scheduler.app, "second")
+        Path(second["result_db_path"]).touch()
         await until(lambda: second.get("jobs_ahead") == 0)
         disconnected = (await update_analysis(request("second"))).body_iterator
         assert await anext(disconnected)
@@ -251,8 +253,14 @@ async def test_multiple_viewers_disconnect_and_replay(scheduler):
 
 
 @run_async
-async def test_notification_during_snapshot_yield(scheduler):
-    info = {"status": "pending", "last_update": {b"queue": "old"}}
+async def test_notification_during_snapshot_yield(scheduler, tmp_path):
+    result_path = tmp_path / "job.duckdb"
+    result_path.touch()
+    info = {
+        "status": "pending",
+        "last_update": {b"queue": "old"},
+        "result_db_path": str(result_path),
+    }
     queue.get_status_dict()["job"] = info
     iterator = (await update_analysis(request("job"))).body_iterator
     assert await anext(iterator) == b"data: "
@@ -296,8 +304,6 @@ async def test_cancel_queued_removes_files_and_updates_positions(
         second = await scheduler.submit(scheduler.app, "second")
         third = await scheduler.submit(scheduler.app, "third")
         await until(lambda: third.get("jobs_ahead") == 1)
-        from pathlib import Path
-
         output = Path(second["result_db_path"])
         files = [
             output,
