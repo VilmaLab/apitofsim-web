@@ -1,7 +1,7 @@
 **
 !Dockerfile
 !README.md
-!fetch-and-start.sh
+!fetch-and-run.sh
 !package.json
 !package-lock.json
 !tsconfig.json
