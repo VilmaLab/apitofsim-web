@@ -52,7 +52,7 @@ RUN --mount=type=bind,from=uv,source=/,target=/installer \
   cmp /opt/dependency-inputs.sha256 /wheel/dependency-inputs.sha256 \
   && sha256sum -c /opt/app-wheel.sha256 \
   && /installer/uv pip install --no-cache --no-deps --python /opt/venv/bin/python /wheel/*.whl
-ADD --checksum=sha256:9ef2a30753d91ecf0c1f9b8d2a6a94bf67886faa0c48284e5e435909b2608ddd --chmod=0755 https://github.com/frankier/dirroof/releases/download/v0.1.1/dirroof-filc-0.1.1-linux-x86_64 /usr/local/bin/dirroof
+ADD --checksum=sha256:ce551919533e5b0cb386bff2e947447141a4f0e45d4d1a089b5d4bd0d18313ab --chmod=0755 https://github.com/frankier/dirroof/releases/download/v0.1.2/dirroof-filc-0.1.2-linux-x86_64 /usr/local/bin/dirroof
 COPY fetch-and-run.sh /usr/local/bin/fetch-and-run.sh
 # Rahti assigns an arbitrary UID with access through group 0.
 RUN install -d -m 0775 /resultdbs
