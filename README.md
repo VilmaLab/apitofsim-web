@@ -42,19 +42,20 @@ subsequent app builds. It tags the dependency image with a hash of the Dockerfil
 The runtime installs the production dependencies from `uv.lock` and adds the
 application wheel in its own layer.
 
-For Rahti, log in to the integrated registry and use the checkout of the commit
-you want to build. Publish the dependency image to the project once per key and
-pass its tag to the app build.
+### Deploying to Rahti
+
+The **Publish container** GitHub Actions workflow builds the production image
+from `main` and pushes it to `ghcr.io/vilmalab/apitofsim-web`. BuildKit stores
+intermediate layers in a separate GHCR cache. The workflow publishes a
+`sha-<commit>` tag and records the image digest in the run summary.
+
+Rahti tracks the GHCR `main` tag through the `apitofsim-web-ghcr:main` image
+stream and rolls out the resolved image digest on import. To refresh the image
+stream ahead of its scheduled import, run:
 
 ```bash
-dependency_image=$(PUBLISH_DEPENDENCIES_TO=image-registry.apps.2.rahti.csc.fi/apitofsimweb/apitofsim-web-dependencies \
-  ./scripts/build-container.sh --dependencies-only)
-oc -n apitofsimweb start-build apitofsim-web-git --commit="$(git rev-parse HEAD)" \
-  --build-arg "DEPENDENCY_IMAGE=image-registry.openshift-image-registry.svc:5000/apitofsimweb/apitofsim-web-dependencies:${dependency_image##*:}"
+oc -n apitofsimweb import-image apitofsim-web-ghcr:main
 ```
-
-The regular Docker build and Rahti builds without `DEPENDENCY_IMAGE` build the
-dependency stage from source.
 
 ## Sentry monitoring
 
