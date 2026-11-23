@@ -326,23 +326,32 @@ def test_stopped_early_notice_and_heading(page, client, history, live_update):
     expect(page.locator("#status")).to_have_text("Simulation stopped early")
 
 
-def test_preparation_handoff_refuses_simulation_after_cancel(monkeypatch):
+def test_preparation_handoff_refuses_simulation_after_cancel():
     # Instantiate the actor implementation locally to test the atomic protocol.
     cls = CancellationControl.__ray_metadata__.modified_class
     control = cls()
-    assert control.enter("skimmer")
-    assert control.request_cancel() == "skimmer"
-    assert not control.enter("apitof")
-    assert control.requested()
+    control.begin("first")
+    assert control.enter("first", "skimmer")
+    assert control.request_cancel("first") == "skimmer"
+    assert not control.enter("first", "apitof")
+    assert control.requested("first")
+
+    control.begin("second")
+    assert control.requested("first")
+    assert not control.enter("first", "apitof")
+    with pytest.raises(ValueError, match="another job"):
+        control.request_cancel("first")
+    assert not control.requested("second")
+    assert control.request_cancel("second") == "queue"
 
 
 def test_enter_cancelled_stage(monkeypatch):
     from types import SimpleNamespace
 
     monkeypatch.setattr("vms.jobs.cancellation.ray.get", lambda value: value)
-    control = SimpleNamespace(enter=SimpleNamespace(remote=lambda stage: False))
+    control = SimpleNamespace(enter=SimpleNamespace(remote=lambda jobid, stage: False))
     with pytest.raises(JobCancelled):
-        enter_stage(control, "apitof")
+        enter_stage(control, "job", "apitof")
 
 
 def test_cancellation_wakes_blocked_iterator(monkeypatch):
@@ -353,9 +362,9 @@ def test_cancellation_wakes_blocked_iterator(monkeypatch):
 
     cancelled = Event()
     monkeypatch.setattr("vms.jobs.cancellation.ray.get", lambda value: value)
-    control = SimpleNamespace(requested=SimpleNamespace(remote=lambda: True))
+    control = SimpleNamespace(requested=SimpleNamespace(remote=lambda jobid: True))
     iterator = SimpleNamespace(request_cancel=cancelled.set)
-    with cancel_iterator(control, iterator):
+    with cancel_iterator(control, "job", iterator):
         assert cancelled.wait(2)
 
 

@@ -16,30 +16,38 @@ class JobCancelled(Exception):
 @ray.remote(num_cpus=0)
 class CancellationControl:
     def __init__(self):
+        self.jobid = None
         self.cancelled = False
         self.stage = "queue"
 
-    def enter(self, stage):
-        if self.cancelled:
+    def begin(self, jobid):
+        self.jobid = jobid
+        self.cancelled = False
+        self.stage = "queue"
+
+    def enter(self, jobid, stage):
+        if self.requested(jobid):
             return False
         self.stage = stage
         return True
 
-    def request_cancel(self):
+    def request_cancel(self, jobid):
+        if jobid != self.jobid:
+            raise ValueError("Cancellation control is assigned to another job")
         self.cancelled = True
         return self.stage
 
-    def requested(self):
-        return self.cancelled
+    def requested(self, jobid):
+        return jobid != self.jobid or self.cancelled
 
 
-def enter_stage(control, stage):
-    if control is not None and not ray.get(control.enter.remote(stage)):
+def enter_stage(control, jobid, stage):
+    if control is not None and not ray.get(control.enter.remote(jobid, stage)):
         raise JobCancelled
 
 
 @contextmanager
-def cancel_iterator(control, iterator):
+def cancel_iterator(control, jobid, iterator):
     """Signal even when next(iterator) is blocked; keep draining on the caller."""
     stopped = Event()
     errors = []
@@ -47,7 +55,7 @@ def cancel_iterator(control, iterator):
     def watch():
         try:
             while not stopped.is_set():
-                if ray.get(control.requested.remote()):
+                if ray.get(control.requested.remote(jobid)):
                     iterator.request_cancel()
                     return
                 stopped.wait(0.1)

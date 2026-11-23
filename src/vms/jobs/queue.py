@@ -101,15 +101,13 @@ def finish_job(info):
     notify_job(info)
 
 
-def start_job(info):
+def start_job(info, jobid, control):
     from vms.jobs.run import run_simulation
     from vms.settings import database_path
 
-    from .cancellation import CancellationControl
-
-    info["cancel_control"] = CancellationControl.remote()
     return run_simulation.remote(
-        cancel_control=info["cancel_control"],
+        cancel_control=control,
+        jobid=jobid,
         trace_headers=info.get("trace_headers"),
         **info["arguments"],
         database_path=database_path,
@@ -128,12 +126,6 @@ def expected_cancellation(info, exc):
     return info.get("cancel_signalled") and isinstance(
         exc, ray.exceptions.TaskCancelledError
     )
-
-
-def dispose_control(info):
-    control = info.pop("cancel_control", None)
-    if control is not None:
-        ray.kill(control)
 
 
 def request_cancellation(info):
@@ -159,11 +151,13 @@ def request_cancellation(info):
 
 def pump_jobs(receiver):
     """Own all Ray generator access in this AnyIO worker thread."""
+    from .cancellation import CancellationControl
+
     waiting = deque()
     active = None
     completion = None
     exhausted = completed = False
-    info = None
+    control = CancellationControl.remote()
     try:
         while True:
             anyio.from_thread.check_cancelled()
@@ -186,22 +180,28 @@ def pump_jobs(receiver):
             if active is None and not waiting:
                 continue
             if active is None:
-                _, info = waiting.popleft()
+                jobid, info = waiting.popleft()
                 if not anyio.from_thread.run_sync(mark_running, info):
                     continue
                 anyio.from_thread.run_sync(update_queue, waiting)
                 try:
-                    active = start_job(info)
+                    try:
+                        ray.get(control.begin.remote(jobid))
+                    except ray.exceptions.RayActorError:
+                        # Replace a failed actor before dispatching the next run.
+                        ray.kill(control)
+                        control = CancellationControl.remote()
+                        ray.get(control.begin.remote(jobid))
+                    active = start_job(info, jobid, control)
                     completion = active.completed()
                 except Exception as exc:
                     anyio.from_thread.run_sync(fail_job, info, exc)
-                    dispose_control(info)
                     continue
                 exhausted = completed = False
 
             if info.get("cancel_requested") and not info.get("cancel_signalled"):
                 try:
-                    stage = ray.get(info["cancel_control"].request_cancel.remote())
+                    stage = ray.get(control.request_cancel.remote(jobid))
                 except Exception as exc:
                     anyio.from_thread.run_sync(fail_job, info, exc)
                     ray.cancel(active)
@@ -236,15 +236,13 @@ def pump_jobs(receiver):
             # draining buffered events. Neither alone releases the execution slot.
             if exhausted and completed:
                 anyio.from_thread.run_sync(finish_job, info)
-                dispose_control(info)
                 active = completion = None
     except anyio.EndOfStream:
         return
     finally:
         if active is not None:
             ray.cancel(active)
-        if info is not None:
-            dispose_control(info)
+        ray.kill(control)
 
 
 @asynccontextmanager
