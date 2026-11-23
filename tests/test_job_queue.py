@@ -12,6 +12,7 @@ import pytest
 from starlette.requests import Request
 
 from vms.jobs import queue
+from vms.jobs.cancellation import CancellationControl
 from vms.jobs.run import update_analysis
 
 
@@ -49,8 +50,21 @@ def scheduler(monkeypatch, tmp_path):
     queue.get_status_dict().clear()
     started = []
     generators = []
+    controls = []
+    killed = []
 
-    def start(info):
+    def create_control():
+        impl = CancellationControl.__ray_metadata__.modified_class()
+        control = SimpleNamespace(
+            **{
+                name: SimpleNamespace(remote=getattr(impl, name))
+                for name in ("begin", "enter", "request_cancel", "requested")
+            }
+        )
+        controls.append(control)
+        return control
+
+    def start(info, jobid, control):
         # No later task may start until both completion and exhaustion.
         if generators:
             previous = generators[-1]
@@ -59,6 +73,8 @@ def scheduler(monkeypatch, tmp_path):
         started.append(info["id"])
         if info.get("submission_error"):
             raise RuntimeError("submission failed")
+        if stage := info.get("cancel_stage"):
+            assert control.enter.remote(jobid, stage)
         generator = info["generator"]
         generators.append(generator)
         return generator
@@ -85,7 +101,9 @@ def scheduler(monkeypatch, tmp_path):
             raise ref
         return ref
 
+    monkeypatch.setattr(CancellationControl, "remote", create_control)
     monkeypatch.setattr(queue, "start_job", start)
+    monkeypatch.setattr(queue.ray, "kill", killed.append)
     monkeypatch.setattr(queue.ray, "wait", wait)
     monkeypatch.setattr(queue.ray, "get", get)
     monkeypatch.setattr(
@@ -113,7 +131,11 @@ def scheduler(monkeypatch, tmp_path):
         return info
 
     yield SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace()), submit=submit, started=started
+        app=SimpleNamespace(state=SimpleNamespace()),
+        submit=submit,
+        started=started,
+        controls=controls,
+        killed=killed,
     )
     queue.get_status_dict().clear()
 
@@ -325,17 +347,7 @@ async def test_cancel_queued_removes_files_and_updates_positions(
 
 @run_async
 @pytest.mark.parametrize("stage", ["skimmer", "apitof"])
-async def test_cancel_running_waits_for_exit_and_drains(scheduler, monkeypatch, stage):
-    class Method:
-        def __init__(self, value):
-            self.value = value
-
-        def remote(self):
-            return self.value
-
-    control = SimpleNamespace(request_cancel=Method(stage))
-    killed = []
-    monkeypatch.setattr(queue.ray, "kill", killed.append)
+async def test_cancel_running_waits_for_exit_and_drains(scheduler, stage):
     gate = threading.Event()
     completion = threading.Event()
     async with queue.scheduler_context(scheduler.app):
@@ -350,7 +362,7 @@ async def test_cancel_running_waits_for_exit_and_drains(scheduler, monkeypatch, 
             events=events,
             gate=gate,
             completion_gate=completion,
-            cancel_control=control,
+            cancel_stage=stage,
         )
         await until(lambda: first["status"] == "running")
         second = await scheduler.submit(scheduler.app, "second")
@@ -368,7 +380,9 @@ async def test_cancel_running_waits_for_exit_and_drains(scheduler, monkeypatch, 
         await until(lambda: second["status"] == "done")
         assert first["status"] == ("done" if stage == "apitof" else "cancelled")
         assert "failure" not in first
-        assert killed == [control]
+        assert len(scheduler.controls) == 1
+        assert not scheduler.controls[0].requested.remote("second")
+        assert not scheduler.killed
         assert (
             f'data-tab="{stage}" data-status="cancelled"'
             in first["last_update"][b"tabs"]
@@ -376,3 +390,18 @@ async def test_cancel_running_waits_for_exit_and_drains(scheduler, monkeypatch, 
         assert ('href="#explorer"' in first["last_update"][b"tabs"]) == (
             stage == "apitof"
         )
+
+    assert scheduler.killed == scheduler.controls
+
+
+@run_async
+async def test_scheduler_replaces_failed_cancellation_actor(scheduler):
+    async with queue.scheduler_context(scheduler.app):
+        await until(lambda: len(scheduler.controls) == 1)
+        failed = scheduler.controls[0]
+        failed.begin.remote = lambda jobid: queue.ray.exceptions.ActorDiedError()
+        job = await scheduler.submit(scheduler.app, "job")
+        await until(lambda: job["status"] == "done")
+        assert len(scheduler.controls) == 2
+        assert scheduler.killed == [failed]
+    assert scheduler.killed == scheduler.controls

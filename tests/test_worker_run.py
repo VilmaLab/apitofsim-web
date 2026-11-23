@@ -51,7 +51,7 @@ def test_recording_worker(worker_arguments, monkeypatch, outcome):
     if outcome == "cancelled":
 
         @contextmanager
-        def cancel_immediately(control, iterator):
+        def cancel_immediately(control, jobid, iterator):
             iterator.request_cancel()
             yield
 

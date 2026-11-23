@@ -18,6 +18,7 @@ from starlette.templating import Jinja2Templates
 
 from .assets import ASSETS, asset_version
 from .jobs.queue import scheduler_context
+from .jobs.run import warm_simulation_worker
 from .markdown_ext import MarkdownExtension
 from .monitoring import SENTRY_ENV_VARS, init_sentry
 from .pintweb.alpine import quantity_display
@@ -96,7 +97,11 @@ async def ray_context(app):
             )
         )
         with my_ray:
-            yield
+            warmup = warm_simulation_worker.remote()
+            try:
+                yield
+            finally:
+                ray.cancel(warmup)
 
 
 @asynccontextmanager

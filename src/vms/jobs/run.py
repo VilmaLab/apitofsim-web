@@ -69,6 +69,15 @@ def simulation_events(**arguments):
 
 
 @ray.remote
+def warm_simulation_worker():
+    """Load simulation dependencies in a regular Ray task worker."""
+    from importlib import import_module
+
+    import_module("apitofsim.workflow.runners")
+    import_module("minify_html_onepass")
+
+
+@ray.remote
 def run_simulation(*, trace_headers=None, **arguments):
     if not sentry_sdk.get_client().is_active():
         yield from simulation_events(**arguments)
@@ -99,6 +108,7 @@ def _run_simulation(
     context,
     start_time,
     cancel_control=None,
+    jobid=None,
 ):
     from time import monotonic, time
 
@@ -190,7 +200,7 @@ def _run_simulation(
             processing = "skimmer"
             yield update_pane("tabs")
         elif processing == "skimmer":
-            enter_stage(cancel_control, processing)
+            enter_stage(cancel_control, jobid, processing)
             skimmer_start = time()
             skimmer = "loading"
             context["stage"] = processing
@@ -213,7 +223,7 @@ def _run_simulation(
             processing = "apitof"
             yield update_pane("tabs")
         elif processing == "apitof":
-            enter_stage(cancel_control, processing)
+            enter_stage(cancel_control, jobid, processing)
             context["stage"] = processing
             yield b"stage", processing
             yield update_pane("apitof")
@@ -237,7 +247,7 @@ def _run_simulation(
                     sample_mode=SampleMode.rejection,
                     loglevel=1,
                 ) as it,
-                cancel_iterator(cancel_control, it),
+                cancel_iterator(cancel_control, jobid, it),
             ):
                 for result in it:
                     if isinstance(
