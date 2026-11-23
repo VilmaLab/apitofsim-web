@@ -72,9 +72,17 @@ if [[ "${RAY_ADDRESS:-local}" == local || "${RAY_ADDRESS:-}" == auto ]]; then
     services[Ray]=$!
     export RAY_ADDRESS=auto
     deadline=$((SECONDS + 120))
-    until timeout 5s ray status >/dev/null 2>&1; do
-        if ! kill -0 "${services[Ray]}" 2>/dev/null || (( SECONDS >= deadline )); then
-            printf 'Ray did not become ready.\n' >&2
+    # The Ray CLI can take more than five seconds on a CPU-limited pod.
+    until timeout --verbose 20s ray status; do
+        if ! kill -0 "${services[Ray]}" 2>/dev/null; then
+            status=0
+            wait "${services[Ray]}" || status=$?
+            printf 'Ray exited before becoming ready (status %d).\n' "$status" >&2
+            unset 'services[Ray]'
+            exit "$(( status == 0 ? 1 : status ))"
+        fi
+        if (( SECONDS >= deadline )); then
+            printf 'Ray did not become ready within 120 seconds.\n' >&2
             exit 1
         fi
         sleep 1

@@ -23,7 +23,17 @@ def test_container_auth_startup(tmp_path, credentials):
     rclone.write_text("#!/bin/sh\nexit 0\n")
     rclone.chmod(0o755)
     ray = bin_dir / "ray"
-    ray.write_text('#!/bin/sh\n[ "$1" = status ] && exit 0\nexec sleep 60\n')
+    ray.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = status ]; then\n'
+        '    [ -f "$TMPDIR/probe-attempted" ] && exit 0\n'
+        '    touch "$TMPDIR/probe-attempted"\n'
+        '    echo "Ray status output"\n'
+        '    echo "Ray status error" >&2\n'
+        "    exit 1\n"
+        "fi\n"
+        "exec sleep 60\n"
+    )
     ray.chmod(0o755)
     roof = bin_dir / "dirroof"
     roof.write_text("#!/bin/sh\nexec sleep 60\n")
@@ -69,8 +79,11 @@ def test_container_auth_startup(tmp_path, credentials):
         timeout=10,
     )
     assert result.returncode == 1
+    assert "Ray status error" in result.stderr
     assert "Web exited unexpectedly (status 0)." in result.stderr
-    settings = json.loads(result.stdout)
+    status_output, settings_json = result.stdout.splitlines()
+    assert status_output == "Ray status output"
+    settings = json.loads(settings_json)
     assert settings["mode"] == ("disabled" if credentials == "disabled" else "token")
     if credentials == "generated":
         token_path = Path(settings["path"])
