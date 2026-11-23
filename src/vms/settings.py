@@ -10,4 +10,4 @@ results_dir = Path(
 
 
 def job_result_path(jobid):
-    return results_dir / f"{jobid}.duckdb"
+    return results_dir / f"{jobid}.apitofsim"

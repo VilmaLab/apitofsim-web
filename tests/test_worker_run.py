@@ -2,7 +2,6 @@
 
 import json
 from contextlib import contextmanager
-from pathlib import Path
 from time import time
 
 import pytest
@@ -12,6 +11,7 @@ from starlette.requests import Request
 from vms.app import app
 from vms.db import current_db, open_result_db
 from vms.forms import SettingsForm, get_histogram_precision_choices
+from vms.jobs.failures import failure_path
 from vms.jobs.run import simulation_events
 
 
@@ -38,7 +38,7 @@ def worker_arguments(test_db, tmp_path):
     return dict(
         arguments,
         database_path=str(test_db),
-        result_db_path=str(tmp_path / "output.duckdb"),
+        result_db_path=str(tmp_path / "output.apitofsim"),
         start_time=time(),
     )
 
@@ -101,10 +101,7 @@ def test_recording_worker(worker_arguments, monkeypatch, outcome):
             failure = json.loads(messages[b"failure"])
             assert failure["message"] == "Injected result write failure"
             assert failures[0][1] == "Injected result write failure"
-            assert (
-                json.loads(Path(result_path).with_suffix(".failure.json").read_text())
-                == failure
-            )
+            assert json.loads(failure_path(result_path).read_text()) == failure
             if outcome == "diagnostics_failed":
                 assert failures[0][2] is None
                 assert failure["database_error"] == "Cannot enrich diagnostics"

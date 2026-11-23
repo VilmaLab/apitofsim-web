@@ -8,3 +8,5 @@ tunning/
 tunning.zstd
 *.duckdb
 *.sqlite.db
+*.apitofsim/
+*.apitofsim.tar.zst

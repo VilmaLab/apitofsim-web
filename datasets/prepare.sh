@@ -1,6 +1,12 @@
 #!/bin/bash
+set -euo pipefail
 
-apitofsim db prepare create -w --db-type=super --ase datasets.toml database.duckdb
-apitofsim db prepare create -w --db-type=super --ase datasets_test.toml database_test.duckdb
-zstdmt --rm database.duckdb -o database.duckdb.zst
-zstdmt --rm database.ase.sqlite.db -o database.ase.sqlite.db.zst
+for name in database database_test; do
+    directory="$name.apitofsim"
+    config=datasets.toml
+    if [[ "$name" == database_test ]]; then
+        config=datasets_test.toml
+    fi
+    apitofsim db prepare create -w --db-type=super --ase "$config" "$directory"
+    tar --zstd -cf "$directory.tar.zst" "$directory"
+done

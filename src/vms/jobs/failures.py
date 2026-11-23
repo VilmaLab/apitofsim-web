@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import sentry_sdk
-from apitofsim.recording import events_filename
+from apitofsim.workflow import DatabasePaths
 from starlette.exceptions import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class IncompleteOutputError(RuntimeError):
 
 
 def failure_path(result_db_path):
-    return Path(result_db_path).with_suffix(".failure.json")
+    return DatabasePaths(result_db_path).root / "failure.json"
 
 
 def result_db_missing(info):
@@ -30,16 +30,13 @@ def result_db_missing(info):
         or failure.get("had_result_db")
         or failure.get("run_id") is not None
     )
-    return expected and not Path(info["result_db_path"]).is_file()
+    return expected and not DatabasePaths(info["result_db_path"]).duckdb.is_file()
 
 
 def result_sidecar_missing(info):
     path = info["result_db_path"]
     if "result" in info and info.get("counts", {}).get("completed", 0) > 0:
-        if not (
-            events_filename(path, format="parquet").is_file()
-            or events_filename(path).is_file()
-        ):
+        if not DatabasePaths(path).parquet.is_file():
             return True
     failure = info.get("failure")
     return (
@@ -59,7 +56,8 @@ def describe_failure(exc, context, result_db_path):
         "message": str(exc),
         "traceback": "".join(traceback.format_exception(exc)),
         "run_id": context.get("run_id"),
-        "had_result_db": "db" in context or Path(result_db_path).is_file(),
+        "had_result_db": "db" in context
+        or DatabasePaths(result_db_path).duckdb.is_file(),
         "cluster_id": context.get("cluster_id"),
         "counts": context.get("counts", {}),
     }

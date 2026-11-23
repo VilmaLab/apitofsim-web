@@ -28,10 +28,8 @@ jobs:
       - name: Cache test database
         uses: actions/cache@v4
         with:
-          path: |
-            datasets/database_test.duckdb
-            datasets/database_test.ase.sqlite.db
-          key: test-dbs-${{ hashFiles('datasets/datasets_test.toml') }}
+          path: datasets/database_test.apitofsim
+          key: test-db-directory-${{ hashFiles('datasets/datasets_test.toml') }}
 
       - name: Set up environment
         uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7

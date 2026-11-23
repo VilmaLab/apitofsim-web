@@ -3,12 +3,12 @@ import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial, wraps
-from pathlib import Path
 from time import time
 from types import SimpleNamespace
 
 import anyio
 import pytest
+from apitofsim.workflow import DatabasePaths
 from starlette.requests import Request
 
 from vms.jobs import queue
@@ -115,7 +115,7 @@ def scheduler(monkeypatch, tmp_path):
             "id": name,
             "status": "pending",
             "last_update": {},
-            "result_db_path": str(tmp_path / f"{name}.duckdb"),
+            "result_db_path": str(tmp_path / f"{name}.apitofsim"),
             "start_time": time(),
             "generator": Generator(
                 events
@@ -255,7 +255,9 @@ async def test_multiple_viewers_disconnect_and_replay(scheduler):
     async with queue.scheduler_context(scheduler.app):
         await scheduler.submit(scheduler.app, "first", gate=gate)
         second = await scheduler.submit(scheduler.app, "second")
-        Path(second["result_db_path"]).touch()
+        output = DatabasePaths(second["result_db_path"])
+        output.create()
+        output.duckdb.touch()
         await until(lambda: second.get("jobs_ahead") == 0)
         disconnected = (await update_analysis(request("second"))).body_iterator
         assert await anext(disconnected)
@@ -276,8 +278,10 @@ async def test_multiple_viewers_disconnect_and_replay(scheduler):
 
 @run_async
 async def test_notification_during_snapshot_yield(scheduler, tmp_path):
-    result_path = tmp_path / "job.duckdb"
-    result_path.touch()
+    result_path = tmp_path / "job.apitofsim"
+    paths = DatabasePaths(result_path)
+    paths.create()
+    paths.duckdb.touch()
     info = {
         "status": "pending",
         "last_update": {b"queue": "old"},
@@ -326,17 +330,16 @@ async def test_cancel_queued_removes_files_and_updates_positions(
         second = await scheduler.submit(scheduler.app, "second")
         third = await scheduler.submit(scheduler.app, "third")
         await until(lambda: third.get("jobs_ahead") == 1)
-        output = Path(second["result_db_path"])
-        files = [
-            output,
-            Path(str(output) + ".wal"),
-            output.with_suffix(".failure.json"),
-        ]
-        for path in files:
-            path.touch()
+        output = DatabasePaths(second["result_db_path"])
+        output.create()
+        for member in ("database.duckdb", "database.duckdb.wal", "failure.json"):
+            (output.root / member).touch()
+        shared = output.root.parent / "shared.apitofsim"
+        shared.mkdir()
         queue.request_cancellation(second)
         assert second["status"] == "cancelled"
-        assert all(not path.exists() for path in files)
+        assert not output.root.exists()
+        assert shared.is_dir()
         assert third["jobs_ahead"] == 0
         assert "cancel_control" not in second
         gate.set()

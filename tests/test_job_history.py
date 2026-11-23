@@ -4,6 +4,7 @@ from pathlib import Path
 from time import time
 
 import pytest
+from apitofsim.workflow import DatabasePaths
 from itsdangerous import TimestampSigner
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -15,6 +16,13 @@ from vms.app import app
 from vms.jobs.cancellation import CancellationControl, JobCancelled, enter_stage
 from vms.jobs.failures import failure_path
 from vms.jobs.queue import finish_job, get_status_dict
+
+
+def touch_result(path):
+    paths = DatabasePaths(path)
+    paths.create()
+    paths.duckdb.touch()
+    return paths
 
 
 @pytest.fixture
@@ -29,7 +37,7 @@ def history(tmp_path):
             "cluster_label": "Test cluster",
             "submitted_at": "2026-10-26T12:00:00+00:00",
             "start_time": time(),
-            "result_db_path": str(tmp_path / f"{jobid}.duckdb"),
+            "result_db_path": str(tmp_path / f"{jobid}.apitofsim"),
             "counts": {"completed": 0, "requested": 100},
             "last_update": {},
             **extra,
@@ -102,7 +110,7 @@ def test_history_owner_order_and_cancellation(client, history):
 
 def test_terminal_cancel_is_noop_and_list_stops_polling(client, history):
     info = history("done", state="done", result={"experiment": 1, "cluster": 18})
-    Path(info["result_db_path"]).touch()
+    touch_result(Path(info["result_db_path"]))
     csrf = token(client, "done")
     client.post("/analysis/cancel?jobid=done", data={"csrf_token": csrf})
     assert "cancel_requested" not in info
@@ -121,7 +129,7 @@ def test_retained_cancelled_results_reload_and_sse(client, history):
     )
     client.portal.call(finish_job, info)
     assert info["status"] == "done"
-    Path(info["result_db_path"]).touch()
+    touch_result(Path(info["result_db_path"]))
     for response in [
         client.get("/analysis?jobid=partial"),
         client.get(
@@ -140,9 +148,9 @@ def test_deleted_results_redirect_and_remain_in_history(client, history):
 
     info = history("done", state="done", result={"experiment": 1, "cluster": 18})
     result_path = Path(info["result_db_path"])
-    result_path.touch()
+    paths = touch_result(result_path)
     assert client.get("/analysis?jobid=done").status_code == 200
-    result_path.unlink()
+    paths.duckdb.unlink()
 
     for path in (
         "/analysis?jobid=done",
@@ -180,8 +188,6 @@ def test_deleted_results_redirect_and_remain_in_history(client, history):
 
 @pytest.mark.parametrize("sidecar", ["diagnostics", "event archive"])
 def test_deleting_sidecar_fades_the_history_entry(client, history, sidecar):
-    from apitofsim.recording import events_filename
-
     if sidecar == "diagnostics":
         info = history(
             "partial",
@@ -196,11 +202,9 @@ def test_deleting_sidecar_fades_the_history_entry(client, history, sidecar):
             counts={"completed": 3, "requested": 3},
         )
     result_path = Path(info["result_db_path"])
-    result_path.touch()
+    paths = touch_result(result_path)
     sidecar_path = (
-        failure_path(result_path)
-        if sidecar == "diagnostics"
-        else events_filename(result_path, format="parquet")
+        failure_path(result_path) if sidecar == "diagnostics" else paths.parquet
     )
     sidecar_path.touch()
     assert "opacity-50" not in client.get("/jobs/list").text
@@ -221,14 +225,17 @@ def test_result_deleted_while_opening_plot(client, history, tmp_path, monkeypatc
 
     info = history("done", state="done", result={"experiment": 1, "cluster": 18})
     result_path = Path(info["result_db_path"])
-    cluster_path = tmp_path / "clusters.duckdb"
-    for path in (cluster_path, result_path):
-        duckdb.connect(str(path)).close()
+    cluster_path = tmp_path / "clusters.apitofsim"
+    clusters = DatabasePaths(cluster_path)
+    paths = DatabasePaths(result_path)
+    for bundle in (clusters, paths):
+        bundle.create()
+        duckdb.connect(bundle.duckdb).close()
 
     connect = duckdb.connect
 
     def connect_after_deletion():
-        result_path.unlink()
+        paths.duckdb.unlink()
         return connect()
 
     monkeypatch.setattr("vms.app.database_path", cluster_path)
@@ -236,7 +243,7 @@ def test_result_deleted_while_opening_plot(client, history, tmp_path, monkeypatc
     response = client.get("/analysis/results/done/spectrogram", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/jobs"
-    assert not result_path.exists()
+    assert not paths.duckdb.exists()
 
 
 def test_browser_redirects_when_result_is_deleted_during_page_load(
@@ -248,7 +255,7 @@ def test_browser_redirects_when_result_is_deleted_during_page_load(
 
     info = history("done", state="done", result={"experiment": 1, "cluster": 18})
     result_path = Path(info["result_db_path"])
-    result_path.touch()
+    paths = touch_result(result_path)
     static = Path(__file__).resolve().parents[1] / "src/vms/static"
 
     def serve(route):
@@ -257,7 +264,7 @@ def test_browser_redirects_when_result_is_deleted_during_page_load(
             route.fulfill(path=str(static / url.path.removeprefix("/static/")))
             return
         if url.path == "/analysis/updates":
-            result_path.unlink(missing_ok=True)
+            paths.duckdb.unlink(missing_ok=True)
         response = client.get(
             url.path + ("?" + url.query if url.query else ""),
             headers=route.request.headers,
@@ -290,7 +297,7 @@ def test_stopped_early_notice_and_heading(page, client, history, live_update):
         counts={"requested": 100, "completed": 3},
     )
     if not live_update:
-        Path(info["result_db_path"]).touch()
+        touch_result(Path(info["result_db_path"]))
     document = html.fromstring(client.get("/analysis?jobid=partial").text)
     body = document.xpath('//div[@class="tab-page"]')[0]
     pane = body.xpath('.//div[@sse-swap="apitof"]')[0]
