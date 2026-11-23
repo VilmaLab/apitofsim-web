@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python AS dependencies
 # RDKit's Cairo renderer needs the X11 client libraries for molecular drawings.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends fontconfig libgomp1 libtbb12 libxext6 libxrender1 rclone tini \
+  && apt-get install -y --no-install-recommends fontconfig libgomp1 libtbb12 libxext6 libxrender1 rclone tini zstd \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=dependency-builder /opt/venv /opt/venv
 COPY --from=dependency-builder /opt/dependency-inputs.sha256 /opt/

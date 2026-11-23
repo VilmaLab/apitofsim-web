@@ -50,13 +50,42 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 0' TERM INT
 
-# Fetch must succeed before any simulation service starts.
+fetch_database() (
+    local filename=$1 archive="$database_dir/$1.zst" database_tmp= child_pid=
+    trap 'exit 1' TERM INT
+    trap '
+        if [[ -n "$child_pid" ]]; then
+            stop_services "$child_pid"
+        fi
+        if [[ -n "$database_tmp" ]]; then
+            rm -f -- "$database_tmp"
+        fi
+    ' EXIT
+
+    rclone copyto --progress ":s3,env_auth:apitofsim-data/$filename.zst" "$archive" &
+    child_pid=$!
+    wait "$child_pid"
+    child_pid=
+
+    database_tmp=$(mktemp -- "$database_dir/$filename.XXXXXX")
+    zstd -dc -- "$archive" > "$database_tmp" &
+    child_pid=$!
+    wait "$child_pid"
+    child_pid=
+    mv -fT -- "$database_tmp" "$database_dir/$filename"
+    database_tmp=
+)
+
+# Download and extract both databases before starting any service.
 export RCLONE_S3_ENDPOINT=https://a3s.fi
-for filename in database.ase.sqlite.db database.duckdb; do
-    rclone copyto --progress ":s3,env_auth:apitofsim-data/$filename" "$database_dir/$filename" &
-    services[Fetch]=$!
-    wait "${services[Fetch]}"
-    unset 'services[Fetch]'
+databases=(database.ase.sqlite.db database.duckdb)
+for filename in "${databases[@]}"; do
+    fetch_database "$filename" &
+    services[$filename]=$!
+done
+for filename in "${databases[@]}"; do
+    wait "${services[$filename]}"
+    unset 'services[$filename]'
 done
 export DATABASE="$database_dir/database.duckdb"
 

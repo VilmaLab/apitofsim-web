@@ -20,8 +20,11 @@ def test_container_auth_startup(tmp_path, credentials):
     bin_dir.mkdir()
     (bin_dir / "python").symlink_to(sys.executable)
     rclone = bin_dir / "rclone"
-    rclone.write_text("#!/bin/sh\nexit 0\n")
+    rclone.write_text('#!/bin/sh\nprintf "%s\\n" "${3##*/}" > "$4"\n')
     rclone.chmod(0o755)
+    zstd = bin_dir / "zstd"
+    zstd.write_text('#!/bin/sh\nexec cat -- "$3"\n')
+    zstd.chmod(0o755)
     ray = bin_dir / "ray"
     ray.write_text(
         "#!/bin/sh\n"
@@ -81,6 +84,8 @@ def test_container_auth_startup(tmp_path, credentials):
     assert result.returncode == 1
     assert "Ray status error" in result.stderr
     assert "Web exited unexpectedly (status 0)." in result.stderr
+    for filename in ("database.ase.sqlite.db", "database.duckdb"):
+        assert (tmp_path / filename).read_text() == f"{filename}.zst\n"
     status_output, settings_json = result.stdout.splitlines()
     assert status_output == "Ray status output"
     settings = json.loads(settings_json)
