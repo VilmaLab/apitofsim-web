@@ -16,14 +16,11 @@ done
 (cd besel2020 && apitofsim generate pathways --guess-prefix xyz pathways.csv clusters.csv **/*.xyz)
 (cd tunning && apitofsim generate pathways --guess-prefix gaussian pathways.csv clusters.csv **/*.log)
 
-rm -f database.db
 if [ -n "${USE_TURSO}" ]; then
     sbatch --wait prepare-turso.slurm
 else
     bash ./prepare.sh
 fi
 
-rclone copy database.duckdb.zst :s3,env_auth:apitofsim-data
-rclone copy database.ase.sqlite.db.zst :s3,env_auth:apitofsim-data
-rclone copy database_test.duckdb :s3,env_auth:apitofsim-data-public
-rclone copy database_test.ase.sqlite.db :s3,env_auth:apitofsim-data-public
+rclone copy database.apitofsim.tar.zst :s3,env_auth:apitofsim-data
+rclone copy database_test.apitofsim.tar.zst :s3,env_auth:apitofsim-data-public

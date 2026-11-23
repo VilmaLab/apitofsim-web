@@ -6,7 +6,6 @@ from shutil import rmtree
 from threading import Event, Thread
 
 import ray
-from apitofsim.recording import events_filename
 
 
 class JobCancelled(Exception):
@@ -78,22 +77,8 @@ def cancel_iterator(control, jobid, iterator):
 
 def clean_job_files(info):
     path = Path(info["result_db_path"])
-    events = events_filename(path)
-    # Explicit job-owned names only; never remove shared input/cache files.
-    for owned in (
-        path,
-        Path(f"{path}.wal"),
-        path.with_suffix(".failure.json"),
-        events,
-        events_filename(path, format="parquet"),
-        Path(f"{events}.lock"),
-        Path(f"{events}.journal"),
-    ):
-        owned.unlink(missing_ok=True)
-    temporary = Path(str(path) + ".tmp")
-    if temporary.is_dir():
-        with suppress(FileNotFoundError):
-            rmtree(temporary)
+    with suppress(FileNotFoundError):
+        rmtree(path)
 
 
 def cancelled_statuses(info):

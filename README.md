@@ -20,19 +20,19 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
 
     Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
 
-The container uses tini as PID 1. The launcher fetches both database files, starts
-Ray, and waits for it to answer before starting the web server. It also runs
-dirroof alongside the server. An unexpected exit of any of these processes stops
-the container so the runtime can restart it.
+The container uses tini as PID 1. The launcher downloads and unpacks
+`database.apitofsim.tar.zst` when the database directory is absent, then starts
+Ray, dirroof, and the web server. An unexpected service exit stops the
+container so the runtime can restart it.
 
-Set `RESULTS_DIR` to the dedicated results directory inside the container
-(default `/resultdbs`) and `RESULTS_MAX_SIZE` to its size limit (default `20G`).
-Mount a writable volume at `RESULTS_DIR` to retain results across container
-replacement. On Rahti, set `RESULTS_DIR=/database/resultdbs` to use the existing
-database volume. dirroof monitors regular files directly in this directory. It
-deletes older files when the directory exceeds the limit and skips files it
-tracks as open. The filesystem and container's seccomp profile must support
-fanotify.
+Set `RESULTS_DIR` to the dedicated results directory (default `/resultdbs`) and
+`RESULTS_MAX_SIZE` to its size limit (default `20G` in the container). Mount a
+writable volume at `RESULTS_DIR` to retain results across container replacement.
+On Rahti, set `RESULTS_DIR=/database/resultdbs` to use the database volume.
+dirroof tracks the size of the results tree recursively and evicts
+least-recently-accessed job directories as units. Files directly under
+`RESULTS_DIR` can also be evicted individually. Each job should have its own
+top-level directory. The container needs inotify and access to `/proc/self/fd`.
 
 Docker enables Ray token authentication by default. For the local head, the
 launcher creates a private token file under `/tmp` if credentials are absent.
@@ -210,19 +210,19 @@ server's working directory.
 Existing deployments using `RESULTS` still use the parent of that path when
 `RESULTS_DIR` is unset.
 
-Failed runs show an alert with the stage, error message, and expandable traceback.
-Their diagnostics are saved as `<jobid>.failure.json` beside the run's DuckDB
-file, including counts and run/cluster IDs when available. Worker failures also
-write to `experiment_failure` when the database is available. Reopening the
-analysis URL restores the failure even after restarting the web server.
+Each job stores its data in a `<jobid>.apitofsim` directory. The directory
+contains the result database, its Parquet event archive, and any failure
+diagnostics. Copy the whole job directory after the job finishes. Opening it
+through the app also requires the matching shared cluster database.
+
+Failed runs show the stage, error message, and expandable traceback.
+Diagnostics in `failure.json` let the analysis page reopen after a server
+restart, including when the job failed before its database was initialized.
+When available, the database also stores worker failures in `experiment_failure`.
 
 A run whose final counters disagree with its recorded events is marked
 **incomplete**. Its available results remain accessible with a warning about
 missing trajectories.
-
-Each new result uses a DuckDB file and a matching `.events.parquet` file.
-Keep them together when copying results. Older results with relational event
-tables require migration before the current result viewer can open them.
 
 ## Developing apitofsim-web and apitofsim
 

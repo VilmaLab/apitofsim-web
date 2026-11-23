@@ -1,13 +1,8 @@
 from contextvars import ContextVar
-from pathlib import Path
 
 import duckdb
+from apitofsim.workflow import DatabasePaths, ExperimentDatabase, SuperClusterDatabase
 from apitofsim.workflow import sql_files_nofk as sql
-from apitofsim.workflow.db import (
-    ExperimentDatabase,
-    SuperClusterDatabase,
-    guess_ase_db_filename,
-)
 
 from vms.settings import database_path
 
@@ -15,9 +10,7 @@ current_db = ContextVar("current_db")
 
 
 def connect_db():
-    return SuperClusterDatabase(
-        database_path, ase_filename=guess_ase_db_filename(database_path), readonly=True
-    )
+    return SuperClusterDatabase(database_path, readonly=True, ase=True)
 
 
 def get_connection():
@@ -26,19 +19,21 @@ def get_connection():
 
 def open_result_db(cluster_path, result_path, *, readonly=True):
     """Open a job's results and event archive alongside the shared cluster data."""
-    result_path = Path(result_path)
+    clusters = DatabasePaths(cluster_path).require_database()
+    results = DatabasePaths(result_path)
     if readonly:
-        if not result_path.is_file():
-            raise FileNotFoundError(result_path)
+        results.require_database()
     else:
-        result_path.parent.mkdir(parents=True, exist_ok=True)
-    clusters = str(cluster_path).replace("'", "''")
-    results = str(result_path).replace("'", "''")
+        results.root.parent.mkdir(parents=True, exist_ok=True)
+        results.create()
+    clusters_file = str(clusters).replace("'", "''")
+    results_file = str(results.duckdb).replace("'", "''")
     access = " (READ_ONLY)" if readonly else ""
-    connection = duckdb.connect()
+    config = {"temp_directory": str(results.root / "database.duckdb.tmp")}
+    connection = duckdb.connect() if readonly else duckdb.connect(config=config)
     try:
-        connection.execute(f"ATTACH '{clusters}' AS clusters_db (READ_ONLY)")
-        connection.execute(f"ATTACH '{results}' AS results_db{access}")
+        connection.execute(f"ATTACH '{clusters_file}' AS clusters_db (READ_ONLY)")
+        connection.execute(f"ATTACH '{results_file}' AS results_db{access}")
         connection.execute("USE results_db")
         connection.execute("SET search_path = 'results_db,clusters_db'")
         if not readonly:
@@ -61,15 +56,15 @@ def open_result_db(cluster_path, result_path, *, readonly=True):
             record_events=not readonly,
             recording_format="parquet",
             recording_compression="zstd",
-            _database_path=result_path,
+            database_paths=results,
         )
         db.create_temp_views()
-        if readonly and not result_path.is_file():
-            raise FileNotFoundError(result_path)
+        if readonly:
+            results.require_database()
         return db
     except BaseException as exc:
         connection.close()
-        if readonly and isinstance(exc, duckdb.Error) and not result_path.is_file():
+        if readonly and isinstance(exc, duckdb.Error) and not results.duckdb.is_file():
             raise FileNotFoundError(result_path) from exc
         raise
 

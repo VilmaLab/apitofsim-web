@@ -51,43 +51,43 @@ trap cleanup EXIT
 trap 'exit 0' TERM INT
 
 fetch_database() (
-    local filename=$1 archive="$database_dir/$1.zst" database_tmp= child_pid=
+    local name=database.apitofsim stage= child_pid=
     trap 'exit 1' TERM INT
     trap '
         if [[ -n "$child_pid" ]]; then
             stop_services "$child_pid"
         fi
-        if [[ -n "$database_tmp" ]]; then
-            rm -f -- "$database_tmp"
+        if [[ -n "$stage" ]]; then
+            rm -rf -- "$stage"
         fi
     ' EXIT
 
-    rclone copyto --progress ":s3,env_auth:apitofsim-data/$filename.zst" "$archive" &
+    stage=$(mktemp -d -- "$database_dir/.download.XXXXXX")
+    rclone copyto --progress ":s3,env_auth:apitofsim-data/$name.tar.zst" "$stage/$name.tar.zst" &
     child_pid=$!
     wait "$child_pid"
     child_pid=
 
-    database_tmp=$(mktemp -- "$database_dir/$filename.XXXXXX")
-    zstd -dc -- "$archive" > "$database_tmp" &
+    tar --zstd -xf "$stage/$name.tar.zst" -C "$stage" &
     child_pid=$!
     wait "$child_pid"
     child_pid=
-    mv -fT -- "$database_tmp" "$database_dir/$filename"
-    database_tmp=
+    [[ -f "$stage/$name/database.duckdb" && -f "$stage/$name/ase.sqlite.db" ]]
+    mv -T -- "$stage/$name" "$database_dir/$name"
 )
 
-# Download and extract both databases before starting any service.
 export RCLONE_S3_ENDPOINT=https://a3s.fi
-databases=(database.ase.sqlite.db database.duckdb)
-for filename in "${databases[@]}"; do
-    fetch_database "$filename" &
-    services[$filename]=$!
-done
-for filename in "${databases[@]}"; do
-    wait "${services[$filename]}"
-    unset 'services[$filename]'
-done
-export DATABASE="$database_dir/database.duckdb"
+export DATABASE="$database_dir/database.apitofsim"
+if [[ ! -e "$DATABASE" ]]; then
+    fetch_database &
+    services[Database]=$!
+    wait "${services[Database]}"
+    unset 'services[Database]'
+fi
+if [[ ! -f "$DATABASE/database.duckdb" || ! -f "$DATABASE/ase.sqlite.db" ]]; then
+    printf 'Incomplete database directory: %s\n' "$DATABASE" >&2
+    exit 1
+fi
 
 # Use the local head by default. Explicit external addresses still work.
 if [[ "${RAY_ADDRESS:-local}" == local || "${RAY_ADDRESS:-}" == auto ]]; then
@@ -118,7 +118,7 @@ if [[ "${RAY_ADDRESS:-local}" == local || "${RAY_ADDRESS:-}" == auto ]]; then
     done
 fi
 
-dirroof --size "$RESULTS_MAX_SIZE" "$RESULTS_DIR" &
+dirroof --size "$RESULTS_MAX_SIZE" --recursive --evict-depth 1 "$RESULTS_DIR" &
 services[Roof]=$!
 # The web process owns the in-memory job queue, so run one worker.
 uvicorn vms:app --host 0.0.0.0 --port 8080 --workers 1 &

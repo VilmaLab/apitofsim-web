@@ -17,6 +17,7 @@ import numpy
 import sentry_sdk
 from apitofsim.api import ureg
 from apitofsim.transmission import TRANSMISSION_MODELS
+from apitofsim.workflow import DatabasePaths
 from lxml import etree
 from pint import set_application_registry
 from starlette.applications import Starlette
@@ -349,8 +350,7 @@ def result_job(jobid):
     info = status.get(jobid)
     if info is None or "result" not in info:
         raise HTTPException(404)
-    if not Path(info["result_db_path"]).is_file():
-        raise FileNotFoundError(info["result_db_path"])
+    DatabasePaths(info["result_db_path"]).require_database()
     return info
 
 

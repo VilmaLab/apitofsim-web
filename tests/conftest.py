@@ -4,6 +4,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.error
@@ -15,7 +16,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATASETS_DIR = REPO_ROOT / "datasets"
 TEST_DB_BASE_URL = "https://a3s.fi/swift/v1/apitofsim-data-public"
-TEST_DB_FILES = ["database_test.duckdb", "database_test.ase.sqlite.db"]
+TEST_DB_NAME = "database_test.apitofsim"
 
 # Ray's head node takes a while to come up inside the web process
 SERVER_STARTUP_TIMEOUT = 300
@@ -27,28 +28,27 @@ def pytest_configure(config):
     config.add_cleanup(results_dir.cleanup)
     env = pytest.MonkeyPatch()
     config.add_cleanup(env.undo)
-    env.setenv("DATABASE", str(DATASETS_DIR / TEST_DB_FILES[0]))
+    env.setenv("DATABASE", str(DATASETS_DIR / TEST_DB_NAME))
     env.setenv("RESULTS_DIR", results_dir.name)
-
-
-def download_if_missing(name):
-    dest = DATASETS_DIR / name
-    if dest.exists():
-        return dest
-    DATASETS_DIR.mkdir(exist_ok=True)
-    part = dest.with_suffix(dest.suffix + ".part")
-    print(f"Downloading {name}...", file=sys.stderr)
-    with urllib.request.urlopen(f"{TEST_DB_BASE_URL}/{name}") as response:
-        part.write_bytes(response.read())
-    # Only publish under the real name once complete, so an interrupted download
-    # is not mistaken for a cached one
-    part.replace(dest)
-    return dest
 
 
 @pytest.fixture(scope="session")
 def test_db():
-    return [download_if_missing(name) for name in TEST_DB_FILES][0]
+    dest = DATASETS_DIR / TEST_DB_NAME
+    if not dest.exists():
+        archive = f"{TEST_DB_NAME}.tar.zst"
+        print(f"Downloading {archive}...", file=sys.stderr)
+        with (
+            tempfile.TemporaryDirectory(dir=DATASETS_DIR) as stage,
+            urllib.request.urlopen(f"{TEST_DB_BASE_URL}/{archive}") as response,
+            tarfile.open(fileobj=response, mode="r|zst") as tar,
+        ):
+            tar.extractall(stage, filter="data")
+            extracted = Path(stage) / TEST_DB_NAME
+            assert (extracted / "database.duckdb").is_file()
+            assert (extracted / "ase.sqlite.db").is_file()
+            extracted.rename(dest)
+    return dest
 
 
 def wait_until_serving(base_url, process, log_path):
@@ -139,14 +139,16 @@ def server(test_db, tmp_path_factory):
 def output_db(tmp_path):
     """Use the same attached cluster/result schemas as a web worker."""
     import duckdb
+    from apitofsim.workflow import DatabasePaths
     from apitofsim.workflow import sql_files_nofk as sql
 
     from vms.db import open_result_db
 
-    clusters = tmp_path / "clusters.duckdb"
-    with duckdb.connect(str(clusters)) as connection:
+    clusters = DatabasePaths(tmp_path / "clusters.apitofsim")
+    clusters.create()
+    with duckdb.connect(clusters.duckdb) as connection:
         connection.execute(sql.pathway + sql.histograms + sql.pathway_report)
-    db = open_result_db(clusters, tmp_path / "output.duckdb", readonly=False)
+    db = open_result_db(clusters.root, tmp_path / "output.apitofsim", readonly=False)
     try:
         yield db
     finally:

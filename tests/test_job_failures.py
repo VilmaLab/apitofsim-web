@@ -9,7 +9,8 @@ import numpy as np
 import pyarrow as pa
 import pytest
 from apitofsim.api import Counters
-from apitofsim.recording import EVENT_SCHEMA, events_filename
+from apitofsim.recording import EVENT_SCHEMA
+from apitofsim.workflow import DatabasePaths
 from playwright.sync_api import expect
 from starlette.requests import Request
 
@@ -28,7 +29,7 @@ VMS_DIR = Path(__file__).resolve().parents[1] / "src/vms"
 
 @pytest.fixture
 def job(monkeypatch, tmp_path):
-    result_path = tmp_path / f"{JOB_ID}.duckdb"
+    result_path = tmp_path / f"{JOB_ID}.apitofsim"
     monkeypatch.setattr(settings, "results_dir", tmp_path)
     # The app and the job queue share one status table.
     status = get_status_dict()
@@ -132,7 +133,9 @@ def test_worker_failure_saved_in_database_and_sidecar(
     assert failure["stage"] == "skimmer"
     assert "ValueError: Injected preliminary failure" in failure["traceback"]
     assert json.loads(failure_path(result_path).read_text()) == failure
-    with duckdb.connect(str(result_path), read_only=True) as connection:
+    with duckdb.connect(
+        DatabasePaths(result_path).duckdb, read_only=True
+    ) as connection:
         name, message, diagnostics = connection.execute(
             "SELECT exc_name, msg, diagnostics FROM experiment_failure ORDER BY id DESC LIMIT 1"
         ).fetchone()
@@ -167,6 +170,7 @@ def test_sse_failure_replays_and_survives_restart(job, error):
     assert info["status"] == "failed"
     failure = json.loads(failure_path(result_path).read_text())
     assert failure["stage"] == "apitof"
+    assert set(result_path.iterdir()) == {failure_path(result_path)}
     if error:
         assert "Worker died &lt;script&gt;" in stream
         assert "Worker died <script>" not in stream
@@ -184,7 +188,9 @@ def test_sse_failure_replays_and_survives_restart(job, error):
 
 def test_incomplete_output_keeps_partial_results(job):
     result_path, info = job
-    result_path.touch()
+    paths = DatabasePaths(result_path)
+    paths.create()
+    paths.duckdb.touch()
     failure = {
         "status": "incomplete",
         "stage": "apitof",
@@ -317,7 +323,9 @@ def test_failure_visible_in_browser(page, job, outcome, tmp_path):
         "traceback": "RuntimeError: test failure",
     }
     if outcome == "incomplete":
-        result_path.touch()
+        paths = DatabasePaths(result_path)
+        paths.create()
+        paths.duckdb.touch()
         failure["result"] = {"experiment": 1, "cluster": 18}
     pane = templates.env.get_template("analysis/apitof.html").render(
         iterations=296,
@@ -384,11 +392,13 @@ def test_cancelled_before_simulation_closes_database(monkeypatch, job):
             db=SimpleNamespace(close=lambda: closed.append(True)),
             counts={"requested": 100, "completed": 0},
         )
-        result_path.touch()
-        archive = events_filename(result_path)
+        paths = DatabasePaths(result_path)
+        paths.create()
+        paths.duckdb.touch()
+        archive = paths.arrow
         for path in (
             archive,
-            events_filename(result_path, format="parquet"),
+            paths.parquet,
             Path(f"{archive}.lock"),
             Path(f"{archive}.journal"),
         ):
@@ -409,5 +419,4 @@ def test_cancelled_before_simulation_closes_database(monkeypatch, job):
     run_async(finish)
     assert info["status"] == "cancelled"
     assert not result_path.exists()
-    assert not list(result_path.parent.glob(f"{result_path.stem}.events.*"))
     assert "failure" not in info

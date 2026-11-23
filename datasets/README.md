@@ -6,7 +6,11 @@ The datasets can be prepared and histograms precomputed into database form on Tu
    VCPKG_ROOT=/path/to/vcpkg
    ./ingest-turso.sh
 
-Everything needed will be grabbed from Allas, the ingestion will happen, and then the results put back on Allas.
+Run `./ingest.sh` from this directory to fetch the sources, prepare the dataset
+directories, and upload `database.apitofsim.tar.zst` and
+`database_test.apitofsim.tar.zst` to Allas. Run `./fetch-dbs.sh` here to download
+and unpack the main dataset locally. Point `DATABASE` at the extracted
+`database.apitofsim` directory.
 
 Before retrying a failed ingest, wait for its Slurm job to finish and run `./clean-ingest-turso.sh`. This removes the generated databases, their sidecar files, and the compressed database outputs so ingestion can recreate them.
 

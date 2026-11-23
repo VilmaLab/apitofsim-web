@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -19,12 +20,16 @@ def test_container_auth_startup(tmp_path, credentials):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "python").symlink_to(sys.executable)
+    fixture = tmp_path / "fixture" / "database.apitofsim"
+    fixture.mkdir(parents=True)
+    for name in ("database.duckdb", "ase.sqlite.db"):
+        (fixture / name).write_text(name)
+    archive = tmp_path / "fixture.tar.zst"
+    with tarfile.open(archive, "w:zst") as bundle:
+        bundle.add(fixture, arcname=fixture.name)
     rclone = bin_dir / "rclone"
-    rclone.write_text('#!/bin/sh\nprintf "%s\\n" "${3##*/}" > "$4"\n')
+    rclone.write_text('#!/bin/sh\ncp -- "$TEST_DATABASE_ARCHIVE" "$4"\n')
     rclone.chmod(0o755)
-    zstd = bin_dir / "zstd"
-    zstd.write_text('#!/bin/sh\nexec cat -- "$3"\n')
-    zstd.chmod(0o755)
     ray = bin_dir / "ray"
     ray.write_text(
         "#!/bin/sh\n"
@@ -38,9 +43,15 @@ def test_container_auth_startup(tmp_path, credentials):
         "exec sleep 60\n"
     )
     ray.chmod(0o755)
-    roof = bin_dir / "dirroof"
-    roof.write_text("#!/bin/sh\nexec sleep 60\n")
-    roof.chmod(0o755)
+    dirroof = bin_dir / "dirroof"
+    dirroof.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, pathlib, sys\n"
+        "pathlib.Path(os.environ['TMPDIR'], 'dirroof-args').write_text(\n"
+        "    json.dumps(sys.argv[1:]))\n"
+        "os.execlp('sleep', 'sleep', '60')\n"
+    )
+    dirroof.chmod(0o755)
     uvicorn = bin_dir / "uvicorn"
     uvicorn.write_text(
         f"#!{sys.executable}\n"
@@ -61,7 +72,9 @@ def test_container_auth_startup(tmp_path, credentials):
     env.update(
         PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         DATABASE_DIR=str(tmp_path),
+        TEST_DATABASE_ARCHIVE=str(archive),
         RESULTS_DIR=str(tmp_path / "results"),
+        RESULTS_MAX_SIZE="4G",
         TMPDIR=str(tmp_path),
         HOME=str(tmp_path / "nonexistent-home"),
     )
@@ -84,8 +97,17 @@ def test_container_auth_startup(tmp_path, credentials):
     assert result.returncode == 1
     assert "Ray status error" in result.stderr
     assert "Web exited unexpectedly (status 0)." in result.stderr
-    for filename in ("database.ase.sqlite.db", "database.duckdb"):
-        assert (tmp_path / filename).read_text() == f"{filename}.zst\n"
+    assert json.loads((tmp_path / "dirroof-args").read_text()) == [
+        "--size",
+        "4G",
+        "--recursive",
+        "--evict-depth",
+        "1",
+        str(tmp_path / "results"),
+    ]
+    for name in ("database.duckdb", "ase.sqlite.db"):
+        assert (tmp_path / "database.apitofsim" / name).read_text() == name
+    assert not list(tmp_path.glob(".download.*"))
     status_output, settings_json = result.stdout.splitlines()
     assert status_output == "Ray status output"
     settings = json.loads(settings_json)
