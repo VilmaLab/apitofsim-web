@@ -1,7 +1,13 @@
 from contextvars import ContextVar
+from functools import cache
 
 import duckdb
-from apitofsim.workflow import DatabasePaths, ExperimentDatabase, SuperClusterDatabase
+from apitofsim.workflow import (
+    DatabasePaths,
+    ExperimentDatabase,
+    HistogramStore,
+    SuperClusterDatabase,
+)
 from apitofsim.workflow import sql_files_nofk as sql
 
 from vms.settings import database_path
@@ -9,8 +15,18 @@ from vms.settings import database_path
 current_db = ContextVar("current_db")
 
 
+@cache
+def shared_histograms(paths: DatabasePaths):
+    store = HistogramStore(paths, readonly=True)
+    store.premap()
+    return store
+
+
 def connect_db():
-    return SuperClusterDatabase(database_path, readonly=True, ase=True)
+    paths = DatabasePaths(database_path)
+    return SuperClusterDatabase(
+        paths.root, readonly=True, ase=True, histogram_store=shared_histograms(paths)
+    )
 
 
 def get_connection():
@@ -19,14 +35,14 @@ def get_connection():
 
 def open_result_db(cluster_path, result_path, *, readonly=True):
     """Open a job's results and event archive alongside the shared cluster data."""
-    clusters = DatabasePaths(cluster_path).require_database()
+    clusters = DatabasePaths(cluster_path)
+    clusters_file = str(clusters.require_database()).replace("'", "''")
     results = DatabasePaths(result_path)
     if readonly:
         results.require_database()
     else:
         results.root.parent.mkdir(parents=True, exist_ok=True)
         results.create()
-    clusters_file = str(clusters).replace("'", "''")
     results_file = str(results.duckdb).replace("'", "''")
     access = " (READ_ONLY)" if readonly else ""
     config = {"temp_directory": str(results.root / "database.duckdb.tmp")}
@@ -57,6 +73,7 @@ def open_result_db(cluster_path, result_path, *, readonly=True):
             recording_format="parquet",
             recording_compression="zstd",
             database_paths=results,
+            histogram_store=shared_histograms(clusters),
         )
         db.create_temp_views()
         if readonly:
@@ -79,8 +96,9 @@ class DatabaseMiddleware:
         ):
             await self.app(scope, receive, send)
             return
-        token = current_db.set(connect_db())
-        try:
-            await self.app(scope, receive, send)
-        finally:
-            current_db.reset(token)
+        with connect_db() as db:
+            token = current_db.set(db)
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                current_db.reset(token)

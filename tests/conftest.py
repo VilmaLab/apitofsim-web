@@ -47,6 +47,7 @@ def test_db():
             extracted = Path(stage) / TEST_DB_NAME
             assert (extracted / "database.duckdb").is_file()
             assert (extracted / "ase.sqlite.db").is_file()
+            assert any(extracted.glob("histograms_*.mmap"))
             extracted.rename(dest)
     return dest
 
