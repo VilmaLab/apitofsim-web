@@ -22,7 +22,7 @@ def test_container_auth_startup(tmp_path, credentials):
     (bin_dir / "python").symlink_to(sys.executable)
     fixture = tmp_path / "fixture" / "database.apitofsim"
     fixture.mkdir(parents=True)
-    for name in ("database.duckdb", "ase.sqlite.db"):
+    for name in ("database.duckdb", "ase.sqlite.db", "histograms_1000.mmap"):
         (fixture / name).write_text(name)
     archive = tmp_path / "fixture.tar.zst"
     with tarfile.open(archive, "w:zst") as bundle:
@@ -105,7 +105,7 @@ def test_container_auth_startup(tmp_path, credentials):
         "1",
         str(tmp_path / "results"),
     ]
-    for name in ("database.duckdb", "ase.sqlite.db"):
+    for name in ("database.duckdb", "ase.sqlite.db", "histograms_1000.mmap"):
         assert (tmp_path / "database.apitofsim" / name).read_text() == name
     assert not list(tmp_path.glob(".download.*"))
     status_output, settings_json = result.stdout.splitlines()

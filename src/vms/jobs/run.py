@@ -8,7 +8,7 @@ import sentry_sdk
 from starlette.exceptions import HTTPException
 from starlette.responses import StreamingResponse
 
-from vms.db import open_result_db
+from vms.db import open_result_db, shared_histograms
 
 from .queue import get_status_dict
 
@@ -69,12 +69,16 @@ def simulation_events(**arguments):
 
 
 @ray.remote
-def warm_simulation_worker():
+def warm_simulation_worker(cluster_path):
     """Load simulation dependencies in a regular Ray task worker."""
     from importlib import import_module
 
     import_module("apitofsim.workflow.runners")
     import_module("minify_html_onepass")
+
+    from apitofsim.workflow import DatabasePaths
+
+    shared_histograms(DatabasePaths(cluster_path))
 
 
 @ray.remote

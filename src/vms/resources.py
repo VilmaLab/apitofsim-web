@@ -14,9 +14,11 @@ from pathlib import Path
 import ray
 from anyio import to_thread
 from apitofsim.api import ureg
+from apitofsim.workflow import DatabasePaths
 from starlette.templating import Jinja2Templates
 
 from .assets import ASSETS, asset_version
+from .db import shared_histograms
 from .jobs.queue import scheduler_context
 from .jobs.run import warm_simulation_worker
 from .markdown_ext import MarkdownExtension
@@ -97,7 +99,7 @@ async def ray_context(app):
             )
         )
         with my_ray:
-            warmup = warm_simulation_worker.remote()
+            warmup = warm_simulation_worker.remote(database_path)
             try:
                 yield
             finally:
@@ -113,8 +115,21 @@ async def bokeh_context(app):
         await bokeh_application.core.stop()
 
 
+@asynccontextmanager
+async def histogram_context(app):
+    shared_histograms(DatabasePaths(database_path))
+    try:
+        yield
+    finally:
+        shared_histograms.cache_clear()
+
+
 lifespan = compose_async_ctx(
-    ensure_assets_context, ray_context, scheduler_context, bokeh_context
+    ensure_assets_context,
+    histogram_context,
+    ray_context,
+    scheduler_context,
+    bokeh_context,
 )
 
 
