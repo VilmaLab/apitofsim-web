@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 )
 def test_container_auth_startup(tmp_path, credentials):
     """Exercise the entrypoint without downloading data or starting the app."""
+    database_dir = tmp_path / "database"
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "python").symlink_to(sys.executable)
@@ -28,7 +29,7 @@ def test_container_auth_startup(tmp_path, credentials):
     with tarfile.open(archive, "w:zst") as bundle:
         bundle.add(fixture, arcname=fixture.name)
     rclone = bin_dir / "rclone"
-    rclone.write_text('#!/bin/sh\ncp -- "$TEST_DATABASE_ARCHIVE" "$4"\n')
+    rclone.write_text('#!/bin/sh\ncat -- "$TEST_DATABASE_ARCHIVE"\n')
     rclone.chmod(0o755)
     ray = bin_dir / "ray"
     ray.write_text(
@@ -71,7 +72,7 @@ def test_container_auth_startup(tmp_path, credentials):
     }
     env.update(
         PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
-        DATABASE_DIR=str(tmp_path),
+        DATABASE_DIR=str(database_dir),
         TEST_DATABASE_ARCHIVE=str(archive),
         RESULTS_DIR=str(tmp_path / "results"),
         RESULTS_MAX_SIZE="4G",
@@ -106,9 +107,9 @@ def test_container_auth_startup(tmp_path, credentials):
         str(tmp_path / "results"),
     ]
     for name in ("database.duckdb", "ase.sqlite.db", "histograms_1000.mmap"):
-        assert (tmp_path / "database.apitofsim" / name).read_text() == name
-    assert not list(tmp_path.glob(".download.*"))
-    status_output, settings_json = result.stdout.splitlines()
+        assert (database_dir / fixture.name / name).read_text() == name
+    assert not (database_dir / ".database-download-in-progress").exists()
+    status_output, settings_json = result.stdout.splitlines()[-2:]
     assert status_output == "Ray status output"
     settings = json.loads(settings_json)
     assert settings["mode"] == ("disabled" if credentials == "disabled" else "token")
