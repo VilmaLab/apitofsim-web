@@ -20,15 +20,19 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
 
     Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
 
-The container uses tini as PID 1. The launcher downloads and unpacks
-`database.apitofsim.tar.zst` when the database directory is absent, then starts
-Ray, dirroof, and the web server. An unexpected service exit stops the
-container so the runtime can restart it.
+The container uses tini as PID 1. If there is no complete local database, the
+launcher streams `database.apitofsim.tar.zst` from the private Allas bucket
+`apitofsim-data` and unpacks it without saving a second copy of the archive.
+Publish the archive before starting with an empty database volume; see
+[`datasets/README.md`](datasets/README.md). The launcher then starts Ray,
+dirroof, and the web server. An unexpected service exit stops the container so
+the runtime can restart it.
 
 Set `RESULTS_DIR` to the dedicated results directory (default `/resultdbs`) and
 `RESULTS_MAX_SIZE` to its size limit (default `20G` in the container). Mount a
 writable volume at `RESULTS_DIR` to retain results across container replacement.
-On Rahti, set `RESULTS_DIR=/database/resultdbs` to use the database volume.
+Keep `RESULTS_DIR` outside `DATABASE_DIR`. Rahti mounts a separate results volume
+at `/resultdb`.
 dirroof tracks the size of the results tree recursively and evicts
 least-recently-accessed job directories as units. Files directly under
 `RESULTS_DIR` can also be evicted individually. Each job should have its own

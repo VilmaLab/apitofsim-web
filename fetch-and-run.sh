@@ -51,44 +51,58 @@ trap cleanup EXIT
 trap 'exit 0' TERM INT
 
 fetch_database() (
-    local name=database.apitofsim child_pid= complete=
+    local archive=":s3,env_auth:apitofsim-data/${DATABASE##*/}.tar.zst"
+    local archive_info child_pid= complete= status
     trap 'exit 1' TERM INT
+
+    # rclone cat can succeed without writing any bytes if the object is absent.
+    if ! archive_info=$(rclone lsjson --stat "$archive"); then
+        printf 'Cannot check the database archive in Allas: %s\n' "$archive" >&2
+        exit 1
+    fi
+    if ! python -c 'import json, sys; info = json.load(sys.stdin); sys.exit(info["IsDir"] or info["Size"] <= 0)' <<< "$archive_info"; then
+        printf 'Database archive missing or empty in Allas: %s\n' "$archive" >&2
+        exit 1
+    fi
+
+    touch -- "$database_dir/.database-download-in-progress"
+    # Clear partial downloads and the previous database layout to make room.
+    rm -rf -- "$DATABASE" "$database_dir"/.download.*
+    rm -f -- "$database_dir"/{database.duckdb,database.ase.sqlite.db}{,.zst}
     trap '
         if [[ -n "$child_pid" ]]; then
             stop_services "$child_pid"
         fi
         if [[ -z "$complete" ]]; then
-            rm -rf -- "$database_dir/$name"
+            rm -rf -- "$DATABASE"
         fi
     ' EXIT
 
-    rclone cat ":s3,env_auth:apitofsim-data/$name.tar.zst" |
-        tar --zstd -xf - -C "$database_dir" &
+    printf 'Downloading database archive: %s\n' "$archive"
+    rclone cat "$archive" | tar --zstd -xf - -C "$database_dir" &
     child_pid=$!
-    wait "$child_pid"
+    status=0
+    wait "$child_pid" || status=$?
     child_pid=
-    [[ -f "$database_dir/$name/database.duckdb" && -f "$database_dir/$name/ase.sqlite.db" ]]
+    if (( status != 0 )); then
+        printf 'Database archive download or extraction failed (status %d): %s\n' "$status" "$archive" >&2
+        exit "$status"
+    fi
+    if [[ ! -f "$DATABASE/database.duckdb" || ! -f "$DATABASE/ase.sqlite.db" ]]; then
+        printf 'Incomplete database directory: %s\n' "$DATABASE" >&2
+        exit 1
+    fi
     rm -f -- "$database_dir/.database-download-in-progress"
     complete=1
 )
 
-export RCLONE_S3_ENDPOINT=https://a3s.fi
+export RCLONE_S3_ENDPOINT=https://a3s.fi RCLONE_S3_PROVIDER=Ceph
 export DATABASE="$database_dir/database.apitofsim"
 if [[ -e "$database_dir/.database-download-in-progress" || ! -f "$DATABASE/database.duckdb" || ! -f "$DATABASE/ase.sqlite.db" ]]; then
-    printf 'Database directory usage before cleanup:\n'
-    du -sh -- "$database_dir"/* "$database_dir"/.[!.]* "$database_dir"/..?* 2>/dev/null || true
-    df -h -- "$database_dir"
-    # Preserve the filesystem's root-owned recovery directory, if present.
-    find "$database_dir" -mindepth 1 -maxdepth 1 ! -name lost+found -exec rm -rf -- {} +
-    touch -- "$database_dir/.database-download-in-progress"
     fetch_database &
     services[Database]=$!
     wait "${services[Database]}"
     unset 'services[Database]'
-fi
-if [[ ! -f "$DATABASE/database.duckdb" || ! -f "$DATABASE/ase.sqlite.db" ]]; then
-    printf 'Incomplete database directory: %s\n' "$DATABASE" >&2
-    exit 1
 fi
 
 # Use the local head by default. Explicit external addresses still work.

@@ -29,7 +29,16 @@ def test_container_auth_startup(tmp_path, credentials):
     with tarfile.open(archive, "w:zst") as bundle:
         bundle.add(fixture, arcname=fixture.name)
     rclone = bin_dir / "rclone"
-    rclone.write_text('#!/bin/sh\ncat -- "$TEST_DATABASE_ARCHIVE"\n')
+    rclone.write_text(
+        "#!/bin/sh\n"
+        'case "$*" in\n'
+        "    'lsjson --stat :s3,env_auth:apitofsim-data/database.apitofsim.tar.zst')\n"
+        '        echo \'{"IsDir": false, "Size": 100}\';;\n'
+        "    'cat :s3,env_auth:apitofsim-data/database.apitofsim.tar.zst')\n"
+        '        exec cat -- "$TEST_DATABASE_ARCHIVE";;\n'
+        "    *) exit 1;;\n"
+        "esac\n"
+    )
     rclone.chmod(0o755)
     ray = bin_dir / "ray"
     ray.write_text(
@@ -127,6 +136,59 @@ def test_container_auth_startup(tmp_path, credentials):
         assert settings["token"] == (
             "test-token" if credentials == "environment" else None
         )
+
+
+@pytest.mark.parametrize(
+    ("is_dir", "size", "error"),
+    [
+        (True, -1, "Database archive missing or empty in Allas"),
+        (False, 0, "Database archive missing or empty in Allas"),
+        (False, 100, "Database archive download or extraction failed"),
+    ],
+)
+def test_container_database_download_failure(tmp_path, is_dir, size, error):
+    database_dir = tmp_path / "database"
+    partial = database_dir / "database.apitofsim"
+    partial.mkdir(parents=True)
+    (partial / "database.duckdb").touch()
+    legacy = database_dir / "database.duckdb.zst"
+    legacy.touch()
+    unrelated = database_dir / "keep"
+    unrelated.touch()
+    marker = database_dir / ".database-download-in-progress"
+    marker.touch()
+    rclone = tmp_path / "rclone"
+    archive_info = json.dumps({"IsDir": is_dir, "Size": size})
+    rclone.write_text(
+        "#!/bin/sh\n"
+        f"if [ \"$1\" = lsjson ]; then echo '{archive_info}'; exit 0; fi\n"
+        'if [ "$1" = cat ]; then touch "$DATABASE_DIR/cat-called"; exit 0; fi\n'
+        "exit 1\n"
+    )
+    rclone.chmod(0o755)
+    (tmp_path / "python").symlink_to(sys.executable)
+
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "fetch-and-run.sh")],
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+            "DATABASE_DIR": str(database_dir),
+            "RESULTS_DIR": str(tmp_path / "results"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert error in result.stderr
+    assert "apitofsim-data/database.apitofsim.tar.zst" in result.stderr
+    assert marker.exists()
+    assert unrelated.exists()
+    assert partial.exists() == (size <= 0)
+    assert legacy.exists() == (size <= 0)
+    assert (database_dir / "cat-called").exists() == (size > 0)
 
 
 @pytest.fixture
