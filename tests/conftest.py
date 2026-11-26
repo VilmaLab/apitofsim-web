@@ -12,6 +12,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from prepare_test_database import prepare_test_database
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATASETS_DIR = REPO_ROOT / "datasets"
@@ -38,9 +39,18 @@ def test_db():
     if not dest.exists():
         archive = f"{TEST_DB_NAME}.tar.zst"
         print(f"Downloading {archive}...", file=sys.stderr)
+        try:
+            response = urllib.request.urlopen(
+                f"{TEST_DB_BASE_URL}/{archive}", timeout=60
+            )
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+            prepare_test_database(dest, TEST_DB_BASE_URL)
+            return dest
         with (
+            response,
             tempfile.TemporaryDirectory(dir=DATASETS_DIR) as stage,
-            urllib.request.urlopen(f"{TEST_DB_BASE_URL}/{archive}") as response,
             tarfile.open(fileobj=response, mode="r|zst") as tar,
         ):
             tar.extractall(stage, filter="data")
