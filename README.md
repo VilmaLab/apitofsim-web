@@ -235,7 +235,7 @@ apitofsim-web. From the apitofsim-web directory, run:
 
 This creates `.venv-local` from the release lockfile, installs CMake build tools,
 and installs both sibling checkouts as editable packages. Follow the
-[apitofsim build prerequisites](https://github.com/VilmaLab/apitofsim/blob/v0.32.0/docs/development.md)
+[apitofsim build prerequisites](https://github.com/VilmaLab/apitofsim/blob/v0.33.0/docs/development.md)
 to set up the native toolchain.
 
 Set `UV_NO_SYNC=1 UV_PROJECT_ENVIRONMENT=.venv-local` when running development
