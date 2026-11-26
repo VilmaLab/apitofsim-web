@@ -7,8 +7,8 @@ export RESULTS_MAX_SIZE="${RESULTS_MAX_SIZE:-20G}"
 
 database_dir=$(realpath -m -- "${DATABASE_DIR:-/database}")
 RESULTS_DIR=$(realpath -m -- "$RESULTS_DIR")
-if [[ "$RESULTS_DIR" == / || "$RESULTS_DIR" == "$database_dir" ]]; then
-    printf 'RESULTS_DIR must be a dedicated directory, separate from DATABASE_DIR.\n' >&2
+if [[ "$database_dir" == / || "$RESULTS_DIR" == / || "$RESULTS_DIR" == "$database_dir" || "$RESULTS_DIR" == "$database_dir/"* ]]; then
+    printf 'DATABASE_DIR must not be /, and RESULTS_DIR must be outside DATABASE_DIR.\n' >&2
     exit 1
 fi
 mkdir -p -- "$database_dir" "$RESULTS_DIR"
@@ -51,34 +51,36 @@ trap cleanup EXIT
 trap 'exit 0' TERM INT
 
 fetch_database() (
-    local name=database.apitofsim stage= child_pid=
+    local name=database.apitofsim child_pid= complete=
     trap 'exit 1' TERM INT
     trap '
         if [[ -n "$child_pid" ]]; then
             stop_services "$child_pid"
         fi
-        if [[ -n "$stage" ]]; then
-            rm -rf -- "$stage"
+        if [[ -z "$complete" ]]; then
+            rm -rf -- "$database_dir/$name"
         fi
     ' EXIT
 
-    stage=$(mktemp -d -- "$database_dir/.download.XXXXXX")
-    rclone copyto --progress ":s3,env_auth:apitofsim-data/$name.tar.zst" "$stage/$name.tar.zst" &
+    rclone cat ":s3,env_auth:apitofsim-data/$name.tar.zst" |
+        tar --zstd -xf - -C "$database_dir" &
     child_pid=$!
     wait "$child_pid"
     child_pid=
-
-    tar --zstd -xf "$stage/$name.tar.zst" -C "$stage" &
-    child_pid=$!
-    wait "$child_pid"
-    child_pid=
-    [[ -f "$stage/$name/database.duckdb" && -f "$stage/$name/ase.sqlite.db" ]]
-    mv -T -- "$stage/$name" "$database_dir/$name"
+    [[ -f "$database_dir/$name/database.duckdb" && -f "$database_dir/$name/ase.sqlite.db" ]]
+    rm -f -- "$database_dir/.database-download-in-progress"
+    complete=1
 )
 
 export RCLONE_S3_ENDPOINT=https://a3s.fi
 export DATABASE="$database_dir/database.apitofsim"
-if [[ ! -e "$DATABASE" ]]; then
+if [[ -e "$database_dir/.database-download-in-progress" || ! -f "$DATABASE/database.duckdb" || ! -f "$DATABASE/ase.sqlite.db" ]]; then
+    printf 'Database directory usage before cleanup:\n'
+    du -sh -- "$database_dir"/* "$database_dir"/.[!.]* "$database_dir"/..?* 2>/dev/null || true
+    df -h -- "$database_dir"
+    # Preserve the filesystem's root-owned recovery directory, if present.
+    find "$database_dir" -mindepth 1 -maxdepth 1 ! -name lost+found -exec rm -rf -- {} +
+    touch -- "$database_dir/.database-download-in-progress"
     fetch_database &
     services[Database]=$!
     wait "${services[Database]}"
