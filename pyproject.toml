@@ -8,7 +8,7 @@ dependencies = [
     "apitofsim[plot]==0.32.0",
     "anyio>=4.14.2",
     "ase>=3.26.0",
-    "duckdb>=1.4.1",
+    "duckdb>=1.5.0,<2",
     "holoviews>=1.21.0",
     "jinja2>=3.1.6",
     "lxml>=6.0.2",
