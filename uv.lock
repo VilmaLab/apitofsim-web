@@ -2677,7 +2677,7 @@ requires-dist = [
     { name = "apitofsim", extras = ["plot"], marker = "platform_machine == 'AMD64' and sys_platform == 'win32'", url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.32.0/apitofsim-0.32.0-cp312-abi3-win_amd64.whl" },
     { name = "apitofsim-resultviewer", url = "https://github.com/VilmaLab/apitofsim-resultviewer/archive/refs/tags/v0.4.0.tar.gz" },
     { name = "ase", specifier = ">=3.26.0" },
-    { name = "duckdb", specifier = ">=1.4.1" },
+    { name = "duckdb", specifier = ">=1.5.0,<2" },
     { name = "holoviews", specifier = ">=1.21.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "lxml", specifier = ">=6.0.2" },
