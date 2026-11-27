@@ -67,9 +67,9 @@ from `main` and pushes it to `ghcr.io/vilmalab/apitofsim-web`. BuildKit stores
 intermediate layers in a separate GHCR cache. The workflow publishes a
 `sha-<commit>` tag and records the image digest in the run summary.
 
-Rahti tracks the GHCR `main` tag through the `apitofsim-web-ghcr:main` image
-stream and rolls out the resolved image digest on import. To refresh the image
-stream ahead of its scheduled import, run:
+Rahti imports the GHCR `main` tag manually. After **Publish container** finishes,
+run the following command to update the `apitofsim-web-ghcr:main` image stream.
+The deployment rolls out automatically when the import resolves to a new digest.
 
 ```bash
 oc -n apitofsimweb import-image apitofsim-web-ghcr:main
