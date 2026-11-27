@@ -6,11 +6,14 @@ import pytest
 from apitofsim.transmission import VOLTAGES_NEGATIVE, VOLTAGES_POSITIVE
 from apitofsim.workflow.db import ClusterDatabase
 from playwright.sync_api import expect
+from starlette.applications import Starlette
 from starlette.datastructures import FormData
 from starlette.requests import Request
+from starlette.routing import Route
+from starlette.testclient import TestClient
 from wtforms import FormField, SelectField
 
-from vms.app import app, pathways_context, templates
+from vms.app import app, instrument_fragment, pathways_context, templates
 from vms.db import current_db
 from vms.forms import (
     SettingsForm,
@@ -200,9 +203,11 @@ def test_edited_voltages_require_explicit_reset(page, form, kind):
     page.select_option("#cluster", "1")
     expect(warning).to_contain_text("cluster charge has changed to negative")
     page.select_option("#cluster", "2")
-    warning.get_by_role("link", name="Voltages page").click()
+    warning.get_by_role("link", name="Charges page").click()
     expect(page.locator('div[name="voltagecontrols"]')).to_be_visible()
-    page.get_by_role("button", name="Set to default").click()
+    page.get_by_role("group", name="Linear acceleration").get_by_role(
+        "button", name="Set to default"
+    ).click()
     assert_voltages(page, VOLTAGES_POSITIVE.magnitude.tolist())
     expect(page.locator('[name="voltages_edited"]')).to_have_value("false")
     expect(warning).to_have_count(0)
@@ -217,7 +222,9 @@ def test_voltage_reset_clears_errors_without_selected_cluster(page, form):
     form.voltage.voltage1.errors = ["Invalid voltage"]
     load(page, form)
     page.click('a[href="#voltagecontrols"]')
-    page.get_by_role("button", name="Set to default").click()
+    page.get_by_role("group", name="Linear acceleration").get_by_role(
+        "button", name="Set to default"
+    ).click()
     assert_voltages(page, VOLTAGES_NEGATIVE.magnitude.tolist())
     number = page.locator('input[type="number"][name="voltage-voltage1"]')
     assert number.evaluate("el => el.validity.customError") is False
@@ -331,6 +338,9 @@ def test_form_alert_dismissal_and_hidden_field_error(page, form):
     form.instrument.instrument_geometry.length_of_first_chamber.errors = [
         "Invalid fixed length"
     ]
+    form.instrument.quadrupole.half_distance_between_quadrupole_rods.errors = [
+        "Invalid fixed radius"
+    ]
     load(page, form)
     alert = page.locator('[role="alert"]')
     expect(alert).to_contain_text("Unable to run simulation")
@@ -339,6 +349,7 @@ def test_form_alert_dismissal_and_hidden_field_error(page, form):
     expect(page.locator('div[name="instrument"]')).to_be_visible()
     expect(page.get_by_text("L0: Invalid fixed length", exact=True)).to_be_visible()
     expect(page.locator('a[href="#instrument"]')).to_be_focused()
+    expect(page.get_by_text("Radius: Invalid fixed radius", exact=True)).to_be_visible()
     page.set_viewport_size({"width": 375, "height": 800})
     assert alert.bounding_box()["width"] <= 375 - 48
     page.get_by_role("button", name="Dismiss errors").click()
@@ -347,6 +358,66 @@ def test_form_alert_dismissal_and_hidden_field_error(page, form):
     page.reload()
     page.add_script_tag(path=str(STATIC_JS))
     expect(alert).to_be_visible()
+
+
+def test_quadrupole_radius_and_electrical_controls_are_independent(page, form):
+    path = "/fragments/instrument"
+    client = TestClient(Starlette(routes=[Route(path, instrument_fragment)]))
+    page.route(
+        f"http://testserver{path}*",
+        lambda route: route.fulfill(body=client.get(route.request.url).text),
+    )
+    form.instrument.quadrupole.ac_quadrupole.errors = ["Invalid AC voltage"]
+    load(page, form, "instrument")
+    charges = page.locator('[name="voltagecontrols"]')
+    electrical = charges.get_by_role(
+        "group", name="Quadrupole (radial acceleration)", exact=True
+    )
+    linear = charges.get_by_role("group", name="Linear acceleration")
+    ac = electrical.get_by_role("textbox", name="AC", exact=True)
+    expect(ac).to_be_focused()
+    expect(ac).to_have_attribute("aria-invalid", "true")
+    electrical.get_by_role("button", name="Set to default").click()
+    expect(ac).not_to_have_attribute("aria-invalid", "true")
+    ac.locator("..").get_by_label("Unit").select_option("kilovolt")
+    dc = electrical.get_by_role("textbox", name="DC", exact=True)
+    rf = electrical.get_by_role("textbox", name="RF", exact=True)
+    dc.fill("12")
+    ac.fill("0.25")
+    rf.fill("1600000")
+
+    page.get_by_role("link", name="Geometries", exact=True).click()
+    geometry = page.locator('[name="instrument"]').get_by_role(
+        "group", name="Quadrupole Geometry", exact=True
+    )
+    radius = geometry.locator(
+        "#instrument-quadrupole-half_distance_between_quadrupole_rods"
+    )
+    model = page.get_by_label("Instrument model")
+    expect(radius).to_have_attribute("type", "hidden")
+    model.select_option("custom")
+    expect(radius).to_be_visible()
+    radius.fill("0.007")
+    page.get_by_role("link", name="Charges", exact=True).click()
+    expect(dc).to_have_value("12")
+    expect(ac).to_have_value("0.25")
+    expect(rf).to_have_value("1600000")
+    linear.get_by_role("button", name="Set to default").click()
+    expect(ac).to_have_value("0.25")
+
+    voltage = linear.locator('input[type="number"][name="voltage-voltage1"]')
+    voltage.fill("-23")
+    electrical.get_by_role("button", name="Set to default").click()
+    expect(dc).to_have_value("0")
+    expect(ac).to_have_value("0.2")
+    expect(rf).to_have_value("1300000")
+    expect(voltage).to_have_value("-23")
+    assert ac.evaluate("el => new FormData(el.form).getAll(el.id)") == ["200 volt"]
+
+    page.get_by_role("link", name="Geometries", exact=True).click()
+    expect(radius).to_have_value("0.007")
+    model.select_option("default")
+    expect(radius).to_have_attribute("type", "hidden")
 
 
 def test_invalid_post_preserves_pathways_and_custom_instrument(page, server):
@@ -550,7 +621,7 @@ def test_config_rejects_incompatible_histograms(config_form, invalid):
         form.get_data()
 
 
-@pytest.mark.parametrize("tab", ["gas", "simulation"])
+@pytest.mark.parametrize("tab", ["gas", "voltagecontrols", "simulation"])
 @pytest.mark.parametrize("width", [320, 360, 390, 640, 768, 1280])
 def test_settings_forms_fit_viewport(page, form, tab, width):
     page.set_viewport_size({"width": width, "height": 844})
@@ -569,3 +640,14 @@ def test_settings_forms_fit_viewport(page, form, tab, width):
     for control in panel.locator('input:not([type="hidden"]), select').all():
         bounds = control.bounding_box()
         assert 0 <= bounds["x"] < bounds["x"] + bounds["width"] <= width
+
+    if tab == "voltagecontrols" and width in (390, 1280):
+        linear = panel.get_by_role("group", name="Linear acceleration").bounding_box()
+        quadrupole = panel.get_by_role(
+            "group", name="Quadrupole (radial acceleration)", exact=True
+        ).bounding_box()
+        if width == 390:
+            assert linear["y"] + linear["height"] <= quadrupole["y"]
+        else:
+            assert linear["x"] + linear["width"] <= quadrupole["x"]
+            assert linear["y"] == pytest.approx(quadrupole["y"], abs=1)

@@ -6,8 +6,10 @@
     })"
     {{ wrapper_params }}
     @unit-change="unitChange($event.detail)"
+    @quantity-reset="reset($event.detail)"
 >
     <input
+        x-ref="quantityValue"
         :value="viewValue"
         @input="input($event)"
         type="text"

@@ -13,6 +13,7 @@ STATIC_URL = "/static/img/diagram.png"
 
 CONSUMERS = (
     "settings/_render_instrument.html",
+    "settings/_render_quadrupole.html",
     "settings/settings.html",
 )
 

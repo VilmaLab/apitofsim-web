@@ -181,7 +181,7 @@
         </div>
         <div class="sticky top-0 z-20 order-1 flex h-[min(50dvh,24rem)] min-w-0 flex-col border border-gray-300 bg-white lg:top-4 lg:order-2 lg:h-auto lg:self-start lg:border-0 xl:contents"
             x-data="{ active_view: 'spectrogram', info_view: 'diagram' }">
-            <div class="flex shrink-0 border-b border-gray-200 xl:hidden" role="tablist" aria-label="Substance views">
+            <div class="flex shrink-0 border-b border-gray-200 xl:hidden" role="tablist" aria-label="Cluster views">
                 <button type="button" class="flex-1 p-2 text-sm" role="tab" aria-controls="mass-spectrogram" @click="active_view = 'spectrogram'" :aria-selected="active_view == 'spectrogram'" :class="active_view == 'spectrogram' ? 'border-b-2 border-blue-700 font-semibold' : ''">Spectrogram</button>
                 <button type="button" class="flex-1 p-2 text-sm" role="tab" aria-controls="species-diagram-panel" @click="active_view = 'diagram'; info_view = 'diagram'" :aria-selected="active_view == 'diagram'" :class="active_view == 'diagram' ? 'border-b-2 border-blue-700 font-semibold' : ''">Diagram</button>
                 <button type="button" class="flex-1 p-2 text-sm" role="tab" aria-controls="species-details-panel" @click="active_view = 'details'; info_view = 'details'" :aria-selected="active_view == 'details'" :class="active_view == 'details' ? 'border-b-2 border-blue-700 font-semibold' : ''">Details</button>

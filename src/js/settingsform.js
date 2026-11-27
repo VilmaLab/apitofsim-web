@@ -43,6 +43,14 @@ export default (errors, voltageDefaults, voltagesEdited) => ({
         this.updateAccelerationWarning();
     },
 
+    resetQuadrupole(defaults) {
+        const fieldset = this.$el.closest('fieldset');
+        for (const [id, value] of Object.entries(defaults)) {
+            const control = fieldset.querySelector(`#${id}`);
+            control.closest('[x-data^="quantityinput"]').dispatchEvent(new CustomEvent('quantity-reset', { detail: value }));
+        }
+    },
+
     async init() {
         this.voltagePolarity = this.selectedPolarity() || 'negative';
         await this.$nextTick();

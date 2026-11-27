@@ -1,0 +1,10 @@
+<fieldset class="min-w-0 w-fit max-w-full rounded-md border border-gray-300 p-4 my-4 mx-auto">
+    <legend>{{ quadrupole_title }}</legend>
+    <div class="flex flex-col items-center gap-4">
+        <svg-focus diagram="#diagram" region="#region-quadrupole" title="{{ quadrupole_title }}"></svg-focus>
+        {% include "ui/_table_form.html" %}
+        {% if show_reset %}
+            <button type="button" @click='resetQuadrupole({{ form.form.electrical_defaults|tojson }})' class="cursor-pointer rounded-md bg-blue-700 px-4 py-2 text-white hover:bg-blue-800 focus-visible:outline-2">Set to default</button>
+        {% endif %}
+    </div>
+</fieldset>

@@ -156,21 +156,37 @@ def mk_instrument_form(hidden):
         )
 
     class QuadrupoleForm(Form):
-        dc_quadrupole = maybe_quantity_field(
+        electrical_fields = (
+            "dc_quadrupole",
+            "ac_quadrupole",
+            "radiofrequency_quadrupole",
+        )
+
+        @property
+        def electrical_defaults(self):
+            return {
+                self[name].id: [
+                    self[name].default.magnitude,
+                    str(self[name].default.units),
+                ]
+                for name in self.electrical_fields
+            }
+
+        dc_quadrupole = QuantityField(
             "DC",
             description="Direct-current voltage applied to the quadrupole.",
             default=Q_(0.0, "V"),
             units=["V", "kV"],
             validators=[InputRequired()],
         )
-        ac_quadrupole = maybe_quantity_field(
+        ac_quadrupole = QuantityField(
             "AC",
             description="Alternating-current voltage applied to the quadrupole.",
             default=Q_(200.0, "V"),
             units=["V", "kV"],
             validators=[InputRequired()],
         )
-        radiofrequency_quadrupole = maybe_quantity_field(
+        radiofrequency_quadrupole = QuantityField(
             "RF",
             description="Radio frequency of the quadrupole's alternating voltage.",
             default=Q_(1.3e6, "Hz"),
@@ -362,7 +378,7 @@ class SettingsForm(StarletteForm):
     pathways = FieldList(FormField(SingleFragmentationPathwayForm), min_entries=1)
     gas = FormField(GasForm)
     instrument_model = SelectField(
-        "Instrument",
+        "Instrument model",
         choices=INSTRUMENT_CHOICES,
         default="default3000",
     )
@@ -461,6 +477,8 @@ def settings_errors(form):
         "gas": "gas",
         "instrument_model": "instrument",
         "instrument": "instrument",
+        "instrument-quadrupole": "voltagecontrols",
+        "instrument-quadrupole-half_distance_between_quadrupole_rods": "instrument",
         "voltage": "voltagecontrols",
         "simulation": "simulation",
     }
@@ -470,7 +488,7 @@ def settings_errors(form):
         for field in current:
             if field is form.pathways and form.cluster.data in (None, "None", ""):
                 continue
-            visit_field(field, tab or tabs.get(field.short_name))
+            visit_field(field, tabs.get(field.name, tab))
 
     def visit_field(field, tab):
         if isinstance(field, FormField):

@@ -17,6 +17,14 @@ export default (props) => {
         viewValue: props.magnitude,
         inputValue: props.magnitude,
 
+        reset([magnitude, unit]) {
+            this.inputValue = magnitude;
+            this.inputUnit = unit;
+            this.viewValue = system.convert(unit, this.viewUnit, magnitude);
+            this.$refs.quantityValue.value = this.viewValue;
+            this.$dispatch('input');
+        },
+
         unitChange(unit) {
             console.log('unitChange', unit, system)
             this.viewUnit = unit

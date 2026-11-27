@@ -40,21 +40,21 @@ document.addEventListener("click", () => {
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-info-circle"></use></svg>
                     <span class="tab-label">About</span>
                 {% endcall %}
-                {% call tab('fragmentationpathways', 'Substance') %}
+                {% call tab('fragmentationpathways', 'Cluster') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-share-nodes"></use></svg>
-                    <span class="tab-label">Substance</span>
+                    <span class="tab-label">Cluster</span>
                 {% endcall %}
-                {% call tab('gas', 'Substrate') %}
+                {% call tab('gas', 'Carrier gas') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-circle"></use></svg>
-                    <span class="tab-label">Substrate</span>
+                    <span class="tab-label">Carrier gas</span>
                 {% endcall %}
-                {% call tab('instrument', 'Instrument') %}
+                {% call tab('instrument', 'Geometries') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-vials"></use></svg>
-                    <span class="tab-label">Instrument</span>
+                    <span class="tab-label">Geometries</span>
                 {% endcall %}
-                {% call tab('voltagecontrols', 'Voltages') %}
+                {% call tab('voltagecontrols', 'Charges') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-bolt"></use></svg>
-                    <span class="tab-label">Voltages</span>
+                    <span class="tab-label">Charges</span>
                 {% endcall %}
                 {% call tab('simulation', 'Simulation') %}
                     <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><use href="#fa-arrows-rotate"></use></svg>
@@ -88,8 +88,8 @@ This site allows you to configure and run simulations of
 an Atmospheric Pressure Ionization Time-of-Flight Mass Spectrometer (APi-ToF MS).
 
 You can adjust voltage settings,
-define the compound chain,
-select the instrument model,
+select a cluster and its fragmentation pathways,
+choose the geometry model,
 and modify constants and simulation parameters.
 
 The underlying tools are available on GitHub:
@@ -104,16 +104,16 @@ can be found on
                 {% endcall %}
                 {% call tab_content('fragmentationpathways') %}
                     {{ uneditable_errors('fragmentationpathways') }}
-                    {% set substance_help = 'This is the substance which will enter the APi-ToF MS and is the object being measured when using the instrument. Once the substance is selected, the fragmentation pathways can be inspected and included/excluded from the simulation.' %}
+                    {% set cluster_help = 'Select the cluster that enters the APi-ToF MS. You can inspect its fragmentation pathways and choose which ones to include in the simulation.' %}
                     <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold" x-show="!clusterSelected">
-                        Substance
-                        {{ tooltip(substance_help, 'substance-tooltip', 'Substance') }}
+                        Cluster
+                        {{ tooltip(cluster_help, 'cluster-help-tooltip', 'Cluster') }}
                     </h2>
                     <img class="p-4 bg-white mx-auto border border-gray-300" x-show="!clusterSelected" src="{{ url_for('static', path='/img/fragmentation.png') }}">
                     <div class="m-4 flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-4">
                         <div class="flex shrink-0 items-center gap-1">
                             {{ form.cluster.label }}
-                            <span x-show="clusterSelected">{{ tooltip(substance_help, 'selected-substance-tooltip', 'Substance', small=True) }}</span>
+                            <span x-show="clusterSelected">{{ tooltip(cluster_help, 'selected-cluster-help-tooltip', 'Cluster', small=True) }}</span>
                             {% if form.cluster.description %}
                                 {{ tooltip(form.cluster.description, form.cluster.id ~ '-tooltip', form.cluster.label.text, small=True) }}
                             {% endif %}
@@ -133,7 +133,7 @@ can be found on
                                 <template x-if="voltageNotice.edited">
                                     <span>
                                         <span x-text="`The cluster charge has changed to ${voltageNotice.polarity}, but the voltages have not changed. You can reset them to the appropriate default on the`"></span>
-                                        <a href="#voltagecontrols" @click="current_tab = 'voltagecontrols'" class="underline">Voltages page</a>.
+                                        <a href="#voltagecontrols" @click="current_tab = 'voltagecontrols'" class="underline">Charges page</a>.
                                     </span>
                                 </template>
                             </p>
@@ -148,8 +148,8 @@ can be found on
                 {% call tab_content('gas') %}
                     {{ uneditable_errors('gas') }}
                     <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
-                        Substrate
-                        {{ tooltip('Set the gas properties, temperature, and chamber pressures used in the simulation.', 'substrate-tooltip', 'Substrate') }}
+                        Carrier gas
+                        {{ tooltip('Set the carrier gas properties, temperature, and chamber pressures used in the simulation.', 'carrier-gas-tooltip', 'Carrier gas') }}
                     </h2>
                     <div class="flex flex-col md:flex-row gap-6 md:gap-4">
                         <fieldset class="min-w-0 max-w-full rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
@@ -175,12 +175,12 @@ can be found on
                 {% call tab_content('instrument') %}
                     {{ uneditable_errors('instrument') }}
                     <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
-                        Instrument
-                        {{ tooltip('On this screen you can modify properties of the instrument such as its geometry as well as quadrupole settings.', 'instrument-tooltip', 'Instrument') }}
+                        Geometries
+                        {{ tooltip('View or customize the instrument geometry, skimmer geometry, and quadrupole radius.', 'geometries-tooltip', 'Geometries') }}
                     </h2>
                     <div class="flex flex-wrap items-center justify-center gap-4 px-2 py-4 sm:px-10">
                         <span class="flex items-center gap-1">
-                            <label class="block" for="instrument-select">Instrument</label>
+                            <label class="block" for="instrument-select">{{ form.instrument_model.label.text }}</label>
                             {% if form.instrument_model.description %}
                                 {{ tooltip(form.instrument_model.description, 'instrument-model-tooltip', form.instrument_model.label.text, small=True) }}
                             {% endif %}
@@ -196,36 +196,42 @@ can be found on
                 {% call tab_content('voltagecontrols') %}
                     {{ uneditable_errors('voltagecontrols') }}
                     <h2 class="flex items-center justify-center gap-2 p-4 text-center text-2xl font-bold">
-                        Voltage Controls
+                        Charges
                         {{ tooltip(
-                            'The clusters are accelerated through the atmospheric pressured interface by fields created by voltages applied at the indicated points on the instrument; Adjust their value in Volts on this screen.',
-                            'voltages-tooltip',
-                            'Voltage Controls'
+                            'Set the voltages that accelerate clusters through the atmospheric pressure interface and the DC voltage, AC voltage, and radio frequency of the quadrupole.',
+                            'charges-tooltip',
+                            'Charges'
                         ) }}
                     </h2>
-                    <div class="w-fit max-w-full mx-auto py-4">
-                        {{ lightbox('img/voltages.png', 'w-full h-auto mb-4 border border-gray-300 bg-white', 'block w-full [contain:inline-size]') }}
-                        <div class="grid grid-cols-5 gap-2 px-8 sm:gap-4 sm:px-20 [&_input[type=number]]:w-20 [&_input[type=number]]:max-w-full">
-                            {% for field in form.voltage %}
-                                <div class="flex flex-col items-center gap-2">
-                                    <div class="mb-2 flex items-center gap-1">
-                                        {{ field.label }}
-                                        {% if field.description %}
-                                            {{ tooltip(field.description, field.id ~ '-tooltip', 'Voltage V' ~ loop.index0, small=True) }}
-                                        {% endif %}
+                    <div class="flex flex-wrap items-start justify-center gap-x-6">
+                        <fieldset class="min-w-0 w-fit max-w-full rounded-md border border-gray-300 p-4 my-4 mx-auto">
+                            <legend>Linear acceleration</legend>
+                            {{ lightbox('img/voltages.png', 'w-full h-auto mb-4 border border-gray-300 bg-white', 'block w-full [contain:inline-size]') }}
+                            <div class="grid grid-cols-5 gap-2 sm:gap-4 sm:px-20 [&_input[type=number]]:w-20 [&_input[type=number]]:max-w-full">
+                                {% for field in form.voltage %}
+                                    <div class="flex flex-col items-center gap-2">
+                                        <div class="mb-2 flex items-center gap-1">
+                                            {{ field.label }}
+                                            {% if field.description %}
+                                                {{ tooltip(field.description, field.id ~ '-tooltip', 'Voltage V' ~ loop.index0, small=True) }}
+                                            {% endif %}
+                                        </div>
+                                        {{ field(range__class="vertical", number__class="text-center") }}
                                     </div>
-                                    {{ field(range__class="vertical", number__class="text-center") }}
-                                </div>
-                            {% endfor %}
-                        </div>
-                        <div class="mx-4 mb-4 mt-8 text-center">
-                            <button type="button" @click="resetVoltages()" class="cursor-pointer rounded-md bg-blue-700 px-4 py-2 text-white hover:bg-blue-800 focus-visible:outline-2">Set to default</button>
-                        </div>
-                        <template x-if="negativeFirstChamberAcceleration">
-                            <div class="mx-auto mb-4 max-w-xl rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800" role="alert">
-                                These voltages cause the selected particle to accelerate in the negative z direction in the first chamber.
+                                {% endfor %}
                             </div>
-                        </template>
+                            <div class="mx-4 mb-4 mt-8 text-center">
+                                <button type="button" @click="resetVoltages()" class="cursor-pointer rounded-md bg-blue-700 px-4 py-2 text-white hover:bg-blue-800 focus-visible:outline-2">Set to default</button>
+                            </div>
+                            <template x-if="negativeFirstChamberAcceleration">
+                                <div class="mx-auto mb-4 max-w-xl rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800" role="alert">
+                                    These voltages cause the selected particle to accelerate in the negative z direction in the first chamber.
+                                </div>
+                            </template>
+                        </fieldset>
+                        {% with form=form.instrument.quadrupole, include_fields=form.instrument.quadrupole.form.electrical_fields, quadrupole_title='Quadrupole (radial acceleration)', show_reset=True %}
+                            {% include "settings/_render_quadrupole.html" %}
+                        {% endwith %}
                     </div>
                 {% endcall %}
                 {% call tab_content('simulation') %}

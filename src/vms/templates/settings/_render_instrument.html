@@ -17,13 +17,7 @@
             {% endwith %}
         </div>
     </fieldset>
-    <fieldset class="rounded-md border border-gray-300 p-4 my-4 inline-block mx-auto">
-        <legend>Quadrupole</legend>
-        <div class="flex flex-col items-center gap-4">
-            <svg-focus diagram="#diagram" region="#region-quadrupole" title="Quadrupole"></svg-focus>
-            {% with form=form.quadrupole %}
-                {% include "ui/_table_form.html" %}
-            {% endwith %}
-        </div>
-    </fieldset>
+    {% with form=form.quadrupole, include_fields=['half_distance_between_quadrupole_rods'], quadrupole_title='Quadrupole Geometry' %}
+        {% include "settings/_render_quadrupole.html" %}
+    {% endwith %}
 </div>
