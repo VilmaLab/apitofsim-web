@@ -1,5 +1,7 @@
 # APi-ToF Web demo
 
+🤖 LLM generated
+
 This is a web demo of a simulation of a APi-ToF mass spectrometer
 
 ## Running with Docker
@@ -18,7 +20,10 @@ This is a web demo of a simulation of a APi-ToF mass spectrometer
 
 3.  **Access the application:**
 
-    Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
+Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
+
+<details>
+<summary>Container startup details</summary>
 
 The container uses tini as PID 1. If there is no complete local database, the
 launcher streams `database.apitofsim.tar.zst` from the private Allas bucket
@@ -28,15 +33,26 @@ Publish the archive before starting with an empty database volume; see
 dirroof, and the web server. An unexpected service exit stops the container so
 the runtime can restart it.
 
+</details>
+
 Set `RESULTS_DIR` to the dedicated results directory (default `/resultdbs`) and
 `RESULTS_MAX_SIZE` to its size limit (default `20G` in the container). Mount a
 writable volume at `RESULTS_DIR` to retain results across container replacement.
 Keep `RESULTS_DIR` outside `DATABASE_DIR`. Rahti mounts a separate results volume
 at `/resultdb`.
+
+<details>
+<summary>Results eviction details</summary>
+
 dirroof tracks the size of the results tree recursively and evicts
 least-recently-accessed job directories as units. Files directly under
 `RESULTS_DIR` can also be evicted individually. Each job should have its own
 top-level directory. The container needs inotify and access to `/proc/self/fd`.
+
+</details>
+
+<details>
+<summary>Ray authentication and runtime details</summary>
 
 Docker enables Ray token authentication by default. For the local head, the
 launcher creates a private token file under `/tmp` if credentials are absent.
@@ -51,6 +67,11 @@ default tokens take precedence. Fontconfig uses `/tmp/.cache` in the image.
 
 To opt out for an isolated development container, pass
 `-e RAY_AUTH_MODE=disabled` to `docker run`.
+
+</details>
+
+<details>
+<summary>Container builds and Rahti deployment</summary>
 
 ### Reusing the runtime dependency image
 
@@ -74,6 +95,11 @@ The deployment rolls out automatically when the import resolves to a new digest.
 ```bash
 oc -n apitofsimweb import-image apitofsim-web-ghcr:main
 ```
+
+</details>
+
+<details>
+<summary>Monitoring and the Ray dashboard</summary>
 
 ## Sentry monitoring
 
@@ -106,6 +132,8 @@ Pass the pod name to the tunnel script.
 Open [http://127.0.0.1:8265](http://127.0.0.1:8265) while the script is running.
 Press Ctrl+C to close the tunnel.
 
+</details>
+
 ## Running the Application Locally with uv
 
 1. **Install uv**
@@ -122,33 +150,41 @@ Press Ctrl+C to close the tunnel.
     ./run_servers.sh
     ```
 
+<details>
+<summary>Starting Ray and the web server separately</summary>
+
 Alternatively you can manually start them in separate terminals:
 
 **Start Ray:**
-    ```bash
-    export RAY_AUTH_MODE=token
-    (umask 077; uv run ray get-auth-token --generate >/dev/null)
-    mkdir -p /tmp/raytmp
-    uv run ray start \
-    --head \
-    --object-store-memory 512000000 \
-    --temp-dir /tmp/raytmp \
-    --num-cpus 1 \
-    --port 6379 \
-    --include-dashboard false \
-    --block
-    ```
+```bash
+export RAY_AUTH_MODE=token
+(umask 077; uv run ray get-auth-token --generate >/dev/null)
+mkdir -p /tmp/raytmp
+uv run ray start \
+--head \
+--object-store-memory 512000000 \
+--temp-dir /tmp/raytmp \
+--num-cpus 1 \
+--port 6379 \
+--include-dashboard false \
+--block
+```
 
 **Run the webserver:**
-    ```bash
-    RAY_AUTH_MODE=token RAY_ADDRESS="localhost:6379" uv run python -m vms --reload
-    ```
+```bash
+RAY_AUTH_MODE=token RAY_ADDRESS="localhost:6379" uv run python -m vms --reload
+```
+
+</details>
 
 It's also possible to run everything in a single command, which starts a local Ray cluster and automatically builds frontend assets before startup and each reload:
 
 ```bash
 uv run python -m vms --reload
 ```
+
+<details>
+<summary>Local authentication and frontend build details</summary>
 
 Ray authentication defaults to `token` in the app and `run_servers.sh`. The launcher
 ensures a token exists before starting Ray and passes the same authentication
@@ -180,9 +216,11 @@ uv build
 Installed wheels validate their bundled assets without needing Node.js. Docker
 builds the frontend in a separate Node.js stage before installing the app.
 
+</details>
+
 **Access the application:**
 
-    Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
+Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
 
 ## Running the tests
 
@@ -203,8 +241,14 @@ test database, which is downloaded automatically on first run.
 
 The suite starts its own web server and its own Ray cluster, so `run_servers.sh` must
 not be running, and `RAY_ADDRESS` must not be set in the environment.
+
+<details>
+<summary>Test authentication details</summary>
+
 The test server always enables token authentication with a private temporary token,
 independent of your shell's Ray credentials.
+
+</details>
 
 ## Run failures
 
@@ -220,13 +264,22 @@ diagnostics. Copy the whole job directory after the job finishes. Opening it
 through the app also requires the matching shared cluster database.
 
 Failed runs show the stage, error message, and expandable traceback.
+
+<details>
+<summary>Failure diagnostic storage</summary>
+
 Diagnostics in `failure.json` let the analysis page reopen after a server
 restart, including when the job failed before its database was initialized.
 When available, the database also stores worker failures in `experiment_failure`.
 
+</details>
+
 A run whose final counters disagree with its recorded events is marked
 **incomplete**. Its available results remain accessible with a warning about
 missing trajectories.
+
+<details>
+<summary>Developing apitofsim-web and apitofsim</summary>
 
 ## Developing apitofsim-web and apitofsim
 
@@ -265,3 +318,5 @@ and `"editable": true`. To switch back to the pinned releases:
 ```bash
 ./run_servers.sh restart
 ```
+
+</details>
