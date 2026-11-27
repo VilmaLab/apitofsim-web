@@ -263,6 +263,13 @@ contains the result database, its Parquet event archive, and any failure
 diagnostics. Copy the whole job directory after the job finishes. Opening it
 through the app also requires the matching shared cluster database.
 
+At startup, the app indexes retained finished results and opens their data on
+demand. Results with a saved `job.json` reappear in **Job results** for the
+browser session that submitted them. Keep the same `SECRET_KEY` across
+restarts to preserve existing session cookies. Older results without recorded
+ownership can be opened using their original analysis URL
+(`/analysis?jobid=<jobid>`).
+
 Failed runs show the stage, error message, and expandable traceback.
 
 <details>

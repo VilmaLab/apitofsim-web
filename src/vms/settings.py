@@ -9,6 +9,10 @@ results_dir = Path(
 ).absolute()
 
 
+def is_job_id(jobid):
+    return len(jobid) == 32 and all(c in "0123456789abcdef" for c in jobid)
+
+
 def job_result_path(jobid):
     return results_dir / f"{jobid}.apitofsim"
 

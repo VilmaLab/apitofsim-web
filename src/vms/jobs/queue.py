@@ -84,6 +84,7 @@ def fail_job(info, exc):
 
 def finish_job(info):
     from .cancellation import finish_cancelled, publish_state
+    from .history import save_result_job
 
     if "failure" not in info and "cancelled_stage" in info:
         try:
@@ -97,6 +98,8 @@ def finish_job(info):
             fail_job(
                 info, RuntimeError("Simulation stream ended without a final result")
             )
+    if "result" in info:
+        save_result_job(info)
     publish_state(info)
     notify_job(info)
 
