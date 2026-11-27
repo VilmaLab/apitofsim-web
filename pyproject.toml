@@ -26,7 +26,7 @@ dependencies = [
     "wtforms>=3.2.1",
     "sympy>=1.14.0",
     "uvicorn>=0.52.1",
-    "apitofsim-resultviewer==0.5.0",
+    "apitofsim-resultviewer==0.5.1",
     "markdown>=3.10.2",
     "workingtitle[devserver]",
 ]
@@ -67,5 +67,5 @@ apitofsim = [
   { url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.33.0/apitofsim-0.33.0-cp312-abi3-macosx_12_0_arm64.whl", marker = "sys_platform == 'darwin' and platform_machine == 'arm64'" },
   { url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.33.0/apitofsim-0.33.0-cp312-abi3-win_amd64.whl", marker = "sys_platform == 'win32' and platform_machine == 'AMD64'" },
 ]
-apitofsim-resultviewer = { url = "https://github.com/VilmaLab/apitofsim-resultviewer/archive/refs/tags/v0.5.0.tar.gz" }
+apitofsim-resultviewer = { url = "https://github.com/VilmaLab/apitofsim-resultviewer/archive/refs/tags/v0.5.1.tar.gz" }
 workingtitle = { git = "https://github.com/frankier/workingtitle.git" }
