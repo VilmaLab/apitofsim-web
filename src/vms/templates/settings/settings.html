@@ -26,7 +26,7 @@ document.addEventListener("click", () => {
 
 {% block content %}
     {# TODO: Decide whether autocomplete should be on and fix up conflicts with htmx #}
-    <form method="POST" autocomplete="off" novalidate
+    <form method="POST" action="/" autocomplete="off" novalidate
           x-data='settingsForm({{ field_errors|tojson }}, {{ form.voltage.form.defaults|tojson }}, {{ (form.voltages_edited.data == "true")|tojson }})'
           @submit="submit($event)" @input="clearError($event)" @change="clearError($event)" @unit-change="clearError($event)">
         <template x-for="error in uneditableErrors.filter(error => !error.tab)" :key="error.name">

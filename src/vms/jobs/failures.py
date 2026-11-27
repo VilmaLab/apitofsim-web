@@ -139,14 +139,15 @@ def validate_output(db, counters, requested, context, *, cancelled=False):
         raise IncompleteOutputError("Output is incomplete; " + "; ".join(mismatches))
 
 
-def process_jobid(request):
+def process_jobid(request, *, jobid=None):
     from time import time
 
     from vms.jobs.queue import get_status_dict
     from vms.settings import job_result_path
 
     status = get_status_dict()
-    jobid = request.query_params.get("jobid")
+    if jobid is None:
+        jobid = request.query_params.get("jobid")
     if jobid is None:
         raise HTTPException(400, detail="Missing jobid parameter")
     if jobid not in status:  # type: ignore

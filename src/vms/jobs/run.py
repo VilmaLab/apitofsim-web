@@ -113,6 +113,7 @@ def _run_simulation(
     start_time,
     cancel_control=None,
     jobid=None,
+    submitted_settings=None,
 ):
     from time import monotonic, time
 
@@ -129,10 +130,15 @@ def _run_simulation(
     from vms.jobs.cancellation import cancel_iterator, enter_stage
     from vms.jobs.failures import validate_output
     from vms.resources import jinja_loader
+    from vms.settings import submitted_settings_path
 
     context["counts"] = {"requested": int(config["N"])}
     db = open_result_db(database_path, result_db_path, readonly=False)
     context["db"] = db
+    if submitted_settings is not None:
+        submitted_settings_path(result_db_path).write_text(
+            json.dumps(submitted_settings), encoding="utf-8"
+        )
     config_id = db.insert_config("webrun", config)
     runner = ExperimentRunner(db)
     runner.start_run(config_id)

@@ -1,7 +1,7 @@
 <select
     x-data="unitswitcher({
         'system': {{ unit_system|escape }},
-        'unit': '{{ unit }}'
+        'unit': '{{ view_unit|default(unit) }}'
     })"
     class="shrink-0 field-sizing-content p-0"
     aria-label="Unit"

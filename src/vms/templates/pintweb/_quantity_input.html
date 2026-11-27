@@ -2,7 +2,8 @@
     x-data="quantityinput({
         'system': {{ unit_system|escape }},
         'magnitude': {{ magnitude }},
-        'unit': '{{ unit }}'
+        'unit': '{{ unit }}',
+        'viewUnit': '{{ view_unit }}'
     })"
     {{ wrapper_params }}
     @unit-change="unitChange($event.detail)"
@@ -21,4 +22,5 @@
         {% include "pintweb/_unit_cycle.html" %}
     {% endif %}
     <input type="hidden" name="{{ name }}" :value="inputValue + ' ' + inputUnit">
+    <input type="hidden" name="{{ name }}-view-unit" :value="viewUnit">
 </div>

@@ -1,0 +1,99 @@
+{% macro row(label, value) %}
+    <dt class="font-medium">{{ label }}</dt>
+    <dd class="mb-2 break-words sm:mb-0">{{ value }}</dd>
+{% endmacro %}
+
+{% macro fields(group, include=none, exclude=(), units='') %}
+    <dl class="grid gap-x-8 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {% for field in group %}
+            {% if field.short_name not in exclude and (include is none or field.short_name in include) %}
+                {% if field.units is defined %}
+                    {{ row(field.label.text, field.display_value()) }}
+                {% else %}
+                    {{ row(field.label.text, field.data|string ~ units) }}
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    </dl>
+{% endmacro %}
+
+<article class="mx-auto max-w-3xl">
+    <h1 class="mb-6 text-2xl font-semibold">Configuration</h1>
+    {% if not can_prefill %}
+        <p class="mb-6 text-gray-700">Only the settings recorded in the result database are available for this experiment.</p>
+    {% endif %}
+    <section>
+        <h2 class="mb-3 text-xl font-semibold">Cluster</h2>
+        <p>{{ cluster_label }}</p>
+        {% if pathways %}
+            <h3 class="mt-4 mb-2 font-semibold">Fragmentation pathways</h3>
+            <ul class="space-y-2">
+                {% for pathway in pathways %}
+                    <li>
+                        {{ pathway.cluster[1] }} → {{ pathway.product1[1] }} + {{ pathway.product2[1] }}
+                        <span class="ml-2 text-sm text-gray-700">{{ 'Enabled' if pathway.form.enabled.data else 'Disabled' }}</span>
+                        {% if pathway.form.fragmentation_energy.data is not none %}
+                            <p class="text-sm text-gray-700">Entered fragmentation energy {{ pathway.form.fragmentation_energy.data }} E<sub>h</sub> (unused by the simulator)</p>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </section>
+    <hr class="my-6 border-gray-300">
+    <section>
+        <h2 class="mb-3 text-xl font-semibold">Carrier gas</h2>
+        <h3 class="mb-2 font-semibold">Gas</h3>
+        {{ fields(form.gas, include=['gas_molecule_radius', 'gas_molecule_mass', 'adiabatic_index']) }}
+        <h3 class="mt-4 mb-2 font-semibold">Environment</h3>
+        {{ fields(form.gas, include=['temperature_', 'pressure_first_chamber', 'pressure_second_chamber']) }}
+    </section>
+    <hr class="my-6 border-gray-300">
+    <section>
+        <h2 class="mb-3 text-xl font-semibold">Geometries</h2>
+        {% if can_prefill %}
+            <dl class="grid gap-x-8 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                {% for value, label in form.instrument_model.choices if value == form.instrument_model.data %}
+                    {{ row(form.instrument_model.label.text, label) }}
+                {% endfor %}
+            </dl>
+        {% endif %}
+        <h3 class="mt-4 mb-2 font-semibold">Instrument geometry</h3>
+        {{ fields(form.instrument.instrument_geometry) }}
+        <h3 class="mt-4 mb-2 font-semibold">Skimmer geometry</h3>
+        {{ fields(form.instrument.skimmer_geometry, units=' × π') }}
+        <h3 class="mt-4 mb-2 font-semibold">Quadrupole geometry</h3>
+        {{ fields(form.instrument.quadrupole, include=['half_distance_between_quadrupole_rods']) }}
+    </section>
+    <hr class="my-6 border-gray-300">
+    <section>
+        <h2 class="mb-3 text-xl font-semibold">Charges</h2>
+        <h3 class="mb-2 font-semibold">Linear acceleration</h3>
+        {{ fields(form.voltage, units=' V') }}
+        <h3 class="mt-4 mb-2 font-semibold">Quadrupole (radial acceleration)</h3>
+        {{ fields(form.instrument.quadrupole, include=form.instrument.quadrupole.form.electrical_fields) }}
+    </section>
+    <hr class="my-6 border-gray-300">
+    <section>
+        <h2 class="mb-3 text-xl font-semibold">Simulation</h2>
+        <h3 class="mb-2 font-semibold">General simulation</h3>
+        {{ fields(form.simulation, include=['realizations']) }}
+        <dl class="grid gap-x-8 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            {% if can_prefill %}
+                {% for value, label in form.simulation.histogram_precision.choices if value == form.simulation.histogram_precision.data %}
+                    {{ row(form.simulation.histogram_precision.label.text, label) }}
+                {% endfor %}
+            {% else %}
+                {% for label, value in histogram.items() %}
+                    {{ row(label, value) }}
+                {% endfor %}
+            {% endif %}
+        </dl>
+        <h3 class="mt-4 mb-2 font-semibold">Skimmer simulation</h3>
+        {{ fields(form.simulation.skimmer) }}
+    </section>
+    {% if can_prefill %}
+        <a class="mt-8 inline-block rounded-lg bg-blue-700 px-4 py-3 text-white hover:bg-blue-800"
+           href="/?from_job={{ jobid }}#fragmentationpathways">Start a new experiment based on this configuration</a>
+    {% endif %}
+</article>
