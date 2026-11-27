@@ -306,8 +306,8 @@ provides-extras = ["reflink", "plot", "notebooks"]
 
 [[package]]
 name = "apitofsim-resultviewer"
-version = "0.5.0"
-source = { url = "https://github.com/VilmaLab/apitofsim-resultviewer/archive/refs/tags/v0.5.0.tar.gz" }
+version = "0.5.1"
+source = { url = "https://github.com/VilmaLab/apitofsim-resultviewer/archive/refs/tags/v0.5.1.tar.gz" }
 dependencies = [
     { name = "apitofsim", version = "0.33.0", source = { url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.33.0/apitofsim-0.33.0-cp312-abi3-macosx_12_0_arm64.whl" }, extra = ["plot"], marker = "sys_platform != 'linux' and sys_platform != 'win32'" },
     { name = "apitofsim", version = "0.33.0", source = { url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.33.0/apitofsim-0.33.0-cp312-abi3-manylinux_2_34_x86_64.whl" }, extra = ["plot"], marker = "sys_platform == 'linux'" },
@@ -326,7 +326,7 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
     { name = "workingtitle" },
 ]
-sdist = { hash = "sha256:1955061d51902470ac6a5cb69633b8245ae693f08f56deff7f2f6e6b51c1b8ca" }
+sdist = { hash = "sha256:773c8ea0ded4d39a3504bf6b1d0f9ffc070821c3d564a86a1c0af6dc1c11803a" }
 
 [package.metadata]
 requires-dist = [
@@ -2675,7 +2675,7 @@ requires-dist = [
     { name = "apitofsim", extras = ["plot"], marker = "platform_machine == 'arm64' and sys_platform == 'darwin'", url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.33.0/apitofsim-0.33.0-cp312-abi3-macosx_12_0_arm64.whl" },
     { name = "apitofsim", extras = ["plot"], marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.33.0/apitofsim-0.33.0-cp312-abi3-manylinux_2_34_x86_64.whl" },
     { name = "apitofsim", extras = ["plot"], marker = "platform_machine == 'AMD64' and sys_platform == 'win32'", url = "https://github.com/VilmaLab/apitofsim/releases/download/v0.33.0/apitofsim-0.33.0-cp312-abi3-win_amd64.whl" },
-    { name = "apitofsim-resultviewer", url = "https://github.com/VilmaLab/apitofsim-resultviewer/archive/refs/tags/v0.5.0.tar.gz" },
+    { name = "apitofsim-resultviewer", url = "https://github.com/VilmaLab/apitofsim-resultviewer/archive/refs/tags/v0.5.1.tar.gz" },
     { name = "ase", specifier = ">=3.26.0" },
     { name = "duckdb", specifier = ">=1.5.0,<2" },
     { name = "holoviews", specifier = ">=1.21.0" },
