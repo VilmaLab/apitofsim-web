@@ -40,6 +40,7 @@ def quantity_input(
     wrapper_params="",
     unit_switcher="select",
     contexts=(),
+    view_unit=None,
 ):
     jinja_env = get_jinja_env()
     unit_system = _make_unitsystem(value, units, contexts)
@@ -53,6 +54,7 @@ def quantity_input(
                 "unit_system": unit_system,
                 "magnitude": magnitude,
                 "unit": unit,
+                "view_unit": view_unit or str(unit),
                 "container_params": container_params,
                 "wrapper_params": wrapper_params,
                 "unit_select": unit_switcher == "select",

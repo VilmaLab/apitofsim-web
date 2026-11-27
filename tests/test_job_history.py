@@ -25,6 +25,140 @@ def touch_result(path):
     return paths
 
 
+def test_reopen_configuration_with_custom_settings(page, client, test_db):
+    from urllib.parse import urlsplit
+
+    from playwright.sync_api import expect
+
+    from vms.db import DatabaseMiddleware, open_result_db
+    from vms.settings import submitted_settings_path
+
+    class CompletedJobSender:
+        async def send(self, message):
+            jobid, info = message
+            saved = info.pop("submitted_settings")
+            assert "csrf_token" not in dict(saved)
+            config = info["arguments"]["config"]
+            assert config["voltages"][0].magnitude == -21.5
+            assert info["arguments"]["pathways"] == []
+            self.saved_path = submitted_settings_path(info["result_db_path"])
+            with open_result_db(test_db, info["result_db_path"], readonly=False) as db:
+                db.insert_config("webrun", config)
+            self.saved_path.write_text(json.dumps(saved))
+            info["result"] = {"experiment": 1, "cluster": int(dict(saved)["cluster"])}
+            info["status"] = "done"
+            self.jobid = jobid
+
+    application = Starlette(
+        routes=app.routes,
+        middleware=[*client.app.user_middleware, Middleware(DatabaseMiddleware)],
+    )
+    sender = application.state.job_sender = CompletedJobSender()
+    static = Path(__file__).resolve().parents[1] / "src/vms/static"
+    with TestClient(
+        application, base_url="http://configuration.test"
+    ) as browser_client:
+
+        def serve(route):
+            url = urlsplit(route.request.url)
+            if url.path.startswith("/static/"):
+                route.fulfill(path=static / url.path.removeprefix("/static/"))
+                return
+            response = browser_client.request(
+                route.request.method,
+                url.path + ("?" + url.query if url.query else ""),
+                content=route.request.post_data,
+                headers={
+                    name: value
+                    for name, value in route.request.headers.items()
+                    if name in {"content-type", "accept", "hx-request"}
+                },
+                follow_redirects=False,
+            )
+            if response.is_redirect:
+                # Let the test navigate explicitly because Playwright skips
+                # interception when following a redirect from route.fulfill().
+                assert response.status_code == 303
+                route.fulfill(status=200, body=response.headers["location"])
+                return
+            route.fulfill(
+                status=response.status_code,
+                headers=dict(response.headers),
+                body=response.content,
+            )
+
+        try:
+            page.route("http://configuration.test/**", serve)
+            page.goto("http://configuration.test/")
+            page.get_by_role("link", name="Cluster", exact=True).click()
+            with page.expect_response("**/fragments/pathways?*") as pathways:
+                page.locator("#cluster").select_option(index=1)
+            assert pathways.value.ok
+            page.locator('input[name^="pathways-"][name$="-enabled"]').first.uncheck()
+            page.locator('input[name$="-fragmentation_energy"]').first.fill("0.005")
+
+            page.get_by_role("link", name="Carrier gas", exact=True).click()
+            page.locator("#gas-temperature_").fill("301")
+            page.locator("#gas-temperature_ + select").select_option("degree_Celsius")
+
+            page.get_by_role("link", name="Geometries", exact=True).click()
+            page.locator("#instrument-select").select_option("custom")
+            page.locator(
+                "#instrument-instrument_geometry-length_of_first_chamber"
+            ).fill("0.002")
+            page.get_by_role("link", name="Charges", exact=True).click()
+            page.locator('input[type="number"][name="voltage-voltage1"]').fill("-21.5")
+            page.locator("#instrument-quadrupole-ac_quadrupole").fill("209")
+
+            page.get_by_role("link", name="Simulation", exact=True).click()
+            page.locator("#simulation-realizations").fill("17")
+            page.locator("#simulation-skimmer-tolerance").fill("0.0005")
+            settings = "form => Object.fromEntries([...new FormData(form)].filter(([name]) => name !== 'csrf_token'))"
+            original = page.locator("form").evaluate(settings)
+            invalid = page.locator("form").evaluate(
+                "form => [...form.elements].filter(el => el.willValidate && !el.validity.valid).map(el => el.name)"
+            )
+            assert not invalid
+            with page.expect_response(
+                lambda response: response.request.method == "POST"
+            ) as submitted:
+                page.get_by_role("button", name="Run").click()
+            page.goto("http://configuration.test" + submitted.value.text())
+
+            page.get_by_role("link", name="Configuration", exact=True).click()
+            panel = page.get_by_role("tabpanel", name="Configuration")
+            expect(panel.locator("h2")).to_have_text(
+                ["Cluster", "Carrier gas", "Geometries", "Charges", "Simulation"]
+            )
+            expect(panel.locator("hr")).to_have_count(4)
+            expect(panel.locator("input, select, textarea, button")).to_have_count(0)
+            expect(panel.get_by_text("Disabled", exact=True)).to_be_visible()
+            expect(panel.get_by_text("-21.5 V", exact=True)).to_be_visible()
+            expect(panel.get_by_text("unused by the simulator")).to_be_visible()
+            panel.get_by_role(
+                "link", name="Start a new experiment based on this configuration"
+            ).click()
+            expect(page.locator("#mass-spectrogram")).to_be_visible()
+            reopened = page.locator("form").evaluate(settings)
+            assert reopened == original
+
+            sender.saved_path.unlink()
+            label = get_status_dict()[sender.jobid].pop("cluster_label")
+            legacy = browser_client.get(
+                f"/analysis/results/{sender.jobid}/configuration"
+            )
+            assert legacy.status_code == 200
+            assert label in legacy.text
+            assert "Only the settings recorded" in legacy.text
+            assert "-21.5 V" in legacy.text
+            assert (
+                "Start a new experiment based on this configuration" not in legacy.text
+            )
+        finally:
+            if hasattr(sender, "jobid"):
+                get_status_dict().pop(sender.jobid)
+
+
 @pytest.fixture
 def history(tmp_path):
     status = get_status_dict()
@@ -156,6 +290,8 @@ def test_deleted_results_redirect_and_remain_in_history(client, history):
         "/analysis?jobid=done",
         "/analysis/results/done/explorer",
         "/analysis/results/done/spectrogram",
+        "/analysis/results/done/configuration",
+        "/?from_job=done",
         "/analysis/results/done/transmission/model",
         "/analysis/results/done/transmission/model/calc",
     ):

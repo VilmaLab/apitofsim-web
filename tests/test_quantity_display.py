@@ -49,8 +49,11 @@ def test_gas_mass_switches_between_particle_and_molar_mass(page):
         expect(value).to_have_value(magnitude)
     selector.select_option("gram / mole")
     value.fill("28.014")
-    hidden = page.locator("input[type=hidden]")
+    hidden = page.locator(f"input[name='{field.name}']")
     expect(hidden).to_have_value("28.014 gram / mole")
+    expect(page.locator(f"input[name='{field.name}-view-unit']")).to_have_value(
+        "gram / mole"
+    )
     submitted = hidden.input_value()
     field = GasForm(FormData({"gas_molecule_mass": submitted})).gas_molecule_mass
     assert field.data.to("kg").magnitude == pytest.approx(

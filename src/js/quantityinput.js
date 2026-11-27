@@ -11,10 +11,14 @@ export default (props) => {
         system = new UnitSystem(props.system);
     }
     console.log(system)
+    const viewUnit = props.viewUnit || props.unit || props.canonicalUnit || system.firstUnit();
+    const convertForDisplay = (unit, value, target) =>
+        Number(system.convert(unit, target, value).toPrecision(5));
     return {
-        viewUnit: props.unit || props.canonicalUnit || system.firstUnit(),
+        viewUnit,
         inputUnit: props.magnitude !== undefined ? props.unit : undefined,
-        viewValue: props.magnitude,
+        viewValue: props.magnitude !== undefined && viewUnit !== props.unit
+            ? convertForDisplay(props.unit, props.magnitude, viewUnit) : props.magnitude,
         inputValue: props.magnitude,
 
         reset([magnitude, unit]) {
@@ -29,8 +33,7 @@ export default (props) => {
             console.log('unitChange', unit, system)
             this.viewUnit = unit
             if (this.inputValue !== undefined && this.inputUnit !== undefined) {
-                let newVal = system.convert(this.inputUnit, this.viewUnit, this.inputValue);
-                this.viewValue = newVal.toPrecision(5).replace(/\.?0+$/, '')
+                this.viewValue = convertForDisplay(this.inputUnit, this.inputValue, this.viewUnit);
             }
             this.$root.dispatchEvent(new CustomEvent('view-change', {
                 bubbles: true,

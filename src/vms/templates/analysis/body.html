@@ -34,6 +34,7 @@
             {# {{ skimmer|safe }} #}
         {% endcall %}
         <div x-show="current_tab == 'apitof'" name="apitof" class="p-2 roomy:p-4 rounded-lg bg-gray-50" role="tabpanel">
+            {% if cluster_label %}<p class="mx-4 mt-4 text-xl font-semibold">{{ cluster_label }}</p>{% endif %}
             <div sse-swap="apitof"></div>
             <div class="m-4">
                 <a class="px-4 py-3 bg-gray-50 hover:text-gray-900 hover:bg-gray-100 inline-block my-2" @click="log_open = !log_open" href="#">Toggle log</a>
@@ -49,6 +50,11 @@
             <template x-if="results_ready && current_tab == 'spectrogram'">
                 <iframe title="Spectrogram plot" src="/analysis/results/{{ jobid }}/spectrogram" class="block w-full border-0" x-data="resultFrame" @load="observe"></iframe>
             </template>
+        </div>
+        <div x-show="results_ready && current_tab == 'configuration'" name="configuration"
+             class="rounded-lg bg-gray-50 p-4 roomy:p-6" role="tabpanel" aria-label="Configuration"
+             hx-get="/analysis/results/{{ jobid }}/configuration" hx-trigger="intersect once">
+            <p role="status">Loading configuration…</p>
         </div>
     </div>
     <div id="actions-panel" class="page-action gap-3">

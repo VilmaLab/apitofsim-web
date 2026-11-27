@@ -20,6 +20,10 @@
         <svg aria-hidden="true" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20V9m4 11V4m4 16v-8m4 8V3m4 17v-11m2 11H2"/></svg>
         <span class="tab-label">Spectrogram</span>
     {% endcall %}
+    {% call tab('configuration', 'Configuration') %}
+        <svg aria-hidden="true" class="icon" viewBox="0 0 384 512"><use href="#fa-clipboard"></use></svg>
+        <span class="tab-label">Configuration</span>
+    {% endcall %}
     <script x-init="results_ready = true"></script>
 {% endif %}
 

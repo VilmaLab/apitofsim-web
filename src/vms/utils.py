@@ -20,7 +20,7 @@ class PairedRangeInputWidget:
         if "required" not in kwargs and "required" in getattr(field, "flags", []):
             kwargs["required"] = True
         range_kwargs = {}
-        number_kwargs = {}
+        number_kwargs = {"step": "any"}
         for k, v in kwargs.items():
             if k in ("min", "max", "step"):
                 range_kwargs[k] = v

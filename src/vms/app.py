@@ -4,6 +4,7 @@ import tempfile
 os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp()
 os.environ["RAY_DISABLE_FAILURE_SIGNAL_HANDLER"] = "1"
 
+import json
 import os
 from datetime import datetime, timezone
 from io import BytesIO
@@ -18,9 +19,11 @@ import sentry_sdk
 from apitofsim.api import ureg
 from apitofsim.transmission import TRANSMISSION_MODELS
 from apitofsim.workflow import DatabasePaths
+from duckdb import ColumnExpression, ConstantExpression
 from lxml import etree
 from pint import set_application_registry
 from starlette.applications import Starlette
+from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -30,6 +33,7 @@ from starlette.staticfiles import StaticFiles
 from starlette_wtf import CSRFProtectMiddleware, csrf_protect, csrf_token
 
 from .cluster_info import enrich_cluster
+from .configuration import recorded_settings
 from .db import DatabaseMiddleware, get_connection, open_result_db
 from .forms import (
     INSTRUMENT_FORMS,
@@ -40,7 +44,7 @@ from .forms import (
 from .jobs import get_status_dict, update_analysis
 from .monitoring import init_sentry
 from .resources import bokeh_application, lifespan, templates
-from .settings import database_path, job_result_path
+from .settings import database_path, job_result_path, submitted_settings_path
 
 matplotlib.use("SVG")
 hv.extension("matplotlib")  # type: ignore
@@ -57,7 +61,20 @@ def render_template(request, path, **context):
 async def settings(request):
     from time import time
 
-    form = await SettingsForm.from_formdata(request)
+    source = request.query_params.get("from_job") if request.method == "GET" else None
+    if source is not None:
+        try:
+            job = configuration_job(request, source)
+        except FileNotFoundError:
+            return redirect_to_jobs(request)
+        saved = load_submitted_settings(job)
+        if saved is None:
+            return RedirectResponse(
+                f"/analysis?jobid={source}#configuration", status_code=303
+            )
+        form = SettingsForm(request, formdata=FormData(saved))
+    else:
+        form = await SettingsForm.from_formdata(request)
     if await form.validate_on_submit():
         arguments = form.get_data()
         job_id = uuid4()
@@ -72,6 +89,7 @@ async def settings(request):
             "submitted_at": datetime.now(timezone.utc).isoformat(),
             "counts": {"requested": int(arguments["config"]["N"]), "completed": 0},
             "arguments": arguments,
+            "submitted_settings": form.submitted_settings(),
             "result_db_path": str(result_db_path),
             "last_update": {},
             "start_time": time(),
@@ -85,7 +103,7 @@ async def settings(request):
         return RedirectResponse(f"/analysis?jobid={job_id.hex}#queue", status_code=303)
     context = {"primary_cluster": None}
     if (
-        request.method == "POST"
+        (request.method == "POST" or source is not None)
         and not form.cluster.errors
         and form.cluster.data not in (None, "None", "")
     ):
@@ -166,18 +184,18 @@ async def pathways_fragment(request):
     )
 
 
-def pathways_context(form, cluster_id, *, submitted=False):
+def pathways_context(form, cluster_id, *, submitted=False, details=True):
     db = get_connection()
     cluster_df = db.clusters_df(parent=cluster_id)
-    cluster_ids = cluster_df["id"].to_numpy()
-    masses = cluster_df["atomic_mass"].to_numpy()
     clusters = {}
     for cluster in cluster_df.itertuples():
         cluster = cluster._asdict()
-        enrich_cluster(db.ase_db, cluster)
+        if details:
+            enrich_cluster(db.ase_db, cluster)
         clusters[cluster["id"]] = cluster
     pathways_relations = db.pathways_query(parent=cluster_id).fetchdf()
     pathways = []
+    plotted_clusters = {cluster_id}
 
     submitted_entries = (
         {entry.form.pathway.data: entry.form for entry in form.pathways}
@@ -198,22 +216,34 @@ def pathways_context(form, cluster_id, *, submitted=False):
             - cluster["electronic_energy"]
         )
 
+        entry = (
+            submitted_entries.get(pathway.id)
+            if submitted
+            else form.pathways.append_entry({"pathway": pathway.id}).form
+        )
+        if entry is None:
+            continue
+        if entry.enabled.data:
+            plotted_clusters.update((pathway.product1_id, pathway.product2_id))
         pathways.append(
             {
                 "cluster": (pathway.cluster_id, cluster["common_name"]),
                 "product1": (pathway.product1_id, product1["common_name"]),
                 "product2": (pathway.product2_id, product2["common_name"]),
                 "bonding_energy": bonding_energy,
-                "form": submitted_entries.get(pathway.id)
-                if submitted
-                else form.pathways.append_entry({"pathway": pathway.id}).form,
+                "form": entry,
             }
         )
 
+    plot_df = cluster_df[cluster_df["id"].isin(plotted_clusters)]
     return dict(
-        pathways=[pathway for pathway in pathways if pathway["form"] is not None],
+        pathways=pathways,
         clusters=clusters.values(),
-        mass_spectrogram=hypothetical_spectrogram(cluster_ids, masses),
+        mass_spectrogram=(
+            hypothetical_spectrogram(plot_df["id"], plot_df["atomic_mass"])
+            if details
+            else None
+        ),
         primary_cluster=(cluster_id, clusters[cluster_id]["common_name"]),
     )
 
@@ -316,6 +346,7 @@ async def analysis(request):
         "analysis/analysis.html",
         jobid=jobid,
         info=info,
+        cluster_label=job_cluster_label(info),
         can_cancel=can_cancel,
         cancel_token=csrf_token(request) if can_cancel else None,
         completed=completed,
@@ -352,6 +383,85 @@ def result_job(jobid):
         raise HTTPException(404)
     DatabasePaths(info["result_db_path"]).require_database()
     return info
+
+
+def job_cluster_label(job):
+    if label := job.get("cluster_label"):
+        return label
+    cluster_id = job.get("result", {}).get("cluster") or job.get("failure", {}).get(
+        "cluster_id"
+    )
+    if cluster_id is not None:
+        cluster = (
+            get_connection()
+            .clusters_query()
+            .filter(ColumnExpression("id") == ConstantExpression(cluster_id))
+            .select("common_name")
+            .fetchone()
+        )
+        if cluster:
+            return cluster[0]
+        return f"Cluster {cluster_id}"
+    return None
+
+
+def configuration_job(request, jobid):
+    from .jobs import process_jobid
+
+    return result_job(process_jobid(request, jobid=jobid))
+
+
+def load_submitted_settings(job):
+    if "submitted_settings" in job:
+        return job["submitted_settings"]
+    try:
+        return json.loads(
+            submitted_settings_path(job["result_db_path"]).read_text(encoding="utf-8")
+        )
+    except FileNotFoundError:
+        return None
+
+
+def result_configuration(db):
+    configs = list(db.iter_configs())
+    if len(configs) != 1:
+        raise HTTPException(
+            500, detail="Result database has unexpected number of configs"
+        )
+    return configs[0].config
+
+
+async def configuration(request):
+    jobid = request.path_params["jobid"]
+    try:
+        job = configuration_job(request, jobid)
+        saved = load_submitted_settings(job)
+        context = {"pathways": (), "histogram": None}
+        if saved is not None:
+            form = SettingsForm(request, formdata=FormData(saved))
+            context = pathways_context(
+                form, int(form.cluster.data), submitted=True, details=False
+            )
+        else:
+            with open_result_db(database_path, job["result_db_path"]) as db:
+                config = result_configuration(db)
+            form = SettingsForm(request, data=recorded_settings(config))
+            context["histogram"] = {
+                "Bin width": config["bin_width"],
+                "Density histogram maximum energy": config["energy_max"],
+                "Rate histogram maximum energy": config["energy_max_rate"],
+            }
+    except FileNotFoundError:
+        return redirect_to_jobs(request)
+    return render_template(
+        request,
+        "analysis/configuration.html",
+        jobid=jobid,
+        form=form,
+        cluster_label=job_cluster_label(job),
+        can_prefill=saved is not None,
+        **context,
+    )
 
 
 def prepare_plot(request, plot, jobid, result, **kwargs):
@@ -468,12 +578,7 @@ async def spectrogram_plot(request):
         job = result_job(jobid)
         result = job["result"]
         with open_result_db(database_path, job["result_db_path"]) as db:
-            experiment = list(db.iter_configs())
-            if len(experiment) != 1:
-                raise HTTPException(
-                    500, detail="Result database has unexpected number of configs"
-                )
-            voltages = experiment[0].config["voltages"]
+            voltages = result_configuration(db)["voltages"]
             cluster_charge = (
                 db.experiment_clusters_query(result["experiment"], result["cluster"])
                 .select("cluster_charge")
@@ -486,6 +591,7 @@ async def spectrogram_plot(request):
         request,
         "analysis/spectrogram.html",
         jobid=jobid,
+        cluster_label=job_cluster_label(job),
         plot_script=plot_script,
         transmission_models=TRANSMISSION_MODELS,
         cluster_charge=cluster_charge,
@@ -506,6 +612,11 @@ app = Starlette(
         Route("/analysis/cancel", cancel_analysis, methods=["POST"]),
         Route("/analysis/updates", update_analysis),
         Route("/analysis/results/{jobid}/explorer", explorer_plot, name="explorer"),
+        Route(
+            "/analysis/results/{jobid}/configuration",
+            configuration,
+            name="configuration",
+        ),
         Route(
             "/analysis/results/{jobid}/spectrogram",
             spectrogram_plot,

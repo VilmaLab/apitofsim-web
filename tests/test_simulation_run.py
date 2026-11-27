@@ -124,12 +124,14 @@ def submit_experiment(page, server, realizations):
     expect(
         page.locator('input[name^="pathways-"][name$="-enabled"]')
     ).not_to_have_count(0)
+    cluster = page.locator("#cluster option:checked").inner_text()
 
     # Everything else stays at its default
     page.click('a[href="#simulation"]')
     page.fill("#simulation-realizations", str(realizations))
 
     page.click('button[type="submit"]')
+    return cluster
 
 
 def test_default_run_completes(page, server, tmp_path):
@@ -137,7 +139,7 @@ def test_default_run_completes(page, server, tmp_path):
     page.on("pageerror", lambda error: page_errors.append(error))
     page.set_default_timeout(60_000)
 
-    submit_experiment(page, server, REALIZATIONS)
+    cluster = submit_experiment(page, server, REALIZATIONS)
     expect(page).to_have_url(re.compile(r"/analysis\?jobid="))
     expect(page.locator('a[href="#explorer"]')).to_have_count(0)
     expect(page.locator('a[href="#spectrogram"]')).to_have_count(0)
@@ -154,7 +156,7 @@ def test_default_run_completes(page, server, tmp_path):
         )
         expect(page.get_by_role("alert")).to_contain_text("Partial results")
 
-    for tab in ("explorer", "spectrogram"):
+    for tab in ("explorer", "spectrogram", "configuration"):
         expect(page.locator(f'a[href="#{tab}"]')).to_be_visible()
 
     page.click('a[href="#explorer"]')
@@ -164,6 +166,7 @@ def test_default_run_completes(page, server, tmp_path):
 
     page.click('a[href="#spectrogram"]')
     spectrogram = page.frame_locator('iframe[title="Spectrogram plot"]')
+    expect(spectrogram.get_by_role("heading", name=cluster, exact=True)).to_be_visible()
     expect(spectrogram.locator(".bk-Canvas")).not_to_have_count(0, timeout=60_000)
     expect_content_sized_frame(page, "Spectrogram plot")
     page.set_viewport_size({"width": 390, "height": 844})
@@ -187,6 +190,7 @@ def test_default_run_completes(page, server, tmp_path):
     expect(page.locator("#iterations")).to_have_text(f"{REALIZATIONS}/{REALIZATIONS}")
 
     pane = page.locator('div[name="apitof"]')
+    expect(pane.get_by_text(cluster, exact=True)).to_be_visible()
     fragmented = int(re.search(r"Fragmented: (\d+)", pane.inner_text()).group(1))
     survived = int(re.search(r"Survived: (\d+)", pane.inner_text()).group(1))
     assert fragmented + survived == REALIZATIONS
@@ -195,6 +199,17 @@ def test_default_run_completes(page, server, tmp_path):
     assert "Traceback" not in body
     assert "Internal Server Error" not in body
     assert page_errors == []
+
+    page.get_by_role("link", name="Configuration", exact=True).click()
+    configuration = page.get_by_role("tabpanel", name="Configuration")
+    expect(configuration.get_by_role("heading", name="Configuration")).to_be_visible()
+    page.reload()
+    expect(configuration.get_by_text(cluster, exact=True)).to_be_visible()
+    configuration.get_by_role(
+        "link", name="Start a new experiment based on this configuration"
+    ).click()
+    expect(page.locator("#cluster option:checked")).to_have_text(cluster)
+    expect(page.locator("#simulation-realizations")).to_have_value(str(REALIZATIONS))
 
 
 def test_cancel_preserves_partial_results_and_history(page, server, tmp_path):
@@ -250,6 +265,7 @@ def test_cancel_preserves_partial_results_and_history(page, server, tmp_path):
         "data-status", "cancelled"
     )
     expect(page.locator('a[href="#explorer"]')).to_be_visible()
+    expect(page.get_by_role("link", name="Configuration", exact=True)).to_be_visible()
     expect(page.get_by_role("heading", name="Finished — stopped early")).to_be_visible()
     page.locator('a[href="#apitof"]').click()
     expect(page.locator("#status")).to_have_text("Simulation stopped early")

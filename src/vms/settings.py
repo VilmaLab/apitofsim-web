@@ -11,3 +11,7 @@ results_dir = Path(
 
 def job_result_path(jobid):
     return results_dir / f"{jobid}.apitofsim"
+
+
+def submitted_settings_path(result_db_path):
+    return Path(result_db_path) / "settings.json"

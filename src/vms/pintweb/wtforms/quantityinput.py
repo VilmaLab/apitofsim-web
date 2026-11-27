@@ -1,6 +1,7 @@
 from markupsafe import Markup
 from pint import get_application_registry
 from wtforms.fields import Field
+from wtforms.utils import unset_value
 from wtforms.widgets.core import html_params
 
 from vms.pintweb.alpine import quantity_input
@@ -45,6 +46,7 @@ class QuantityInput:
             container_params=container_params,
             wrapper_params=wrapper_params,
             contexts=self.contexts,
+            view_unit=field.view_unit,
         )
 
 
@@ -64,6 +66,20 @@ class QuantityField(Field):
                 "At least one unit (including from the default value) must be given."
             )
         self.widget = QuantityInput(units, contexts)
+
+    def process(self, formdata, data=unset_value, extra_filters=None):
+        view_unit = (
+            formdata.get(f"{self.name}-view-unit") if formdata is not None else None
+        )
+        self.view_unit = view_unit if view_unit in map(str, self.units) else None
+        super().process(formdata, data, extra_filters)
+
+    def display_value(self):
+        quantity = self.ureg.Quantity(self._value())
+        if self.view_unit and self.view_unit != str(quantity.units):
+            quantity = quantity.to(self.view_unit, *self.contexts)
+            return f"{quantity:.5g~P}"
+        return f"{quantity:~P}"
 
     def _value(self):
         if self.raw_data:

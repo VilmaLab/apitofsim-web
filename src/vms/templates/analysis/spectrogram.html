@@ -4,6 +4,7 @@
 {% block body_class %}p-2 roomy:p-4 relative{% endblock %}
 
 {% block content %}
+    {% if cluster_label %}<h1 class="mb-4 text-xl font-semibold">{{ cluster_label }}</h1>{% endif %}
     <div class="overflow-x-auto">{{ plot_script|safe }}</div>
     <hr class="my-4">
     <h3 class="text-lg font-semibold">Transmission model</h3>

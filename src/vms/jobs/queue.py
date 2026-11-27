@@ -108,6 +108,7 @@ def start_job(info, jobid, control):
     return run_simulation.remote(
         cancel_control=control,
         jobid=jobid,
+        submitted_settings=info.get("submitted_settings"),
         trace_headers=info.get("trace_headers"),
         **info["arguments"],
         database_path=database_path,

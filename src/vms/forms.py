@@ -50,9 +50,16 @@ def clean_key(key):
 wtforms_widgets_core_module.clean_key = clean_key
 
 
+class PairedVoltageField(FloatField):
+    def process_formdata(self, valuelist):
+        # The slider is submitted first and can round the adjacent number input.
+        self.raw_data = valuelist[-1:]
+        super().process_formdata(self.raw_data)
+
+
 def mk_voltage_field(num, **kwargs):
-    label = Markup(rf'<span class="italic">V<sub>{num}</sub></em>')
-    return FloatField(
+    label = Markup(rf'<span class="italic">V<sub>{num}</sub></span>')
+    return PairedVoltageField(
         label,
         **kwargs,
         validators=[InputRequired()],
@@ -398,6 +405,20 @@ class SettingsForm(StarletteForm):
             for name, field in type(self)._unbound_fields
         ]
         super().__init__(request, *args, **kwargs)
+
+    def submitted_settings(self):
+        def values(fields):
+            for field in fields:
+                if isinstance(field, FormField):
+                    yield from values(field.form)
+                elif isinstance(field, FieldList):
+                    yield from values(field.entries)
+                elif field is not getattr(self, "csrf_token", None):
+                    yield from ((field.name, value) for value in field.raw_data or ())
+                    if isinstance(field, QuantityField) and field.view_unit:
+                        yield f"{field.name}-view-unit", field.view_unit
+
+        return list(values(self))
 
     def get_data(self):
         from apitofsim import CONFIG_FIELDS, build_config
