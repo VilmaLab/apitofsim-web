@@ -253,6 +253,39 @@ def test_terminal_cancel_is_noop_and_list_stops_polling(client, history):
         assert "No jobs yet" in anonymous.get("/jobs").text
 
 
+def test_saved_result_reopens_after_startup(client, history, tmp_path, monkeypatch):
+    from vms import resources
+
+    jobid = "a" * 32
+    info = history(
+        jobid,
+        state="running",
+        result={"experiment": 1, "cluster": 18},
+        cancelled_stage="apitof",
+        counts={"requested": 100, "completed": 3},
+    )
+    touch_result(Path(info["result_db_path"])).parquet.touch()
+    client.portal.call(finish_job, info)
+    get_status_dict().clear()
+    monkeypatch.setattr(resources, "results_dir", tmp_path)
+    application = Starlette(
+        routes=app.routes,
+        middleware=client.app.user_middleware,
+        lifespan=resources.result_history_context,
+    )
+    with TestClient(application, cookies=client.cookies) as restarted:
+        history_page = restarted.get("/jobs")
+        assert f"/analysis?jobid={jobid}" in history_page.text
+        assert "stopped early" in history_page.text
+        assert "3/100" in history_page.text
+        response = restarted.get(f"/analysis?jobid={jobid}")
+        assert response.status_code == 200
+        assert "Finished — stopped early" in response.text
+        assert restarted.get(f"/analysis/results/{jobid}/explorer").status_code == 200
+        restarted.cookies.clear()
+        assert "No jobs yet" in restarted.get("/jobs").text
+
+
 def test_retained_cancelled_results_reload_and_sse(client, history):
     info = history(
         "partial",

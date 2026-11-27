@@ -6,7 +6,7 @@
     :data-controls-open="String(controls_open)"
     :class="current_tab == 'explorer' && results_ready ? 'explorer-view h-[calc(100dvh-5.5rem)] roomy:h-[calc(100dvh-7rem)] flex flex-col' : ''"
     x-data="{ current_tab: 'queue', controls_open: false, log_open: false, results_ready: {{ 'true' if completed else 'false' }}, job_status: '{{ job_status }}', stopped_early: {{ 'true' if info.get('cancelled_stage') else 'false' }}, cancelling: {{ 'true' if info.get('cancel_requested') else 'false' }} }"
-    x-init="current_tab = window.location.hash?.replace('#', '') || 'queue'; $watch('current_tab', () => controls_open = false)"
+    x-init="current_tab = window.location.hash?.replace('#', '') || '{{ 'spectrogram' if completed and info.get('restored') else 'queue' }}'; $watch('current_tab', () => controls_open = false)"
     @keydown.escape="controls_open = false; if ($refs.explorerToggle.getClientRects().length) $refs.explorerToggle.focus()"
 >
     <button type="button" x-ref="explorerToggle" x-data="draggableToggle" class="explorer-toggle cursor-grab active:cursor-grabbing bg-gray-50 rounded-lg p-3 shadow touch-none select-none"

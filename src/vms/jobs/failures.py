@@ -143,7 +143,7 @@ def process_jobid(request, *, jobid=None):
     from time import time
 
     from vms.jobs.queue import get_status_dict
-    from vms.settings import job_result_path
+    from vms.settings import is_job_id, job_result_path
 
     status = get_status_dict()
     if jobid is None:
@@ -152,7 +152,7 @@ def process_jobid(request, *, jobid=None):
         raise HTTPException(400, detail="Missing jobid parameter")
     if jobid not in status:  # type: ignore
         # Only accept the UUID hex used for result filenames.
-        if len(jobid) != 32 or any(c not in "0123456789abcdef" for c in jobid):
+        if not is_job_id(jobid):
             raise HTTPException(404, detail="Job ID not found")
         result_db_path = job_result_path(jobid)
         try:

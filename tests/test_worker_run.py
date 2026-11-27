@@ -2,6 +2,7 @@
 
 import json
 from contextlib import contextmanager
+from pathlib import Path
 from time import time
 
 import pytest
@@ -12,6 +13,7 @@ from vms.app import app
 from vms.db import current_db, open_result_db
 from vms.forms import SettingsForm, get_histogram_precision_choices
 from vms.jobs.failures import failure_path
+from vms.jobs.history import restore_result_jobs
 from vms.jobs.run import simulation_events
 
 
@@ -38,7 +40,7 @@ def worker_arguments(test_db, tmp_path):
     return dict(
         arguments,
         database_path=str(test_db),
-        result_db_path=str(tmp_path / "output.apitofsim"),
+        result_db_path=str(tmp_path / f"{'a' * 32}.apitofsim"),
         start_time=time(),
     )
 
@@ -145,3 +147,16 @@ def test_recording_worker(worker_arguments, monkeypatch, outcome):
                 )
                 assert len(curves) == len(worker_arguments["pathways"])
                 assert all(curve.histogram is not None for curve in curves)
+
+    directory = Path(result_path)
+    restored = restore_result_jobs(directory.parent).get(directory.stem)
+    if b"result" in messages:
+        assert restored["result"] == json.loads(messages[b"result"])
+        assert (
+            restored["counts"]["completed"]
+            == json.loads(messages[b"progress"])["completed"]
+        )
+        assert "owner" not in restored
+        assert ("cancelled_stage" in restored) == (outcome == "cancelled")
+    else:
+        assert restored is None

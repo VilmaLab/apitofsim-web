@@ -19,14 +19,15 @@ from starlette.templating import Jinja2Templates
 
 from .assets import ASSETS, asset_version
 from .db import shared_histograms
-from .jobs.queue import scheduler_context
+from .jobs.history import restore_result_jobs
+from .jobs.queue import get_status_dict, scheduler_context
 from .jobs.run import warm_simulation_worker
 from .markdown_ext import MarkdownExtension
 from .monitoring import SENTRY_ENV_VARS, init_sentry
 from .pintweb.alpine import quantity_display
 from .ray_auth import local_ray_auth
 from .result_plots import make_bokeh_app
-from .settings import database_path
+from .settings import database_path, results_dir
 
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 templates.env.globals["asset_version"] = asset_version
@@ -124,9 +125,17 @@ async def histogram_context(app):
         shared_histograms.cache_clear()
 
 
+@asynccontextmanager
+async def result_history_context(app):
+    jobs = await to_thread.run_sync(restore_result_jobs, results_dir)
+    get_status_dict().update(jobs)
+    yield
+
+
 lifespan = compose_async_ctx(
     ensure_assets_context,
     histogram_context,
+    result_history_context,
     ray_context,
     scheduler_context,
     bokeh_context,
